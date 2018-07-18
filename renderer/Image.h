@@ -166,7 +166,7 @@ public:
 	void		GenerateCubeImage( const byte *pic[6], int size, 
 						textureFilter_t filter, bool allowDownSize, 
 						textureDepth_t depth );
-	void		GenerateAttachment( int width, int height, textureFilter_t filter, GLint format );
+	void		GenerateAttachment( int width, int height, GLint format );
 /*	void		GenerateRendertarget(); //~SS
 	// added for soft shadows jitter map, but should be generally useful for storing data 
 	// in a 3D texture. No mipmaps, high quality, nearest filtering, user specifies the format.
@@ -208,7 +208,7 @@ public:
 	void		ActuallyLoadImage( bool checkForPrecompressed, bool fromBackEnd );
 	void		StartBackgroundImageLoad();
 	int			BitsForInternalFormat( int internalFormat ) const;
-	void		UploadCompressedNormalMap( int width, int height, const byte *rgba, int mipLevel );
+	//void		UploadCompressedNormalMap( int width, int height, const byte *rgba, int mipLevel );
 	GLenum		SelectInternalFormat( const byte **dataPtrs, int numDataPtrs, int width, int height, textureDepth_t minimumDepth ) const;
 	void		ImageProgramStringToCompressedFileName( const char *imageProg, char *fileName ) const;
 	int			NumLevelsForImageSize( int width, int height ) const;

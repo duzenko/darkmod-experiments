@@ -247,7 +247,7 @@ static bool IsAMD( void ) {
 HasCMOV
 ================
 */
-static bool HasCMOV( void ) {
+/*static bool HasCMOV( void ) {
 	unsigned regs[4];
 
 	// get CPU feature bits
@@ -258,7 +258,7 @@ static bool HasCMOV( void ) {
 		return true;
 	}
 	return false;
-}
+}*/
 
 /*
 ================
@@ -417,6 +417,45 @@ static bool HasAVX( void ) {
 
 /*
 ================
+HasAVX2
+================
+*/
+static bool HasAVX2( void ) {
+	unsigned regs[4];
+	//check that cpuid instruction supports function 7
+	CPUID( 0, regs );
+	if (regs[0] < 7)
+		return false;
+	// get CPU feature bits
+	CPUID( 7, regs );
+	//check if CPU supports AVX2 instructions
+	bool cpuAVX2Support = (regs[_REG_EBX] & (1 << 5)) != 0;
+	if ( cpuAVX2Support && HasAVX() ) {
+		return true;
+	}
+	return false;
+}
+
+/*
+================
+HasFMA3
+================
+*/
+static bool HasFMA3( void ) {
+	unsigned regs[4];
+
+	// get CPU feature bits
+	CPUID( 1, regs );
+
+	// bit 12 of ECX denotes FMA3 support
+	if ( regs[_REG_ECX] & (1 << 12) ) {
+		return true;
+	}
+	return false;
+}
+
+/*
+================
 LogicalProcPerPhysicalProc
 ================
 */
@@ -458,13 +497,13 @@ CPUCount
 	returns one of the HT_* flags
 ================
 */
-#define HT_NOT_CAPABLE				0
+/*#define HT_NOT_CAPABLE				0
 #define HT_ENABLED					1
 #define HT_DISABLED					2
 #define HT_SUPPORTED_NOT_ENABLED	3
-#define HT_CANNOT_DETECT			4
+#define HT_CANNOT_DETECT			4*/
 
-int CPUCount( int &logicalNum, int &physicalNum )
+/*int CPUCount( int &logicalNum, int &physicalNum )
 {
 	int statusFlag;
 	SYSTEM_INFO info;
@@ -550,7 +589,7 @@ int CPUCount( int &logicalNum, int &physicalNum )
 		}
 	}
 	return statusFlag;
-}
+}*/
 
 /*
 ================
@@ -671,15 +710,25 @@ cpuid_t Sys_GetCPUId( void ) {
 		flags |= CPUID_AVX;
 	}
 
+	// check for FMA3
+	if ( HasFMA3() ) {
+		flags |= CPUID_FMA3;
+	}
+
+	// check for AVX
+	if ( HasAVX2() ) {
+		flags |= CPUID_AVX2;
+	}
+
 	// check for Hyper-Threading Technology
 /*	if ( HasHTT() ) {
 		flags |= CPUID_HTT;
 	}*/
 
 	// check for Conditional Move (CMOV) and fast floating point comparison (FCOMI) instructions
-	if ( HasCMOV() ) {
+	/*if ( HasCMOV() ) {
 		flags |= CPUID_CMOV;
-	}
+	}*/
 
 	// check for Denormals-Are-Zero mode
 	if ( HasDAZ() ) {

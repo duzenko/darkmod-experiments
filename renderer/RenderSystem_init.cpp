@@ -70,7 +70,7 @@ idCVar r_finish( "r_finish", "0", CVAR_RENDERER | CVAR_BOOL, "force a call to gl
 idCVar r_swapInterval( "r_swapInterval", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "changes wglSwapIntarval" );
 idCVar r_swapIntervalTemp( "r_swapIntervalTemp", "1", CVAR_RENDERER | CVAR_INTEGER, "forces VSync in GUI" );
 
-idCVar r_gamma( "r_gamma", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "changes gamma tables", 0.5f, 3.0f );
+idCVar r_gamma( "r_gamma", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "changes gamma tables", 0.5f, 10.0f );
 idCVar r_brightness( "r_brightness", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "changes gamma tables", 0.5f, 2.0f );
 
 idCVar r_jitter( "r_jitter", "0", CVAR_RENDERER | CVAR_BOOL, "randomly subpixel jitter the projection matrix" );
@@ -232,17 +232,21 @@ idCVar r_postprocess_sceneGamma( "r_postprocess_sceneGamma", "0.82", CVAR_GAME |
 idCVar r_postprocess_bloomIntensity( "r_postprocess_bloomIntensity", "0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE, " Adjusts the Bloom intensity. 0.0 disables the bloom but other postprocessing effects remain unaffected." );
 idCVar r_postprocess_bloomKernelSize( "r_postprocess_bloomKernelSize", "2", CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE, " Sets Bloom's Kernel size. Smaller is faster, takes less memory. Also, smaller kernel means larger bloom spread. \n 1. Large (2x smaller than current resolution) \n 2. Small (4x smaller than current resolution) " );
 
-// 2016-2017 additions by duzenko
+// 2016-2018 additions by duzenko
 idCVar r_useAnonreclaimer( "r_useBfgPortalCulling", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "test anonreclaimer culling patch" );
+idCVar r_ambient_testadd( "r_ambient_testadd", "0", CVAR_RENDERER | CVAR_FLOAT, "Added ambient brightness for testing purposes. ", 0, 1 );
+idCVar r_useGLSL( "r_useGLSL", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use GLSL shaders instead of ARB" );
+idCVar r_useMultiDraw( "r_useMultiDraw", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use glMultiDrawXXX functions for batch processing" );
+
+// FBO
 idCVar r_useFbo( "r_useFBO", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use framebuffer objects" );
 idCVar r_nvidiaOverride( "r_nvidiaOverride", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Force FBO if Soft Shadows are enabled with Nvidia hardware" );
-idCVar r_useGLSL( "r_useGLSL", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use GLSL shaders instead of ARB" );
 idCVar r_fboDebug("r_fboDebug", "0", CVAR_RENDERER | CVAR_INTEGER, "0-3 individual fbo attachments");
 idCVar r_fboColorBits( "r_fboColorBits", "32", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "15, 32" );
-idCVar r_fboDepthBits( "r_fboDepthBits", "24", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "16, 24" );
+idCVar r_fboDepthBits( "r_fboDepthBits", "24", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "16, 24, 32" );
 idCVar r_shadowMapSize( "r_shadowMapSize", "256", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "Shadow map texture resolution" );
-idCVar r_fboResolution("r_fboResolution", "1", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "internal rendering resolution factor");
-idCVar r_ambient_testadd( "r_ambient_testadd", "0", CVAR_RENDERER | CVAR_FLOAT, "Added ambient brightness for testing purposes. ", 0, 1 );
+idCVar r_fboResolution( "r_fboResolution", "1", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "internal rendering resolution factor" );
+idCVar r_fboSeparateStencil("r_fboSeparateStencil", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use separate depth and stencil FBO attachments. Only supported on some Intel GPU's");
 
 // relocate stgatilov ROQ options
 
@@ -1498,9 +1502,18 @@ void R_ScreenShot_f( const idCmdArgs &args ) {
 	idStr checkname;
     qglFinish();
 	
+	static bool stopTimeT = false;
 	int width = glConfig.vidWidth;
 	int height = glConfig.vidHeight;
 	int	blends = 0;
+	
+	if (g_stopTime.GetBool()) {
+	stopTimeT = true;
+	}
+	else {
+	g_stopTime.SetBool(true);
+	}
+	
 
 	switch ( args.Argc() ) {
 	case 1:
@@ -1539,17 +1552,12 @@ void R_ScreenShot_f( const idCmdArgs &args ) {
 	console->Close();
     
 	tr.TakeScreenshot( width, height, checkname, blends, NULL );
-	if ( r_useFbo.GetBool() == 1)
-       {
-		r_useFbo.SetBool(0);
-		session->RunGameTic();
-		session->UpdateScreen();
-		qglFinish();
-		r_useFbo.SetBool(1);
-		session->RunGameTic();
-		session->UpdateScreen();
-		qglFinish();
-	   }
+	
+    if (!stopTimeT) {
+	g_stopTime.SetBool(false);
+	}
+	
+	stopTimeT = false;
 	
 }
 

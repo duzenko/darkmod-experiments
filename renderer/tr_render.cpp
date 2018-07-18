@@ -94,6 +94,37 @@ void RB_DrawElementsWithCounters( const srfTriangles_t *tri ) {
 	}
 }
 
+void RB_DrawElementsWithCounters( const srfTriangles_t *tri, int baseVertex ) {
+	if( vertexCache.currentVertexBuffer == 0 ) {
+		common->Printf( "RB_DrawElementsWithCounters called, but no vertex buffer is bound. Vertex cache resize?\n" );
+		return;
+	}
+	if (r_showPrimitives.GetBool() && !backEnd.viewDef->IsLightGem() ) {
+		backEnd.pc.c_drawElements++;
+		backEnd.pc.c_drawIndexes += tri->numIndexes;
+		backEnd.pc.c_drawVertexes += tri->numVerts;
+
+		if (tri->ambientSurface && (tri->indexes == tri->ambientSurface->indexes || tri->verts == tri->ambientSurface->verts)) {
+			backEnd.pc.c_drawRefIndexes += tri->numIndexes;
+			backEnd.pc.c_drawRefVertexes += tri->numVerts;
+		}
+	}
+
+	static PFNGLDRAWELEMENTSBASEVERTEXPROC qglDrawElementsBaseVertex = (PFNGLDRAWELEMENTSBASEVERTEXPROC)GLimp_ExtensionPointer("glDrawElementsBaseVertex");
+
+	if ( tri->indexCache.IsValid() ) {
+		qglDrawElementsBaseVertex( GL_TRIANGLES, 
+		                 tri->numIndexes,
+		                 GL_INDEX_TYPE,
+		                 vertexCache.IndexPosition( tri->indexCache ), baseVertex );
+		if (r_showPrimitives.GetBool() && !backEnd.viewDef->IsLightGem() ) 
+			backEnd.pc.c_vboIndexes += tri->numIndexes;
+	} else {
+		vertexCache.UnbindIndex();
+		qglDrawElementsBaseVertex( GL_TRIANGLES, tri->numIndexes, GL_INDEX_TYPE, tri->indexes, baseVertex );
+	}
+}
+
 /*
 ================
 RB_DrawShadowElementsWithCounters
@@ -228,10 +259,19 @@ void RB_RenderDrawSurfListWithFunction( drawSurf_t **drawSurfs, int numDrawSurfs
 		// Note (SteveL) : FIXME: It *won't* always be NULL, we're in a loop and it gets set at the end. This change might be wiping out 
 		// all (marginal) benefits from sorting DrawSurfs by material, as it'll cause a blocking change in GL state on every draw. However, 
 		// reverting the change causes all static solid surfaces to become invisible. Don't know why.
-		if ( drawSurf->space ) {
-			qglLoadMatrixf( drawSurf->space->modelViewMatrix );
+		// Note (duzenko): is the "return" causing it?
+		const bool cacheMatrix = true;
+		if ( cacheMatrix ) {
+			if ( drawSurf->space != backEnd.currentSpace ) {
+				qglLoadMatrixf( drawSurf->space->modelViewMatrix );
+				backEnd.currentSpace = drawSurf->space;
+			}
 		} else {
-			return;
+			if ( drawSurf->space ) {
+				qglLoadMatrixf( drawSurf->space->modelViewMatrix );
+			} else {
+				return; // duzenko: what is this supposed to mean???
+			}
 		}
 
 		if ( drawSurf->space->weaponDepthHack ) {
@@ -258,7 +298,8 @@ void RB_RenderDrawSurfListWithFunction( drawSurf_t **drawSurfs, int numDrawSurfs
 			RB_LeaveDepthHack();
 		}
 
-		backEnd.currentSpace = drawSurf->space;
+		if( !cacheMatrix )
+			backEnd.currentSpace = drawSurf->space;
 	}
 }
 

@@ -184,7 +184,7 @@ static void R_ViewStatistics( viewDef_t &parms ) {
 	if ( !r_showSurfaces.GetBool() ) {
 		return;
 	}
-	common->Printf( "view:%p surfs:%i\n", parms, parms.numDrawSurfs );
+	common->Printf( "view:%i surfs:%i\n", tr.pc.c_numViews, parms.numDrawSurfs );
 }
 
 /*
@@ -638,9 +638,6 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 		double startLoop = Sys_GetClockTicks();
 		session->ActivateFrontend();
 		double endSignal = Sys_GetClockTicks();
-		// render lightgem
-//		gameLocal.RenderLightgem();
-		double endLightgem = Sys_GetClockTicks();
 		// start the back end up again with the new command list
 		R_IssueRenderCommands( backendFrameData );
 		double endRender = Sys_GetClockTicks();
@@ -658,15 +655,14 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 			const double TO_MICROS = 1000000 / Sys_ClockTicksPerSecond();
 			static double lastEndTime = Sys_GetClockTicks();
 			double signalFrontend = (endSignal - startLoop) * TO_MICROS;
-			double lightGem = (endLightgem - endSignal) * TO_MICROS;
-			double render = (endRender - endLightgem) * TO_MICROS;
+			double render = (endRender - endSignal) * TO_MICROS;
 			double waitForFrontend = (endWait - endRender) * TO_MICROS;
 			double framePrep = ( startLoop - lastEndTime ) * TO_MICROS;
 			double totalFrameTime = ( endWait - lastEndTime ) * TO_MICROS;
 			lastEndTime = endWait;
 			
 			smpTimingsLogFile->Printf( "Frame %.7d: preparation %.2f - total frame time %.2f us\n", frameCount, framePrep, totalFrameTime );
-			smpTimingsLogFile->Printf( "  Backend: signal frontend %.2f us - lightgem %.2f us - render %.2f us - wait for frontend %.2f us\n", signalFrontend, lightGem, render, waitForFrontend );
+			smpTimingsLogFile->Printf( "  Backend: signal frontend %.2f us - render %.2f us - wait for frontend %.2f us\n", signalFrontend, render, waitForFrontend );
 			session->LogFrontendTimings( *smpTimingsLogFile );
 		}
 	} catch( std::shared_ptr<ErrorReportedException> e ) {
@@ -692,9 +688,6 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 
 	// we can now release the vertexes used this frame
 	vertexCache.EndFrame();
-
-	// swap lightgem render buffers
-	//gameLocal.SwapLightgemBuffers();
 
 	if ( session->writeDemo ) {
 		session->writeDemo->WriteInt( DS_RENDER );
@@ -929,40 +922,6 @@ void idRenderSystemLocal::CaptureRenderToBuffer( unsigned char* buffer, bool use
 	cmd.imageHeight = rc.height;
 
 	R_IssueRenderCommands( frameData );
-
-	/*int backEndStartTime = Sys_Milliseconds();
-	if ( !r_useFbo.GetBool() ) // duzenko #4425: not applicable, raises gl errors
-		qglReadBuffer( GL_BACK );
-
-	// #4395 Duzenko lightem pixel pack buffer optimization
-	if ( usePbo && glConfig.pixelBufferAvailable ) {
-		static int pboSize = -1;
-		if ( !pbo ) {
-			pboSize = rc->width * rc->height * 3;
-			qglGenBuffersARB( 1, &pbo );
-			qglBindBufferARB( GL_PIXEL_PACK_BUFFER, pbo );
-			qglBufferDataARB( GL_PIXEL_PACK_BUFFER, pboSize, NULL, GL_STREAM_READ );
-			qglBindBufferARB( GL_PIXEL_PACK_BUFFER, 0 );
-		}
-		if ( rc->width * rc->height * 3 != pboSize )
-			common->Error( "CaptureRenderToBuffer: wrong PBO size %dx%d/%d", rc->width, rc->height, pboSize );
-		qglBindBufferARB( GL_PIXEL_PACK_BUFFER, pbo );
-		unsigned char* ptr = (unsigned char*)qglMapBufferARB( GL_PIXEL_PACK_BUFFER, GL_READ_ONLY );
-		if ( ptr ) {
-			memcpy( buffer, ptr, pboSize );
-			qglUnmapBufferARB( GL_PIXEL_PACK_BUFFER );
-		} else {
-			// #4395 vid_restart ?
-			pbo = 0;
-		}
-		qglReadPixels( rc->x, rc->y, rc->width, rc->height, GL_RGB, GL_UNSIGNED_BYTE, 0 );
-		//qglReadPixels(rc->x, rc->y, rc->width, rc->height, GL_RGB, r_fboColorBits.GetInteger() == 15 ? GL_UNSIGNED_SHORT_5_5_5_1 : GL_UNSIGNED_BYTE, 0);
-		qglBindBufferARB( GL_PIXEL_PACK_BUFFER, 0 );
-	} else
-		qglReadPixels( rc->x, rc->y, rc->width, rc->height, GL_RGB, GL_UNSIGNED_BYTE, buffer );
-	qglClear( GL_COLOR_BUFFER_BIT );
-	int backEndFinishTime = Sys_Milliseconds();
-	backEnd.pc.msec += backEndFinishTime - backEndStartTime;*/
 }
 
 /*

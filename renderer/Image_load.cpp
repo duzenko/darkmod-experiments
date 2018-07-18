@@ -629,35 +629,59 @@ void idImage::GenerateImage( const byte *pic, int width, int height,
 #endif
 }
 
-void idImage::GenerateAttachment( int width, int height, textureFilter_t filter, GLint format ) {
-	if ( uploadWidth == width && uploadHeight == height 
-		&& !( format == GL_DEPTH_COMPONENT && r_fboDepthBits.IsModified() ) 
-	) return;
-	this->filter = filter;
+// FBO attachments need specific setup, rarely changed
+void idImage::GenerateAttachment( int width, int height, GLint format ) {
+	bool changed = (uploadWidth != width || uploadHeight != height || internalFormat != format);
+	if ( (format == GL_DEPTH || format == GL_DEPTH_STENCIL) && r_fboDepthBits.IsModified() ) {
+		changed = true;
+		r_fboDepthBits.ClearModified();
+	}
+	if ( format == GL_COLOR && r_fboColorBits.IsModified() ) { // IGPs might benefit from reduced color depth
+		changed = true;
+		r_fboColorBits.ClearModified();
+	}
+	if ( !changed )
+		return;
+	if ( texnum == TEXTURE_NOT_LOADED ) // for color textures usually generated elsewhere, but for depth here
+		qglGenTextures( 1, &texnum );
+	switch ( format ) {
+	case GL_COLOR:
+		filter = TF_LINEAR;
+		break;
+	default:
+		filter = TF_NEAREST;
+	}
 	Bind();
-	uploadWidth = width;
-	uploadHeight = height;
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter == TF_NEAREST ? GL_NEAREST : GL_LINEAR );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter == TF_NEAREST ? GL_NEAREST : GL_LINEAR );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	switch ( format ) {
-	case GL_STENCIL_INDEX:
-		qglTexImage2D( GL_TEXTURE_2D, 0, GL_STENCIL_INDEX8, width, height, 0, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, 0 );
-		common->Printf( "Generated framebuffer STENCIL attachment: %dx%d\n", width, height );
+	case GL_DEPTH_STENCIL:
+		qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, width, height, 0, GL_DEPTH_STENCIL, 
+			r_fboDepthBits.GetInteger() == 32 ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, 0 );
+		common->Printf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
 		break;
-	case GL_DEPTH_COMPONENT:
+	case GL_COLOR:
+		qglTexImage2D( GL_TEXTURE_2D, 0, r_fboColorBits.GetInteger() == 15 ? GL_RGB5_A1 : GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0 );
+		common->Printf( "Generated framebuffer COLOR attachment: %dx%d\n", width, height );
+		break;
+	// these two are for Intel separate stencil optimization
+	case GL_DEPTH:
 		r_fboDepthBits.ClearModified();
 		qglTexImage2D( GL_TEXTURE_2D, 0, r_fboDepthBits.GetInteger() == 16 ? GL_DEPTH_COMPONENT16 : GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
 		common->Printf( "Generated framebuffer DEPTH attachment: %dx%d\n", width, height );
 		break;
-	case GL_DEPTH_STENCIL:
-		qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0 );
-		common->Printf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
+	case GL_STENCIL:
+		qglTexImage2D( GL_TEXTURE_2D, 0, GL_STENCIL_INDEX8, width, height, 0, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, 0 );
+		common->Printf( "Generated framebuffer STENCIL attachment: %dx%d\n", width, height );
 		break;
 	default:
 		common->Error( "Unsupported format in GenerateAttachment\n" );
 	}
+	uploadWidth = width;
+	uploadHeight = height;
+	internalFormat = format;
 }
 
 /*

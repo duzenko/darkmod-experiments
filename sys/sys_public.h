@@ -214,17 +214,18 @@ typedef enum {
 	CPUID_GENERIC						= 0x00002,	// unrecognized processor
 	CPUID_INTEL							= 0x00004,	// Intel
 	CPUID_AMD							= 0x00008,	// AMD
+
 	CPUID_MMX							= 0x00010,	// Multi Media Extensions
-	//CPUID_3DNOW						= 0x00020,	// 3DNow!
-	CPUID_SSE							= 0x00040,	// Streaming SIMD Extensions
-	CPUID_SSE2							= 0x00080,	// Streaming SIMD Extensions 2
-	CPUID_SSE3							= 0x00100,	// Streaming SIMD Extentions 3 aka Prescott's New Instructions
-	CPUID_SSSE3							= 0x00200,	// Supplemental Streaming SIMD Extentions (Core 2)
-	CPUID_SSE41							= 0x00400,	// Streaming SIMD Extentions 4.1 (Penryn)
-	CPUID_AVX							= 0x00800,	// AVX extenstions (SandyBridge)
-	//CPUID_ALTIVEC						= 0x00200,	// AltiVec
-	//CPUID_HTT							= 0x01000,	// Hyper-Threading Technology
-	CPUID_CMOV							= 0x02000,	// Conditional Move (CMOV) and fast floating point comparison (FCOMI) instructions
+	CPUID_SSE							= 0x00020,	// Streaming SIMD Extensions
+	CPUID_SSE2							= 0x00040,	// Streaming SIMD Extensions 2
+	CPUID_SSE3							= 0x00080,	// Streaming SIMD Extentions 3 aka Prescott's New Instructions
+	CPUID_SSSE3							= 0x00100,	// Supplemental Streaming SIMD Extentions (Core 2)
+	CPUID_SSE41							= 0x00200,	// Streaming SIMD Extentions 4.1 (Penryn)
+	CPUID_AVX							= 0x00400,	// AVX extenstions (SandyBridge)
+	CPUID_AVX2							= 0x00800,	// AVX2 extenstions (Haswell)
+	
+	CPUID_FMA3							= 0x01000,	// FMA3 instruction (Haswell)
+//	CPUID_CMOV							= 0x02000,	// Conditional Move (CMOV) and fast floating point comparison (FCOMI) instructions
 	CPUID_FTZ							= 0x04000,	// Flush-To-Zero mode (denormal results are flushed to zero)
 	CPUID_DAZ							= 0x08000	// Denormals-Are-Zero mode (denormal source operands are set to zero)
 } cpuid_t;
@@ -465,16 +466,25 @@ public:
 	bool		Init( const char *host, short port );
 	void		Close();
 
+	// starts listening for incoming connections on specified port
+	bool		Listen( short port );
+	// if there is pending client, create direct connection with him
+	// note: caller must delete returned object!
+	idTCP*		Accept();
+
+	bool		IsAlive() const { return fd > 0; }
+	const netadr_t &GetAddress() const { return address; }
+
 	// returns -1 on failure (and closes socket)
 	// those are non blocking, can be used for polling
 	// there is no buffering, you are not guaranteed to Read or Write everything in a single call
 	// (specially on win32, see recv and send documentation)
 	int			Read( void *data, int size );
-	int			Write( void *data, int size );
+	int			Write( const void *data, int size );
 
 private:
 	netadr_t	address;		// remote address
-	int			fd;				// OS specific socket
+	size_t		fd;				// OS specific socket
 };
 
 				// parses the port number

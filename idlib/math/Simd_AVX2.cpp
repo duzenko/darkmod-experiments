@@ -22,6 +22,7 @@
 #include "Simd_SSE2.h"
 #include "Simd_SSE3.h"
 #include "Simd_AVX.h"
+#include "Simd_AVX2.h"
 #include <immintrin.h>
 
 //===============================================================
@@ -34,19 +35,19 @@ static idCVar com_tempAllowAVX( "com_tempAllowAVX", "1", CVAR_SYSTEM, "to be rem
 
 /*
 ============
-idSIMD_AVX::GetName
+idSIMD_AVX2::GetName
 ============
 */
-const char * idSIMD_AVX::GetName( void ) const {
-	return "MMX & SSE* & AVX";
+const char * idSIMD_AVX2::GetName( void ) const {
+	return "MMX & SSE* & AVX & AVX2 & FMA3";
 }
 
 /*
 ============
-idSIMD_AVX::CullByFrustum
+idSIMD_AVX2::CullByFrustum
 ============
 */
-void VPCALL idSIMD_AVX::CullByFrustum( idDrawVert *verts, const int numVerts, const idPlane frustum[6], byte *pointCull, float epsilon ) {
+void VPCALL idSIMD_AVX2::CullByFrustum( idDrawVert *verts, const int numVerts, const idPlane frustum[6], byte *pointCull, float epsilon ) {
 	if ( !com_tempAllowAVX.GetBool() ) { // hidden under this cvar for now
 		return idSIMD_SSE::CullByFrustum( verts, numVerts, frustum, pointCull, epsilon );
 	}
@@ -61,16 +62,10 @@ void VPCALL idSIMD_AVX::CullByFrustum( idDrawVert *verts, const int numVerts, co
 		__m256 vX = _mm256_set1_ps( vec.x );
 		__m256 vY = _mm256_set1_ps( vec.y );
 		__m256 vZ = _mm256_set1_ps( vec.z );
-		__m256 d = _mm256_add_ps(
-			_mm256_add_ps(
-				_mm256_mul_ps( fA, vX ),
-				_mm256_mul_ps( fB, vY )
-			),
-			_mm256_add_ps(
-				_mm256_mul_ps( fC, vZ ),
-				fD
-			)
-		);
+		__m256 d = _mm256_fmadd_ps( fA, vX,
+			_mm256_fmadd_ps( fB, vY,
+				_mm256_fmadd_ps( fC, vZ, fD )
+			) );
 		int mask_lo = _mm256_movemask_ps( _mm256_cmp_ps( d, eps, _CMP_LT_OQ ) );
 		pointCull[j] = (byte)mask_lo & mask6;
 	}
@@ -79,10 +74,10 @@ void VPCALL idSIMD_AVX::CullByFrustum( idDrawVert *verts, const int numVerts, co
 
 /*
 ============
-idSIMD_AVX::CullByFrustum2
+idSIMD_AVX2::CullByFrustum2
 ============
 */
-void VPCALL idSIMD_AVX::CullByFrustum2( idDrawVert *verts, const int numVerts, const idPlane frustum[6], unsigned short *pointCull, float epsilon ) {
+void VPCALL idSIMD_AVX2::CullByFrustum2( idDrawVert *verts, const int numVerts, const idPlane frustum[6], unsigned short *pointCull, float epsilon ) {
 	if ( !com_tempAllowAVX.GetBool() ) { // hidden under this cvar for now
 		return idSIMD_SSE::CullByFrustum2( verts, numVerts, frustum, pointCull, epsilon );
 	}
@@ -98,16 +93,10 @@ void VPCALL idSIMD_AVX::CullByFrustum2( idDrawVert *verts, const int numVerts, c
 		__m256 vX = _mm256_set1_ps( vec.x );
 		__m256 vY = _mm256_set1_ps( vec.y );
 		__m256 vZ = _mm256_set1_ps( vec.z );
-		__m256 d = _mm256_add_ps(
-			_mm256_add_ps(
-				_mm256_mul_ps( fA, vX ),
-				_mm256_mul_ps( fB, vY )
-			),
-			_mm256_add_ps(
-				_mm256_mul_ps( fC, vZ ),
-				fD
-			)
-		);
+		__m256 d = _mm256_fmadd_ps( fA, vX,
+			_mm256_fmadd_ps( fB, vY,
+				_mm256_fmadd_ps( fC, vZ, fD )
+			) );
 		int mask_lo = _mm256_movemask_ps( _mm256_cmp_ps( d, eps, _CMP_LT_OQ ) );
 		int mask_hi = _mm256_movemask_ps( _mm256_cmp_ps( d, eps, _CMP_GT_OQ ) );
 		pointCull[j] = (unsigned short)(mask_lo & mask6 | (mask_hi & mask6) << 6);

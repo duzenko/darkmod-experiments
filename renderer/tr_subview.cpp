@@ -19,6 +19,7 @@
 
 
 #include "tr_local.h"
+#include "../game/Grabber.h"
 
 
 typedef struct {
@@ -573,7 +574,6 @@ void R_XrayRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect scissor
 /*
 =================
 R_Lightgem_Render
-Originally in game code, moved here for unification
 =================
 */
 bool R_Lightgem_Render() {
@@ -590,10 +590,16 @@ bool R_Lightgem_Render() {
 	// Get position for lg
 	idEntity* lg = m_LightgemSurface.GetEntity();
 	// duzenko #4408 - this happens at map start if no game tics ran in background yet
-	if ( lg->GetModelDefHandle() == -1 )
+	if ( !lg || lg->GetModelDefHandle() == -1 )
 		return false;
 	renderEntity_t* lgent = lg->GetRenderEntity();
+
 	auto player = gameLocal.GetLocalPlayer();
+	// don't render lightgem If player is hidden (i.e the whole player entity is actually hidden)
+	if ( player->GetModelDefHandle() == -1 ) {
+		return false;
+	}
+
 	const idVec3& Cam = player->GetEyePosition();
 	idVec3 LGPos = player->GetPhysics()->GetOrigin();// Set the lightgem position to that of the player
 
@@ -610,13 +616,13 @@ bool R_Lightgem_Render() {
 	lg->SetOrigin( LGPos ); // Move the lightgem testmodel to the players feet based on the eye position
 
 	gameRenderWorld->UpdateEntityDef( lg->GetModelDefHandle(), lgent ); // Make sure the lg is in the updated position
-	auto &m_Lightgem_rv = parms.renderView;
-	m_Lightgem_rv.width = SCREEN_WIDTH;
-	m_Lightgem_rv.height = SCREEN_HEIGHT;
-	m_Lightgem_rv.fov_x = m_Lightgem_rv.fov_y = DARKMOD_LG_RENDER_FOV;	// square, TODO: investigate lowering the value to increase performance on tall maps
-	m_Lightgem_rv.x = m_Lightgem_rv.y = 0;
-	m_Lightgem_rv.viewID = VID_LIGHTGEM;
-	m_Lightgem_rv.viewaxis = idMat3(
+	auto &lightgemRv = parms.renderView;
+	lightgemRv.width = SCREEN_WIDTH;
+	lightgemRv.height = SCREEN_HEIGHT;
+	lightgemRv.fov_x = lightgemRv.fov_y = DARKMOD_LG_RENDER_FOV;	// square, TODO: investigate lowering the value to increase performance on tall maps
+	lightgemRv.x = lightgemRv.y = 0;
+	lightgemRv.viewID = VID_LIGHTGEM;
+	lightgemRv.viewaxis = idMat3(
 		0.0f, 0.0f, 1.0f,
 		0.0f, 1.0f, 0.0f,
 		-1.0f, 0.0f, 0.0f
@@ -624,15 +630,15 @@ bool R_Lightgem_Render() {
 	renderSystem->CropRenderSize( DARKMOD_LG_RENDER_WIDTH, DARKMOD_LG_RENDER_WIDTH, true, true );
 
 	// Give the rv the current ambient light values - Not all of the other values, avoiding fancy effects.
-	m_Lightgem_rv.shaderParms[2] = gameLocal.globalShaderParms[2]; // Ambient R
-	m_Lightgem_rv.shaderParms[3] = gameLocal.globalShaderParms[3]; // Ambient G
-	m_Lightgem_rv.shaderParms[4] = gameLocal.globalShaderParms[4]; // Ambient B
+	lightgemRv.shaderParms[2] = gameLocal.globalShaderParms[2]; // Ambient R
+	lightgemRv.shaderParms[3] = gameLocal.globalShaderParms[3]; // Ambient G
+	lightgemRv.shaderParms[4] = gameLocal.globalShaderParms[4]; // Ambient B
 
 	// angua: render view needs current time, otherwise it will be unable to see time-dependent changes in light shaders such as flickering torches
-	m_Lightgem_rv.time = gameLocal.GetTime();
+	lightgemRv.time = gameLocal.GetTime();
 	static int lgSplit;
 	if(lgSplit++ & 1)
-		m_Lightgem_rv.viewaxis.TransposeSelf();
+		lightgemRv.viewaxis.TransposeSelf();
 
 	// Make sure the player model is hidden in the lightgem renders
 	renderEntity_t* prent = player->GetRenderEntity();
@@ -658,7 +664,7 @@ bool R_Lightgem_Render() {
 	int heldDef = 0;
 	int heldSurfID = 0;
 	int heldShadID = 0;
-	/*renderEntity_t *heldRE = NULL;
+	renderEntity_t *heldRE = NULL;
 	idEntity *heldEnt = gameLocal.m_Grabber->GetSelected();
 	if ( heldEnt ) {
 		heldDef = heldEnt->GetModelDefHandle();
@@ -673,7 +679,7 @@ bool R_Lightgem_Render() {
 			heldRE->suppressSurfaceInViewID = VID_LIGHTGEM;
 			gameRenderWorld->UpdateEntityDef( heldDef, heldRE );
 		}
-	}*/
+	}
 
 	tr.RenderViewToViewport( parms.renderView, parms.viewport );
 
@@ -691,7 +697,7 @@ bool R_Lightgem_Render() {
 	gameRenderWorld->UpdateEntityDef( hdef, hrent );
 
 	// switch back currently grabbed entity settings
-	/*if ( heldEnt ) {
+	if ( heldEnt ) {
 		// tels: #3286: Only update the entityDef if it is valid
 		if ( heldDef >= 0 )
 		{
@@ -699,7 +705,7 @@ bool R_Lightgem_Render() {
 			heldRE->suppressShadowInViewID = heldShadID;
 			gameRenderWorld->UpdateEntityDef( heldDef, heldRE );
 		}
-	}*/
+	}
 
 	int width, height;
 	renderSystem->GetCurrentRenderCropSize( width, height );
@@ -707,7 +713,8 @@ bool R_Lightgem_Render() {
 
 	copyRenderCommand_t &cmd = *(copyRenderCommand_t *)R_GetCommandBuffer( sizeof( cmd ) );
 	cmd.commandId = RC_COPY_RENDER;
-	cmd.buffer = gameLocal.m_lightGem.m_LightgemImgBuffer;
+	// the frontend buffer has already been analyzed this frame and will become the backend buffer in the next frame
+	cmd.buffer = gameLocal.m_lightGem.m_LightgemImgBufferFrontend;
 	cmd.usePBO = true;
 	cmd.image = NULL;
 	cmd.x = 0;
@@ -818,6 +825,12 @@ bool R_GenerateSubViews( void ) {
 
 	subviews = false;
 
+	extern idCVar cv_lg_interleave;
+	if ( !tr.viewDef->isSubview && cv_lg_interleave.GetBool() ) {
+		R_Lightgem_Render();
+		subviews = true;
+	}
+
 	// scan the surfaces until we either find a subview, or determine
 	// there are no more subview surfaces.
 	for ( i = 0; i < tr.viewDef->numDrawSurfs; i++ ) {
@@ -846,11 +859,6 @@ bool R_GenerateSubViews( void ) {
 			subviews = true;
 		}
 		dontReenter = false;
-	}
-
-	if ( !tr.viewDef->isSubview ) {
-		R_Lightgem_Render();
-		subviews = true;
 	}
 
 	return subviews;

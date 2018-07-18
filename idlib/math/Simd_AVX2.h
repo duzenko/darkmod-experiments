@@ -18,22 +18,22 @@
 /*
 ===============================================================================
 
-	AVX implementation of idSIMDProcessor
+	AVX2 implementation of idSIMDProcessor
 
 ===============================================================================
 */
 
 #ifdef __linux__
-#define ALLOW_AVX __attribute__ ((__target__ ("avx")))
+#define ALLOW_AVX2 __attribute__ ((__target__ ("avx2")))  __attribute__ ((__target__ ("fma")))
 #else
-#define ALLOW_AVX
+#define ALLOW_AVX2
 #endif
 
 
 
-class idSIMD_AVX : public idSIMD_SSE3 {
+class idSIMD_AVX2 : public idSIMD_AVX {
 public:
 	virtual const char * VPCALL GetName( void ) const;
-	virtual void VPCALL CullByFrustum( idDrawVert *verts, const int numVerts, const idPlane frustum[6], byte *pointCull, float epsilon ) ALLOW_AVX;
-	virtual void VPCALL CullByFrustum2( idDrawVert *verts, const int numVerts, const idPlane frustum[6], unsigned short *pointCull, float epsilon ) ALLOW_AVX;
+	virtual void VPCALL CullByFrustum( idDrawVert *verts, const int numVerts, const idPlane frustum[6], byte *pointCull, float epsilon ) ALLOW_AVX2;
+	virtual void VPCALL CullByFrustum2( idDrawVert *verts, const int numVerts, const idPlane frustum[6], unsigned short *pointCull, float epsilon ) ALLOW_AVX2;
 };
