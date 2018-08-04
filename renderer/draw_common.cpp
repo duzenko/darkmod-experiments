@@ -18,6 +18,7 @@
 #include "tr_local.h"
 #include "glsl.h"
 #include "FrameBuffer.h"
+#include "Profiling.h"
 
 /*
 ================
@@ -155,13 +156,6 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	tri = surf->backendGeo;
 	shader = surf->material;
 
-	// update the clip plane if needed
-	if ( backEnd.viewDef->numClipPlanes && surf->space != backEnd.currentSpace ) {
-		idPlane	plane;
-		R_GlobalPlaneToLocal( surf->space->modelMatrix, backEnd.viewDef->clipPlanes[0], plane );
-		qglUniform4fv( depthShader.clipPlane, 1, plane.ToFloatPtr() );
-	}
-
 	if ( !shader->IsDrawn() ) {
 		return;
 	}
@@ -222,7 +216,6 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	}
 
 	idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( tri->ambientCache );
-	//qglVertexPointer( 3, GL_FLOAT, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), &ac->xyz );
 
 	bool drawSolid = false;
@@ -278,10 +271,10 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 
 			RB_FinishStageTexturing( pStage, surf, ac );
 
-			qglUniform4fv( depthShader.color, 1, color );
 			qglUniform1f( depthShader.alphaTest, -1 ); // hint the glsl to skip texturing
 		}
 
+		qglUniform4fv( depthShader.color, 1, colorBlack.ToFloatPtr() );
 		qglDisableVertexAttribArray( 8 );
 		if (!didDraw) {
 			drawSolid = true;
@@ -301,6 +294,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 
 	// reset blending
 	if ( shader->GetSort() == SS_SUBVIEW ) {
+		qglUniform4fv( depthShader.color, 1, colorBlack.ToFloatPtr() );
 		GL_State( GLS_DEPTHFUNC_LESS );
 	}
 }
@@ -314,7 +308,7 @@ solid static surfaces are expected to be in a single VBO => call VertexAttribPoi
 also sort by surface.space to minimize matrix switches
 TODO instanced draw
 */
-NOINLINE void RB_FillDepthBuffer_Multi( drawSurf_t **drawSurfs, int numDrawSurfs) {
+ID_NOINLINE void RB_FillDepthBuffer_Multi( drawSurf_t **drawSurfs, int numDrawSurfs) {
 	static idCVar r_showMultiDraw( "r_showMultiDraw", "0", CVAR_RENDERER, "1 = print to console, 2 - visualize" );
 	std::vector<drawSurf_t*> stat;
 	stat.reserve( numDrawSurfs );
@@ -360,14 +354,14 @@ NOINLINE void RB_FillDepthBuffer_Multi( drawSurf_t **drawSurfs, int numDrawSurfs
 		/*if ( r_showMultiDraw.GetInteger() == 2 )
 			gameRenderWorld->DebugBox( ac.offset == tri->ambientCache.offset ? colorGreen : colorYellow,
 				idBox( tri->bounds, stat[i]->space->modelMatrix ), 5000 );*/
-		auto cachePointer = (int)vertexCache.VertexPosition( tri->ambientCache );
-		int baseVertex = cachePointer / sizeof( idDrawVert ), offset = cachePointer % sizeof( idDrawVert );
+		auto cachePointer = (size_t)vertexCache.VertexPosition( tri->ambientCache );
+		size_t baseVertex = cachePointer / sizeof( idDrawVert ), offset = cachePointer % sizeof( idDrawVert );
 		if ( !i ) {
 			qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), (GLvoid*)offset );
 			vapCalls++;
 		}
 		extern void RB_DrawElementsWithCounters( const srfTriangles_t *tri, int baseVertex );
-		RB_DrawElementsWithCounters( tri, baseVertex );
+		RB_DrawElementsWithCounters( tri, (int)baseVertex );
 	}
 	if ( r_showMultiDraw.GetBool() )
 		common->Printf( "Surfaces:%i/%i, matrix loads:%i, AttribPointer calls:%i\n", stat.size(), numDrawSurfs, matrixLoads, vapCalls );
@@ -389,16 +383,21 @@ void RB_STD_FillDepthBuffer( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		return;
 	}
 
+	GL_PROFILE( "STD_FillDepthBuffer" );
+
 	GL_CheckErrors();
 	RB_LogComment( "---------- RB_STD_FillDepthBuffer ----------\n" );
 
 	depthShader.Use();
 	qglUniform1f( depthShader.alphaTest, -1 ); // no alpha test by default
-	// enable the second texture for mirror plane clipping if needed
-	if ( backEnd.viewDef->numClipPlanes ) {
+	if ( backEnd.viewDef->numClipPlanes ) { // pass mirror clip plane details to vertex shader if needed
+		idMat4 m;
+		memcpy( m.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( m ) );
+		m.InverseSelf();
+		qglUniformMatrix4fv( depthShader.matViewRev, 1, false, m.ToFloatPtr() );
+		qglUniform4fv( depthShader.clipPlane, 1, backEnd.viewDef->clipPlanes[0].ToFloatPtr() );
 	} else {
-		const float noClip[] = { 0, 0, 0, 1 };
-		qglUniform4fv( depthShader.clipPlane, 1, noClip );
+		qglUniform4fv( depthShader.clipPlane, 1, colorBlack.ToFloatPtr() ); // 0 0 0 1, all geometry passes
 	}
 
 	// the first texture will be used for alpha tested surfaces
@@ -407,7 +406,7 @@ void RB_STD_FillDepthBuffer( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	// decal surfaces may enable polygon offset
 	qglPolygonOffset( r_offsetFactor.GetFloat(), r_offsetUnits.GetFloat() );
 
-	GL_State( GLS_DEPTHFUNC_LESS & GLS_COLORMASK & GLS_ALPHAMASK );
+	GL_State( GLS_DEPTHFUNC_LESS );
 
 	// Enable stencil test if we are going to be using it for shadows.
 	// If we didn't do this, it would be legal behavior to get z fighting
@@ -989,6 +988,8 @@ int RB_STD_DrawShaderPasses( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	if ( backEnd.viewDef->viewEntitys && r_skipAmbient.GetInteger() == 1 )
 		return numDrawSurfs;
 
+	GL_PROFILE( "STD_DrawShaderPasses" );
+
 	RB_LogComment( "---------- RB_STD_DrawShaderPasses ----------\n" );
 
 	// if we are about to draw the first surface that needs
@@ -1307,6 +1308,8 @@ void RB_STD_FogAllLights( void ) {
 		return;
 	}
 
+	GL_PROFILE( "STD_FogAllLights" );
+
 	RB_LogComment( "---------- RB_STD_FogAllLights ----------\n" );
 
 	for ( vLight = backEnd.viewDef->viewLights ; vLight ; vLight = vLight->next ) {
@@ -1334,6 +1337,8 @@ RB_STD_DrawView
 =============
 */
 void	RB_STD_DrawView( void ) {
+	GL_PROFILE( "STD_DrawView" );
+
 	drawSurf_t	 **drawSurfs;
 	int			numDrawSurfs, processed;
 
@@ -1436,8 +1441,18 @@ Originally in front renderer (idPlayerView::dnPostProcessManager)
 void RB_Bloom() {
 	FB_CopyColorBuffer();
 	int w = globalImages->currentRenderImage->uploadWidth, h = globalImages->currentRenderImage->uploadHeight;
-	if ( !w || !h ) // this has actually happened
+	
+	if ( !w || !h // this has actually happened
+	     // nbohr1more add checks for render tools
+	     || r_showLightCount.GetBool() 
+		 || r_showShadows.GetBool() 
+		 || r_showVertexColor.GetBool()
+		 || r_showShadowCount.GetBool()
+		 || r_showTexturePolarity.GetBool()
+		 || r_showTangentSpace.GetBool()
+		 || r_showDepth.GetBool() )
 		return;
+		
 	float	parm[4];
 
 	FB_SelectPostProcess();

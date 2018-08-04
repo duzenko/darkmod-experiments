@@ -20,6 +20,7 @@
 #include "tr_local.h"
 #include "FrameBuffer.h"
 #include "glsl.h"
+#include "Profiling.h"
 
 idRenderSystemLocal	tr;
 idRenderSystem	*renderSystem = &tr;
@@ -101,6 +102,9 @@ static void R_PerformanceCounters( void ) {
 		int	m1 = frameData ? frameData->memoryHighwater : 0;
 		common->Printf( "frameData: %i (%i)\n", m0, m1 );
 	}
+	if ( r_showSmp.GetBool() )
+		common->Printf( "%c", backEnd.pc.waitedFor );
+
 
 	memset( &tr.pc, 0, sizeof( tr.pc ) );
 	memset( &backEnd.pc, 0, sizeof( backEnd.pc ) );
@@ -152,7 +156,7 @@ void *R_GetCommandBuffer( int bytes ) {
 
 	cmd = (emptyCommand_t *)R_FrameAlloc( bytes );
 	cmd->next = NULL;
-	frameData->cmdTail->next = &cmd->commandId;
+	frameData->cmdTail->next = cmd;
 	frameData->cmdTail = cmd;
 
 	return (void *)cmd;
@@ -634,6 +638,7 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	}
 
 	try {
+		ProfilingBeginFrame();
 		common->SetErrorIndirection( true );
 		double startLoop = Sys_GetClockTicks();
 		session->ActivateFrontend();
@@ -644,6 +649,7 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 		session->WaitForFrontendCompletion();
 		double endWait = Sys_GetClockTicks();
 		common->SetErrorIndirection( false );
+		ProfilingEndFrame();
 
 		if( r_logSmpTimings.GetBool() ) {
 			if( !smpTimingsLogFile ) {

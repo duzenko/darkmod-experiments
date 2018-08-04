@@ -394,6 +394,17 @@ PFNGLFENCESYNCPROC						qglFenceSync;
 PFNGLCLIENTWAITSYNCPROC					qglClientWaitSync;
 PFNGLDELETESYNCPROC						qglDeleteSync;
 
+// profiling
+PFNGLGENQUERIESPROC						qglGenQueries;
+PFNGLDELETEQUERIESPROC					qglDeleteQueries;
+PFNGLQUERYCOUNTERPROC					qglQueryCounter;
+PFNGLGETQUERYOBJECTUI64VPROC			qglGetQueryObjectui64v;
+PFNGLBEGINQUERYPROC						qglBeginQuery;
+PFNGLENDQUERYPROC						qglEndQuery;
+// debug groups
+PFNGLPUSHDEBUGGROUPPROC					qglPushDebugGroup;
+PFNGLPOPDEBUGGROUPPROC					qglPopDebugGroup;
+
 /*
 =================
 R_CheckExtension
@@ -624,6 +635,22 @@ static void R_CheckPortableExtensions( void ) {
 		if (glConfig.framebufferMultisampleAvailable) {
 			qglRenderbufferStorageMultisample = (PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC)GLimp_ExtensionPointer("glRenderbufferStorageMultisampleEXT");
 		}
+	}
+
+	if( glConfig.glVersion > 3.2 || R_CheckExtension( "GL_ARB_timer_query" ) ) {
+		glConfig.timerQueriesAvailable = true;
+		qglGenQueries = ( PFNGLGENQUERIESPROC )GLimp_ExtensionPointer( "glGenQueries" );
+		qglDeleteQueries = ( PFNGLDELETEQUERIESPROC )GLimp_ExtensionPointer( "glDeleteQueries" );
+		qglQueryCounter = ( PFNGLQUERYCOUNTERPROC )GLimp_ExtensionPointer( "glQueryCounter" );
+		qglGetQueryObjectui64v = ( PFNGLGETQUERYOBJECTUI64VPROC )GLimp_ExtensionPointer( "glGetQueryObjectui64v" );
+		qglBeginQuery = ( PFNGLBEGINQUERYPROC )GLimp_ExtensionPointer( "glBeginQuery" );
+		qglEndQuery = ( PFNGLENDQUERYPROC )GLimp_ExtensionPointer( "glEndQuery" );
+	}
+
+	if( glConfig.glVersion > 4.2 || R_CheckExtension( "GL_KHR_debug" ) ) {
+		glConfig.debugGroupsAvailable = true;
+		qglPushDebugGroup = ( PFNGLPUSHDEBUGGROUPPROC )GLimp_ExtensionPointer( "glPushDebugGroup" );
+		qglPopDebugGroup = ( PFNGLPOPDEBUGGROUPPROC )GLimp_ExtensionPointer( "glPopDebugGroup" );
 	}
 
 //	 -----====+++|   END TDM ~SS Extensions   |+++====-----   */
@@ -1315,22 +1342,31 @@ void R_ReadTiledPixels( int width, int height, byte *buffer, renderView_t *ref =
 		for ( int yo = 0 ; yo < height ; yo += oldHeight ) {
 			tr.viewportOffset[0] = -xo;
 			tr.viewportOffset[1] = -yo;
+			int w = (xo + oldWidth > width) ? (width - xo) : oldWidth;
+			int h = (yo + oldHeight > height) ? (height - yo) : oldHeight;
 
 			if ( ref ) {
 				tr.BeginFrame( oldWidth, oldHeight );
 				tr.primaryWorld->RenderScene( *ref );
+				copyRenderCommand_t &cmd = *(copyRenderCommand_t *)R_GetCommandBuffer( sizeof( cmd ) );
+				cmd.commandId = RC_COPY_RENDER;
+				cmd.buffer = temp;
+				cmd.usePBO = false;
+				cmd.image = NULL;
+				cmd.x = 0;
+				cmd.y = 0;
+				cmd.imageWidth = oldWidth;
+				cmd.imageHeight = oldHeight;
+				tr.EndFrame( NULL, NULL );
+				tr.BeginFrame( oldWidth, oldHeight );
 				tr.EndFrame( NULL, NULL );
 			} else {
 				session->UpdateScreen(false);
+				qglReadBuffer( GL_FRONT );
+				qglReadPixels( 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, temp );
 			}
 
-			int w = ( xo + oldWidth > width )   ? (width - xo)  : oldWidth;
-			int h = ( yo + oldHeight > height ) ? (height - yo) : oldHeight;
-
-			qglReadBuffer( GL_FRONT );
-			qglReadPixels( 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, temp ); 
-
-			int	row = ( w * 3 + 3 ) & ~3;		// OpenGL pads to dword boundaries
+			int	row = (oldWidth * 3 + 3 ) & ~3;		// OpenGL pads to dword boundaries
 
 			for ( int y = 0 ; y < h ; y++ ) {
 				memcpy( buffer + ( ( yo + y )* width + xo ) * 3,
@@ -1676,8 +1712,8 @@ void R_EnvShotGL_f( const idCmdArgs &args ) {
 		ref = primary.renderView;
 		ref.x = ref.y = 0;
 		ref.fov_x = ref.fov_y = 90;
-		ref.width = glConfig.vidWidth;
-		ref.height = glConfig.vidHeight;
+		ref.width = SCREEN_WIDTH;// glConfig.vidWidth;
+		ref.height = SCREEN_HEIGHT; //glConfig.vidHeight;
 		ref.viewaxis = axis[i];
 		sprintf( fullname, "env/%s%s", baseName, GLcubeExtensions[i] );
 		tr.TakeScreenshot( size, size, fullname, blends, &ref, true );
@@ -1762,8 +1798,8 @@ void R_EnvShot_f( const idCmdArgs &args ) {
 		ref = primary.renderView;
 		ref.x = ref.y = 0;
 		ref.fov_x = ref.fov_y = 90;
-		ref.width = glConfig.vidWidth;
-		ref.height = glConfig.vidHeight;
+		ref.width = SCREEN_WIDTH;// glConfig.vidWidth;
+		ref.height = SCREEN_HEIGHT;// glConfig.vidHeight;
 		ref.viewaxis = axis[i];
 		sprintf( fullname, "env/%s%s", baseName, cubeExtensions[i] );
 		tr.TakeScreenshot( size, size, fullname, blends, &ref, true );

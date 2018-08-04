@@ -85,6 +85,8 @@ int idImage::BitsForInternalFormat( int internalFormat ) const {
 		return 4;			// not sure
 	case GL_COMPRESSED_RGBA_ARB:
 		return 8;			// not sure
+	case GL_DEPTH: case GL_DEPTH_STENCIL: case GL_STENCIL: case GL_COLOR: // FBO attachments
+		return 0;
 	default:
 		common->Warning( "\nR_BitsForInternalFormat: bad internalFormat:%i", internalFormat );
 	}
@@ -658,8 +660,12 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	switch ( format ) {
 	case GL_DEPTH_STENCIL:
-		qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, width, height, 0, GL_DEPTH_STENCIL, 
-			r_fboDepthBits.GetInteger() == 32 ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, 0 );
+		/*qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, width, height, 0, GL_DEPTH_STENCIL,
+			 ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, 0 );*/
+		if( r_fboDepthBits.GetInteger() == 32 )
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH32F_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 0 );
+		else
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0 );
 		common->Printf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
 		break;
 	case GL_COLOR:
@@ -668,8 +674,19 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 		break;
 	// these two are for Intel separate stencil optimization
 	case GL_DEPTH:
+		switch ( r_fboDepthBits.GetInteger() )
+		{
+		case 16:
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
+			break;
+		case 32:
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
+			break;
+		default:
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
+			break;
+		}
 		r_fboDepthBits.ClearModified();
-		qglTexImage2D( GL_TEXTURE_2D, 0, r_fboDepthBits.GetInteger() == 16 ? GL_DEPTH_COMPONENT16 : GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
 		common->Printf( "Generated framebuffer DEPTH attachment: %dx%d\n", width, height );
 		break;
 	case GL_STENCIL:

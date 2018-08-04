@@ -228,6 +228,9 @@
 @copy $(SolutionDir)$(OpenALSoftDLLPath) $(OutDir) /Y</Command>
     </PostBuildEvent>
     <Link />
+    <Link>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">
     <Link>
@@ -261,6 +264,9 @@
       <Command>
       </Command>
     </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">
     <Link>
@@ -283,6 +289,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Link>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -742,6 +749,7 @@
     <ClInclude Include="renderer\ModelDecal.h" />
     <ClInclude Include="renderer\ModelManager.h" />
     <ClInclude Include="renderer\ModelOverlay.h" />
+    <ClInclude Include="renderer\Profiling.h" />
     <ClInclude Include="renderer\qgl.h" />
     <ClInclude Include="renderer\qgl_linked.h" />
     <ClInclude Include="renderer\RenderSystem.h" />
@@ -751,6 +759,7 @@
     <ClInclude Include="renderer\tr_local.h" />
     <ClInclude Include="renderer\VertexCache.h" />
     <ClInclude Include="sound\efxlib.h" />
+    <ClInclude Include="sound\snd_efxpresets.h" />
     <ClInclude Include="sound\snd_local.h" />
     <ClInclude Include="sound\sound.h" />
     <ClInclude Include="sys\sys_local.h" />
@@ -1203,6 +1212,7 @@
     <ClCompile Include="renderer\ModelDecal.cpp" />
     <ClCompile Include="renderer\ModelManager.cpp" />
     <ClCompile Include="renderer\ModelOverlay.cpp" />
+    <ClCompile Include="renderer\Profiling.cpp" />
     <ClCompile Include="renderer\RenderEntity.cpp" />
     <ClCompile Include="renderer\RenderSystem.cpp" />
     <ClCompile Include="renderer\RenderSystem_init.cpp" />
@@ -1231,6 +1241,7 @@
     <ClCompile Include="sound\snd_cache.cpp" />
     <ClCompile Include="sound\snd_decoder.cpp" />
     <ClCompile Include="sound\snd_efxfile.cpp" />
+    <ClCompile Include="sound\snd_efxpresets.cpp" />
     <ClCompile Include="sound\snd_emitter.cpp" />
     <ClCompile Include="sound\snd_shader.cpp" />
     <ClCompile Include="sound\snd_system.cpp" />

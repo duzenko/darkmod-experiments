@@ -19,11 +19,11 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 
 struct shaderProgram_t {
 	GLuint program;								// GPU program = vertex + fragment shader
-	bool Load( char *fileName );
+	bool Load( const char *fileName );
 	virtual void AfterLoad();
 	virtual void Use();							// 	qglUseProgram( 0 ) to reset, maybe consider RAII?
 private:
-	void AttachShader( GLint ShaderType, char *fileName );
+	void AttachShader( GLint ShaderType, const char *fileName );
 	GLuint CompileShader( GLint ShaderType, const char *fileName );
 };
 
@@ -35,7 +35,7 @@ struct oldStageProgram_t : shaderProgram_t {
 };
 
 struct depthProgram_t : shaderProgram_t {
-	GLint			clipPlane;
+	GLint			clipPlane, matViewRev;
 	GLint			color;
 	GLint			alphaTest;
 	virtual	void AfterLoad();

@@ -14,6 +14,7 @@
 ******************************************************************************/
 
 #include "precompiled.h"
+#include "../renderer/Profiling.h"
 #pragma hdrstop
 
 
@@ -388,6 +389,7 @@ void idConsoleLocal::Init( void ) {
 
 	cmdSystem->AddCommand( "clear", Con_Clear_f, CMD_FL_SYSTEM, "clears the console" );
 	cmdSystem->AddCommand( "conDump", Con_Dump_f, CMD_FL_SYSTEM, "dumps the console text to a file" );
+	cmdSystem->AddCommand( "printGlProfiling", ProfilingPrintTimings_f, CMD_FL_SYSTEM, "Print current GL profile timings to the console" );
 }
 
 /*
@@ -1204,6 +1206,10 @@ void idConsoleLocal::Draw( bool forceFullScreen ) {
 		return;
 	}
 #endif
+	if ( r_glProfiling.GetInteger() == 1 ) {
+		ProfilingDrawCurrentTimings();
+	}
+	
 	int y = 0; // Padding from the top of the screen for FPS display etc.
 
 	if ( forceFullScreen ) {
@@ -1238,7 +1244,7 @@ void idConsoleLocal::Draw( bool forceFullScreen ) {
 	if ( com_showSoundDecoders.GetBool() ) {
 		y = SCR_DrawSoundDecoders( y );
 	}
-	
+
 #ifdef MULTIPLAYER
 	if (com_showAsyncStats.GetBool()) {
 		y = SCR_DrawAsyncStats( y );

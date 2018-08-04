@@ -19,8 +19,9 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "FrameBuffer.h"
 #include "glsl.h"
 
-bool primaryOn;
+bool primaryOn, shadowOn;
 bool depthCopiedThisView;
+float shadowResolution;
 GLuint fboPrimary, fboResolve, fboShadow, fboPostProcess, fboCurrent, pbo;
 GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
 GLuint postProcessWidth, postProcessHeight;
@@ -161,11 +162,22 @@ void FB_CopyRender( const copyRenderCommand_t &cmd ) { // system mem only
 	GL_CheckErrors();
 }
 
+void DeleteFramebuffers() { // force recreate on a cvar change
+	qglDeleteFramebuffers( 1, &fboPrimary );
+	qglDeleteFramebuffers( 1, &fboResolve );
+	qglDeleteFramebuffers( 1, &fboShadow );
+	fboPrimary = fboResolve = fboShadow = 0;
+}
+
 void CheckCreatePrimary() {
 	GL_CheckErrors(); // debug
 	// virtual resolution as a modern alternative for actual desktop resolution affecting all other windows
 	GLuint curWidth = r_fboResolution.GetFloat() * glConfig.vidWidth, curHeight = r_fboResolution.GetFloat() * glConfig.vidHeight;
 
+	if ( r_fboSeparateStencil.IsModified() || curWidth != globalImages->currentRenderImage->uploadWidth ) {
+		r_fboSeparateStencil.ClearModified();
+		DeleteFramebuffers(); // otherwise framebuffer is not resized (even though its attachments are, FIXME? ViewPort not updated?)
+	}
 	if ( r_fboSeparateStencil.GetBool() ) { // intel optimization
 		globalImages->currentDepthImage->GenerateAttachment( curWidth, curHeight, GL_DEPTH );
 		globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
@@ -197,10 +209,7 @@ void CheckCreatePrimary() {
 		int statusPrimary = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
 		if ( GL_FRAMEBUFFER_COMPLETE != statusResolve || GL_FRAMEBUFFER_COMPLETE != statusPrimary ) { // something went wrong, fall back to default
 			common->Printf( "glCheckFramebufferStatus - primary: %d - resolve: %d\n", statusPrimary, statusResolve );
-			qglDeleteFramebuffers( 1, &fboPrimary );
-			qglDeleteFramebuffers( 1, &fboResolve );
-			fboPrimary = 0; // try from scratch next time
-			fboResolve = 0;
+			DeleteFramebuffers(); // try from scratch next time
 			r_useFbo.SetBool( false );
 			r_softShadowsQuality.SetInteger( 0 );
 		}
@@ -208,12 +217,17 @@ void CheckCreatePrimary() {
 	}
 }
 
+//static idCVar r_fboShadowResolution( "r_fboShadowResolution", "1", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "internal rendering resolution factor" );
+
 void CheckCreateShadow() {
 	// (re-)attach textures to FBO
 	GLuint curWidth = glConfig.vidWidth, curHeight = glConfig.vidHeight;
 	if ( primaryOn ) {
-		curWidth *= r_fboResolution.GetFloat();
-		curHeight *= r_fboResolution.GetFloat();
+		float shadowRes = 1;
+		if ( r_softShadowsQuality.GetInteger() < 0 )
+			shadowRes = r_softShadowsQuality.GetInteger() / -100.;
+		curWidth *= r_fboResolution.GetFloat() * shadowRes;
+		curHeight *= r_fboResolution.GetFloat() * shadowRes;
 	}
 	textureType_t type = r_shadows.GetInteger() == 2 ? TT_CUBIC : TT_2D;
 	static textureType_t nowType;
@@ -306,12 +320,23 @@ void FB_BindShadowTexture() {
 		GL_SelectTexture( 7 );
 		if ( !r_fboSeparateStencil.GetBool() ) {
 			globalImages->shadowDepthFbo->Bind();
-			const GLenum GL_DEPTH_STENCIL_TEXTURE_MODE = 0x90EA;
 			qglTexParameteri( GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX );
 		} else
 			globalImages->currentStencilFbo->Bind();
 	}
 	GL_CheckErrors();
+}
+
+void FB_ApplyScissor() {
+	if ( r_useScissor.GetBool() ) {
+		float resFactor = 1;// r_fboResolution.GetFloat();
+		if( shadowOn )
+			resFactor *= shadowResolution;
+		qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1*resFactor,
+			backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1*resFactor,
+			(backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1)*resFactor,
+			(backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1)*resFactor );
+	}
 }
 
 void FB_ToggleShadow( bool on, bool clear ) {
@@ -324,13 +349,35 @@ void FB_ToggleShadow( bool on, bool clear ) {
 			qglBindFramebuffer( GL_READ_FRAMEBUFFER, fboResolve );
 		}
 		if( !depthCopiedThisView && !r_fboSeparateStencil.GetBool() ) {  // most vendors can't do separate stencil so we need to copy depth from the main/default FBO
-			globalImages->shadowDepthFbo->Bind();
-			qglCopyTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, 0, 0, globalImages->shadowDepthFbo->uploadWidth, globalImages->shadowDepthFbo->uploadHeight );
+			qglDisable( GL_SCISSOR_TEST );
+			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, fboShadow );
+			qglBlitFramebuffer( 0, 0, globalImages->currentDepthImage->uploadWidth, globalImages->currentDepthImage->uploadHeight,
+				0, 0, globalImages->shadowDepthFbo->uploadWidth, globalImages->shadowDepthFbo->uploadHeight,
+				GL_DEPTH_BUFFER_BIT, GL_NEAREST );
+			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, primaryOn ? fboPrimary : 0 );
+			qglEnable( GL_SCISSOR_TEST );
 			depthCopiedThisView = true;
 		}
 		GL_CheckErrors();
 	}
+
+	shadowOn = on;
 	qglBindFramebuffer( GL_FRAMEBUFFER, on ? fboShadow : primaryOn ? fboPrimary : 0 );
+	if(r_shadows.GetInteger() == 1)
+	if ( on ) {
+		if ( r_softShadowsQuality.GetInteger() < 0 && shadowOn )
+			shadowResolution = r_softShadowsQuality.GetInteger() / -100.;
+		else
+			shadowResolution = 1;
+		qglViewport( 0, 0, glConfig.vidWidth * shadowResolution * r_fboResolution.GetFloat(), glConfig.vidHeight * shadowResolution * r_fboResolution.GetFloat() );
+		FB_ApplyScissor();
+	} else {
+		if( primaryOn )
+			qglViewport( 0, 0, glConfig.vidWidth * r_fboResolution.GetFloat(), glConfig.vidHeight * r_fboResolution.GetFloat() );
+		else
+			qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+		FB_ApplyScissor();
+	}
 	GL_CheckErrors();
 
 	if ( r_shadows.GetInteger() == 2 ) { // additional steps for shadowmaps
@@ -432,6 +479,7 @@ void LeavePrimary() {
 				break;
 			case 3:
 				globalImages->shadowDepthFbo->Bind();
+				qglTexParameteri( GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT );
 				break;
 			default:
 				globalImages->currentRenderImage->Bind();

@@ -15,6 +15,7 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "precompiled.h"
 #include "tr_local.h"
 #include "glsl.h"
+#include "Profiling.h"
 
 /*
 ==============================================================================
@@ -34,6 +35,7 @@ the shadow volumes face INSIDE
 static void RB_T_Shadow( const drawSurf_t *surf ) {
 	GL_CheckErrors();
 	const srfTriangles_t	*tri;
+	int softCheck = r_softShadowsQuality.GetInteger();
 
 	// set the light position if we are using a vertex program to project the rear surfaces
 	if ( surf->space != backEnd.currentSpace ) {
@@ -91,6 +93,12 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 
 	// debug visualization
 	if ( r_showShadows.GetInteger() ) {
+		
+		if ( r_softShadowsQuality.GetBool() ) {
+		r_softShadowsQuality.SetBool(0);
+		}
+		    
+		
 		if ( r_showShadows.GetInteger() == 3 ) {
 			if ( external ) {
 				qglColor3f( 0.1 / backEnd.overBright, 1 / backEnd.overBright, 0.1 / backEnd.overBright );
@@ -163,6 +171,11 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 			RB_DrawShadowElementsWithCounters( tri, numIndexes );
 		}
 	}
+	
+	if (!r_showShadows.GetBool()) {
+	r_softShadowsQuality.SetInteger ( softCheck );
+	}
+	
 	GL_CheckErrors();
 }
 
@@ -182,6 +195,8 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 	if ( !drawSurfs ) {
 		return;
 	}
+
+	GL_PROFILE( "StencilShadowPass" );
 
 	RB_LogComment( "---------- RB_StencilShadowPass ----------\n" );
 
