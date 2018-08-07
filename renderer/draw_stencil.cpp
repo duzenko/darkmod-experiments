@@ -17,6 +17,8 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "glsl.h"
 #include "Profiling.h"
 
+idCVar r_usePenumbraWedge("r_usePenumbraWedge", "0", CVAR_ARCHIVE | CVAR_BOOL, "" );
+
 /*
 ==============================================================================
 
@@ -43,9 +45,13 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 
 		R_GlobalPointToLocal( surf->space->modelMatrix, backEnd.vLight->globalLightOrigin, localLight.ToVec3() );
 		localLight.w = 0.0f;
-		if ( r_useGLSL.GetBool() )
-			qglUniform4fv( stencilShadowShader.lightOrigin, 1, localLight.ToFloatPtr() );
-		else
+		if ( r_useGLSL.GetBool() ) {
+			if ( r_usePenumbraWedge.GetBool() ) {
+				qglUniformMatrix4fv( penumbraWedgeShader.modelMatrix, 1, false, surf->space->modelMatrix );
+				qglUniform4fv( penumbraWedgeShader.lightOrigin, 1, localLight.ToFloatPtr() );
+			} else
+				qglUniform4fv( stencilShadowShader.lightOrigin, 1, localLight.ToFloatPtr() );
+		} else
 			qglProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_ORIGIN, localLight.ToFloatPtr() );
 	}
 
@@ -200,6 +206,10 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 
 	RB_LogComment( "---------- RB_StencilShadowPass ----------\n" );
 
+	if ( r_usePenumbraWedge.GetBool() )
+		penumbraWedgeShader.Use();
+	else
+		stencilShadowShader.Use();
 	globalImages->BindNull();
 
 	// for visualizing the shadows
@@ -245,6 +255,23 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 		qglDisable( GL_DEPTH_BOUNDS_TEST_EXT );
 
 	qglStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
-	if ( !r_softShadowsQuality.GetBool() || backEnd.viewDef->IsLightGem() )
+	if ( r_softShadowsQuality.GetBool() && !backEnd.viewDef->IsLightGem() ) {
+		if ( r_usePenumbraWedge.GetBool() ) {
+			qglStencilFunc( GL_LESS, 128, 255 );
+			GL_State( GLS_DEPTHMASK | GLS_DEPTHFUNC_LESS );
+			qglUniform1f( penumbraWedgeShader.occluderDistance, 1 );
+			idMat4 m;
+			memcpy( m.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( m ) );
+			m.InverseSelf();
+			qglUniformMatrix4fv( penumbraWedgeShader.viewInvMatrix, 1, false, m.ToFloatPtr() );
+			//qglUniform4fv( penumbraWedgeShader.lightOriginGlobal, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+			GL_SelectTexture( 0 );
+			globalImages->currentDepthImage->Bind();
+			//RB_RenderDrawSurfChainWithFunction( drawSurfs, RB_T_Shadow );
+			globalImages->BindNull();
+			qglUniform1f( penumbraWedgeShader.occluderDistance, 0 );
+		}
+		qglStencilFunc( GL_ALWAYS, 1, 255 );
+	} else
 		qglStencilFunc( GL_GEQUAL, 128, 255 );
 }

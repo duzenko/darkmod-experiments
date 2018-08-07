@@ -68,12 +68,18 @@ struct lightProgram_t : shaderProgram_t {
 	virtual void UpdateUniforms(const drawInteraction_t *din) {}
 };
 
+struct penumbraWedgeProgram_t : lightProgram_t {
+	GLint occluderDistance, viewInvMatrix, lightOriginGlobal;
+	virtual	void AfterLoad();
+};
+
 extern shaderProgram_t cubeMapShader;
 extern oldStageProgram_t oldStageShader;
 extern depthProgram_t depthShader;
 extern fogProgram_t fogShader;
 extern blendProgram_t blendShader;
 extern lightProgram_t stencilShadowShader;
+extern penumbraWedgeProgram_t penumbraWedgeShader;
 
 extern idCVar r_ambient_testadd;
 extern idCVar r_useGLSL;

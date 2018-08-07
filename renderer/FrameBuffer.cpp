@@ -238,6 +238,7 @@ void CheckCreateShadow() {
 		globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
 	} else
 		globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
+	globalImages->shadowDistance->GenerateAttachment( curWidth, curHeight, GL_COLOR );
 
 	if ( globalImages->shadowCubeMap->uploadWidth != r_shadowMapSize.GetInteger() || r_fboDepthBits.IsModified() ) {
 		r_fboDepthBits.ClearModified();
@@ -274,6 +275,7 @@ void CheckCreateShadow() {
 				GLuint depthTex = globalImages->shadowDepthFbo->texnum;
 				qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthTex, 0 );
 			}
+			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, globalImages->shadowDistance->texnum, 0 );
 		}
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
 		if ( GL_FRAMEBUFFER_COMPLETE != status ) { // something went wrong, fall back to default
@@ -315,6 +317,8 @@ void FB_BindShadowTexture() {
 		GL_SelectTexture( 6 );
 		globalImages->shadowCubeMap->Bind();
 	} else {
+		GL_SelectTexture( 5 );
+		globalImages->shadowDistance->Bind();
 		GL_SelectTexture( 6 );
 		globalImages->currentDepthImage->Bind();
 		GL_SelectTexture( 7 );

@@ -92,6 +92,7 @@ shaderProgram_t cubeMapShader;
 oldStageProgram_t oldStageShader;
 depthProgram_t depthShader;
 lightProgram_t stencilShadowShader;
+penumbraWedgeProgram_t penumbraWedgeShader;
 shadowMapProgram_t shadowMapShader;
 fogProgram_t fogShader;
 blendProgram_t blendShader;
@@ -190,6 +191,8 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 
 	// disable features
 	if ( r_softShadowsQuality.GetBool() && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
+		GL_SelectTexture( 5 );
+		globalImages->BindNull();
 		GL_SelectTexture( 6 );
 		globalImages->BindNull();
 		GL_SelectTexture( 7 );
@@ -237,12 +240,11 @@ void RB_GLSL_DrawLight_Stencil() {
 		}
 		if ( useShadowFbo )
 			FB_ToggleShadow( true );
-		qglClear( GL_STENCIL_BUFFER_BIT );
+		qglClear( useShadowFbo ? GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT : GL_STENCIL_BUFFER_BIT );
 	} else 
 		// no shadows, so no need to read or write the stencil buffer
 		qglStencilFunc( GL_ALWAYS, 128, 255 );
 
-	stencilShadowShader.Use();
 	RB_StencilShadowPass( backEnd.vLight->globalShadows );
 
 	const bool NoSelfShadows = true; // otherwise low-poly "round" models cast ugly shadows on themselves
@@ -254,7 +256,6 @@ void RB_GLSL_DrawLight_Stencil() {
 			FB_ToggleShadow( true );
 	}
 
-	stencilShadowShader.Use();
 	RB_StencilShadowPass( backEnd.vLight->localShadows );
 
 	if ( useShadowFbo )
@@ -378,6 +379,7 @@ bool R_ReloadGLSLPrograms() {
 	ok &= pointInteractionShader.Load( "interaction" );				// filenames hardcoded here since they're not used elsewhere
 	ok &= ambientInteractionShader.Load( "ambientInteraction" );
 	ok &= stencilShadowShader.Load( "stencilShadow" );
+	ok &= penumbraWedgeShader.Load( "penumbraWedge" );
 	ok &= shadowMapShader.Load( "shadowMap" );
 	ok &= oldStageShader.Load( "oldStage" );
 	ok &= depthShader.Load( "depthAlpha" );
@@ -611,6 +613,13 @@ void shadowMapProgram_t::Use() {
 	currrentInteractionShader = this;
 }
 
+void penumbraWedgeProgram_t::AfterLoad() {
+	lightProgram_t::AfterLoad();
+	occluderDistance = qglGetUniformLocation( program, "u_occluderDistance" );
+	viewInvMatrix = qglGetUniformLocation( program, "u_viewInvMatrix" );
+	lightOriginGlobal = qglGetUniformLocation( program, "u_lightOriginGlobal" );
+}
+
 void interactionProgram_t::ChooseInteractionProgram() {
 	if ( backEnd.vLight->lightShader->IsAmbientLight() )
 		ambientInteractionShader.Use();
@@ -669,8 +678,8 @@ void interactionProgram_t::AfterLoad() {
 	qglUniform1i( diffuseTexture, 3 );
 	qglUniform1i( specularTexture, 4 );
 	// can't have sampler2D, usampler2D, samplerCube have the same TMU index
-	qglUniform1i( lightProjectionCubemap, 5 ); 
-	qglUniform1i( lightFalloffCubemap, 5 );
+	qglUniform1i( lightProjectionCubemap, MAX_MULTITEXTURE_UNITS + 1 );
+	qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 	qglUseProgram( 0 );
 }
 
@@ -736,11 +745,13 @@ void pointInteractionProgram_t::AfterLoad() {
 	renderResolution = qglGetUniformLocation( program, "u_renderResolution" );
 	lightOrigin2 = qglGetUniformLocation( program, "u_lightOrigin2" );
 	shadowMipMap = qglGetUniformLocation( program, "u_shadowMipMap" );
+	auto distanceTexture = qglGetUniformLocation( program, "u_distanceTexture" );
 	// set texture locations
 	qglUseProgram( program );
 	// can't have sampler2D, usampler2D, samplerCube, samplerCubeShadow on the same TMU
 	qglUniform1i( shadowMap, 6 );
 	qglUniform1i( stencilTexture, 7 );
+	qglUniform1i( distanceTexture, 5 );
 	qglUseProgram( 0 );
 	g_softShadowsSamples.Clear();
 }
