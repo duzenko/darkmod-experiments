@@ -61,7 +61,26 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 		return;
 	}
 
-	qglVertexAttribPointer( 0, 4, GL_FLOAT, false, sizeof( shadowCache_t ), vertexCache.VertexPosition( tri->shadowCache ) );
+	idPlane *planes = (idPlane *)alloca(tri->numVerts*sizeof( idPlane ));
+	for ( int i = 0; i < tri->numVerts; i++ ) {
+		planes[i].Zero(); // needed?
+	}
+
+	auto *ac = (shadowCache_t *)vertexCache.VertexPosition( tri->shadowCache );
+	qglVertexAttribPointer( 0, 4, GL_FLOAT, false, sizeof( shadowCache_t ), &ac->xyz );
+
+	/*shadowCache_t *shadowVertexes = (shadowCache_t *)qglMapBufferARB( GL_ARRAY_BUFFER, GL_READ_ONLY );
+	for ( int i = 0; i < tri->numIndexes; i += 3 ) {
+		auto &v1 = shadowVertexes[tri->indexes[i]].xyz, &v2 = shadowVertexes[tri->indexes[i + 1]].xyz, &v3 = shadowVertexes[tri->indexes[i + 2]].xyz;
+		if ( v1.w + v2.w + v3.w < 3.f )
+			continue;
+		idPlane p( v1.ToVec3(), v2.ToVec3(), v3.ToVec3(), true );
+		planes[tri->indexes[i]] = planes[tri->indexes[i]] + p;
+		planes[tri->indexes[i + 1]] = planes[tri->indexes[i + 1]] + p;
+		planes[tri->indexes[i + 2]] = planes[tri->indexes[i + 2]] + p;
+	}
+	qglUnmapBufferARB( GL_ARRAY_BUFFER );*/
+	qglVertexAttribPointer( 11, 4, GL_FLOAT, false, 0, planes );
 
 	// we always draw the sil planes, but we may not need to draw the front or rear caps
 	int	numIndexes;
@@ -239,6 +258,7 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 		qglEnable( GL_POLYGON_OFFSET_FILL );
 	}
 
+	qglEnableVertexAttribArray( 11 );
 	qglStencilFunc( GL_ALWAYS, 1, 255 );
 
 	if ( glConfig.depthBoundsTestAvailable && r_useDepthBoundsTest.GetBool() ) 
@@ -267,11 +287,12 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 			//qglUniform4fv( penumbraWedgeShader.lightOriginGlobal, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
 			GL_SelectTexture( 0 );
 			globalImages->currentDepthImage->Bind();
-			//RB_RenderDrawSurfChainWithFunction( drawSurfs, RB_T_Shadow );
+			RB_RenderDrawSurfChainWithFunction( drawSurfs, RB_T_Shadow );
 			globalImages->BindNull();
 			qglUniform1f( penumbraWedgeShader.occluderDistance, 0 );
 		}
 		qglStencilFunc( GL_ALWAYS, 1, 255 );
 	} else
 		qglStencilFunc( GL_GEQUAL, 128, 255 );
+	qglDisableVertexAttribArray( 11 );
 }

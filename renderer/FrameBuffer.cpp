@@ -485,6 +485,9 @@ void LeavePrimary() {
 				globalImages->shadowDepthFbo->Bind();
 				qglTexParameteri( GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT );
 				break;
+			case 4:
+				globalImages->shadowDistance->Bind();
+				break;
 			default:
 				globalImages->currentRenderImage->Bind();
 			}
