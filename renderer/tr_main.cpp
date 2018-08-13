@@ -973,7 +973,7 @@ void R_SetupProjection( void ) {
 	// rasterize right at the wraparound point
 	tr.viewDef->projectionMatrix[2] = 0;
 	tr.viewDef->projectionMatrix[6] = 0;
-	tr.viewDef->projectionMatrix[10] = -0.999f;
+	tr.viewDef->projectionMatrix[10] = -1.f;
 	tr.viewDef->projectionMatrix[14] = -2.0f * zNear;
 
 	tr.viewDef->projectionMatrix[3] = 0;

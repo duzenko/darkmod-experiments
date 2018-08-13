@@ -278,12 +278,14 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 	if ( r_softShadowsQuality.GetBool() && !backEnd.viewDef->IsLightGem() ) {
 		if ( r_usePenumbraWedge.GetBool() ) {
 			qglStencilFunc( GL_LESS, 128, 255 );
+			qglStencilFunc( GL_ALWAYS, 1, 255 );
 			GL_State( GLS_DEPTHMASK | GLS_DEPTHFUNC_LESS );
 			qglUniform1f( penumbraWedgeShader.occluderDistance, 1 );
-			idMat4 m;
+			/*idMat4 m;
 			memcpy( m.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( m ) );
 			m.InverseSelf();
-			qglUniformMatrix4fv( penumbraWedgeShader.viewInvMatrix, 1, false, m.ToFloatPtr() );
+			qglUniformMatrix4fv( penumbraWedgeShader.viewInvMatrix, 1, false, m.ToFloatPtr() );*/
+			qglUniformMatrix4fv( penumbraWedgeShader.viewInvMatrix, 1, false, backEnd.viewDef->worldSpace.modelViewMatrix );
 			//qglUniform4fv( penumbraWedgeShader.lightOriginGlobal, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
 			GL_SelectTexture( 0 );
 			globalImages->currentDepthImage->Bind();
