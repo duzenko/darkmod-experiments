@@ -247,7 +247,8 @@ void RB_GLSL_DrawLight_Stencil() {
 
 		if ( useShadowFbo ) {
 			FB_ToggleShadow( true );
-			qglClear( useShadowFbo ? GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT : GL_STENCIL_BUFFER_BIT );
+			//qglClear( useShadowFbo ? GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT : GL_STENCIL_BUFFER_BIT );
+			qglClear( GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
 		} else
 			// no shadows, so no need to read or write the stencil buffer
 			qglStencilFunc( GL_ALWAYS, 128, 255 );

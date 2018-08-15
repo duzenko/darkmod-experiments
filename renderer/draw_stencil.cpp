@@ -275,7 +275,8 @@ void RB_StencilShadowPass( const drawSurf_t *drawSurfs ) {
 		qglDisable( GL_DEPTH_BOUNDS_TEST_EXT );
 
 	qglStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
-	if ( r_softShadowsQuality.GetBool() && !backEnd.viewDef->IsLightGem() ) {
+	if ( /*r_softShadowsQuality.GetBool() &&*/
+		!backEnd.viewDef->IsLightGem() ) {
 		if ( r_usePenumbraWedge.GetBool() ) {
 			qglStencilFunc( GL_LESS, 128, 255 );
 			qglStencilFunc( GL_ALWAYS, 1, 255 );
