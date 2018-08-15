@@ -2,9 +2,9 @@
 ===========================================================================
 
 Doom 3 GPL Source Code
-Copyright (C) 1999-2011 id Software LLC, a ZeniMax Media company. 
+Copyright (C) 1999-2011 id Software LLC, a ZeniMax Media company.
 
-This file is part of the Doom 3 GPL Source Code ("Doom 3 Source Code").  
+This file is part of the Doom 3 GPL Source Code ("Doom 3 Source Code").
 
 Doom 3 Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ struct shadowMapProgram_t : lightProgram_t {
 struct interactionProgram_t : lightProgram_t {
 	GLint localViewOrigin;
 	GLint rgtc;
-		  
+
 	GLint lightProjectionS;
 	GLint lightProjectionT;
 	GLint lightProjectionQ;
@@ -52,20 +52,20 @@ struct interactionProgram_t : lightProgram_t {
 
 	GLint colorModulate;
 	GLint colorAdd;
-		  
+
 	GLint bumpMatrixS;
 	GLint bumpMatrixT;
-		  
+
 	GLint diffuseMatrixS;
 	GLint diffuseMatrixT;
 	GLint diffuseColor;
-		  
+
 	GLint specularMatrixS;
 	GLint specularMatrixT;
 	GLint specularColor;
 
 	virtual	void AfterLoad();
-	virtual void UpdateUniforms(bool translucent) {}
+	virtual void UpdateUniforms( bool translucent ) {}
 	virtual void UpdateUniforms( const drawInteraction_t *din );
 	virtual void Use();
 	static void ChooseInteractionProgram();
@@ -98,8 +98,7 @@ fogProgram_t fogShader;
 blendProgram_t blendShader;
 pointInteractionProgram_t pointInteractionShader;
 ambientInteractionProgram_t ambientInteractionShader;
-
-lightProgram_t* currrentInteractionShader;
+lightProgram_t *currrentInteractionShader;
 
 /*
 ==================
@@ -132,8 +131,9 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 	GL_SelectTexture( 4 );
 	din->specularImage->Bind();
 
-	if ( (r_softShadowsQuality.GetBool()) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2) 
+	if ( ( r_softShadowsQuality.GetBool() ) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
 		FB_BindShadowTexture();
+	}
 
 	// draw it
 	GL_CheckErrors();
@@ -147,9 +147,9 @@ RB_GLSL_CreateDrawInteractions
 =============
 */
 void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
-	if ( !surf )
+	if ( !surf ) {
 		return;
-
+	}
 	GL_PROFILE( "GLSL_CreateDrawInteractions" );
 
 	// perform setup here that will be constant for all interactions
@@ -166,11 +166,13 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 	qglEnableVertexAttribArray( 11 );
 	qglEnableVertexAttribArray( 3 );
 
-	for ( ; surf; surf = surf->nextOnLight ) {
-		if ( surf->dsFlags & DSF_SHADOW_MAP_ONLY )
+	for ( /**/; surf; surf = surf->nextOnLight ) {
+		if ( surf->dsFlags & DSF_SHADOW_MAP_ONLY ) {
 			continue;
+		}
+
 		// set the vertex pointers
-		idDrawVert	*ac = (idDrawVert *)vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
 		qglVertexAttribPointer( 3, 4, GL_UNSIGNED_BYTE, true, sizeof( idDrawVert ), &ac->color );
 		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
 		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
@@ -180,9 +182,8 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 
 		// this may cause RB_GLSL_DrawInteraction to be executed multiple
 		// times with different colors and images if the surface or light have multiple layers
-		RB_CreateSingleDrawInteractions( surf/*, RB_GLSL_DrawInteraction*/ );
+		RB_CreateSingleDrawInteractions( surf );
 	}
-
 	qglDisableVertexAttribArray( 8 );
 	qglDisableVertexAttribArray( 9 );
 	qglDisableVertexAttribArray( 10 );
@@ -198,7 +199,6 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 		GL_SelectTexture( 7 );
 		globalImages->BindNull();
 	}
-
 	GL_SelectTexture( 4 );
 	globalImages->BindNull();
 
@@ -229,42 +229,61 @@ void RB_GLSL_DrawLight_Stencil() {
 	pointInteractionShader.Use();
 	qglUniform1f( pointInteractionShader.shadows, 1 );
 
+	// set depth bounds for the whole light
+	if ( backEnd.useLightDepthBounds ) {
+		GL_DepthBoundsTest( backEnd.vLight->scissorRect.zmin, backEnd.vLight->scissorRect.zmax );
+	}
+
 	// clear the stencil buffer if needed
 	if ( backEnd.vLight->globalShadows || backEnd.vLight->localShadows ) {
 		backEnd.currentScissor = backEnd.vLight->scissorRect;
+
 		if ( r_useScissor.GetBool() ) {
 			qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
 				backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 				backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 				backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
 		}
-		if ( useShadowFbo )
+
+		if ( useShadowFbo ) {
 			FB_ToggleShadow( true );
-		qglClear( useShadowFbo ? GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT : GL_STENCIL_BUFFER_BIT );
-	} else 
-		// no shadows, so no need to read or write the stencil buffer
-		qglStencilFunc( GL_ALWAYS, 128, 255 );
+			qglClear( useShadowFbo ? GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT : GL_STENCIL_BUFFER_BIT );
+		} else
+			// no shadows, so no need to read or write the stencil buffer
+			qglStencilFunc( GL_ALWAYS, 128, 255 );
+	}
 
 	RB_StencilShadowPass( backEnd.vLight->globalShadows );
 
 	const bool NoSelfShadows = true; // otherwise low-poly "round" models cast ugly shadows on themselves
+
 	if ( NoSelfShadows ) {
-		if ( useShadowFbo )
+		if ( useShadowFbo ) {
 			FB_ToggleShadow( false );
+		}
 		RB_GLSL_CreateDrawInteractions( backEnd.vLight->localInteractions );
-		if ( useShadowFbo )
+
+		if ( useShadowFbo ) {
 			FB_ToggleShadow( true );
+		}
 	}
+	stencilShadowShader.Use();
 
 	RB_StencilShadowPass( backEnd.vLight->localShadows );
 
-	if ( useShadowFbo )
+	if ( useShadowFbo ) {
 		FB_ToggleShadow( false );
+	}
 
-	if ( !NoSelfShadows )
+	if ( !NoSelfShadows ) {
 		RB_GLSL_CreateDrawInteractions( backEnd.vLight->localInteractions );
+	}
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->globalInteractions );
 
+	// reset depth bounds
+	if ( backEnd.useLightDepthBounds ) {
+		GL_DepthBoundsTest( 0.0f, 0.0f );
+	}
 	qglUseProgram( 0 );	// if there weren't any globalInteractions, it would have stayed on
 }
 
@@ -274,27 +293,36 @@ RB_GLSL_CreateDrawInteractions
 =============
 */
 void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = false ) {
-	if ( !surf )
+	if ( !surf ) {
 		return;
-
+	}
 	GL_PROFILE( "GLSL_DrawInteractions_ShadowMap" );
 
 	FB_ToggleShadow( true, clear );
+
 	shadowMapShader.Use();
+
 	qglUniform4fv( shadowMapShader.lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+
 	for ( ; surf; surf = surf->nextOnLight ) {
-		if ( !surf->material->SurfaceCastsShadow() )
-			continue; //most of dynamic models don't have this flag but use an _invisible_ shadow material
-		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE )
-			continue; // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+		if ( !surf->material->SurfaceCastsShadow() ) {
+			continue;    //most of dynamic models don't have this flag but use an _invisible_ shadow material
+		}
+
+		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
+			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+		}
 		qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
+
 		// set the vertex pointers
-		idDrawVert	*ac = (idDrawVert *)vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
 		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), &ac->xyz );
 		RB_DrawElementsWithCounters( surf->backendGeo );
 	}
 	qglUseProgram( 0 );
+
 	FB_ToggleShadow( false );
+
 	GL_CheckErrors();
 }
 
@@ -307,20 +335,21 @@ void RB_GLSL_DrawLight_ShadowMap() {
 	GL_PROFILE( "GLSL_DrawLight_ShadowMap" );
 
 	GL_CheckErrors();
+
 	if ( !backEnd.vLight->lightShader->IsAmbientLight() ) {
-		bool doShadows = !backEnd.vLight->lightDef->parms.noShadows
-			&& backEnd.vLight->lightShader->LightCastsShadows();
+		bool doShadows = !backEnd.vLight->lightDef->parms.noShadows &&
+		                 backEnd.vLight->lightShader->LightCastsShadows();
 
 		if ( doShadows ) {
 			RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->globalInteractions, true );
-			
+
 			pointInteractionShader.Use();
 			qglUniform1f( pointInteractionShader.shadows, 2 );
 			qglUniform1i( pointInteractionShader.shadowMipMap, ShadowMipMap );
 			RB_GLSL_CreateDrawInteractions( backEnd.vLight->localInteractions );
-			
+
 			RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions );
-			
+
 			pointInteractionShader.Use();
 		} else {
 			pointInteractionShader.Use();
@@ -329,7 +358,9 @@ void RB_GLSL_DrawLight_ShadowMap() {
 		}
 	}
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->globalInteractions );
-	qglUseProgram( 0 );	
+
+	qglUseProgram( 0 );
+
 	GL_CheckErrors();
 }
 
@@ -342,28 +373,39 @@ void RB_GLSL_DrawInteractions() {
 	GL_PROFILE( "GLSL_DrawInteractions" );
 
 	GL_SelectTexture( 0 );
+
 	// for each light, perform adding and shadowing
 	for ( backEnd.vLight = backEnd.viewDef->viewLights; backEnd.vLight; backEnd.vLight = backEnd.vLight->next ) {
 		// do fogging later
-		if ( backEnd.vLight->lightShader->IsFogLight() )
+		if ( backEnd.vLight->lightShader->IsFogLight() ) {
 			continue;
-		if ( backEnd.vLight->lightShader->IsBlendLight() )
+		}
+
+		if ( backEnd.vLight->lightShader->IsBlendLight() ) {
 			continue;
+		}
+
 		// if there are no interactions, get out!
-		if ( !backEnd.vLight->localInteractions && !backEnd.vLight->globalInteractions && !backEnd.vLight->translucentInteractions )
+		if ( !backEnd.vLight->localInteractions && !backEnd.vLight->globalInteractions && !backEnd.vLight->translucentInteractions ) {
 			continue;
-		if ( r_shadows.GetInteger() == 2 )
+		}
+
+		if ( r_shadows.GetInteger() == 2 ) {
 			RB_GLSL_DrawLight_ShadowMap();
-		else
+		} else {
 			RB_GLSL_DrawLight_Stencil();
+		}
+
 		// translucent surfaces never get stencil shadowed
-		if ( r_skipTranslucent.GetBool() )
+		if ( r_skipTranslucent.GetBool() ) {
 			continue;
+		}
 		qglStencilFunc( GL_ALWAYS, 128, 255 );
 		backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 		RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
 		backEnd.depthFunc = GLS_DEPTHFUNC_EQUAL;
 	}
+
 	// disable stencil shadow test
 	qglStencilFunc( GL_ALWAYS, 128, 255 );
 	GL_SelectTexture( 0 );
@@ -371,7 +413,7 @@ void RB_GLSL_DrawInteractions() {
 
 /*
 ==================
-R_ReloadGLSLShaders_f
+R_ReloadGLSLPrograms
 ==================
 */
 bool R_ReloadGLSLPrograms() {
@@ -389,6 +431,11 @@ bool R_ReloadGLSLPrograms() {
 	return ok;
 }
 
+/*
+==================
+R_ReloadGLSLPrograms_f
+==================
+*/
 void R_ReloadGLSLPrograms_f( const idCmdArgs &args ) {
 	common->Printf( "---------- R_ReloadGLSLPrograms_f -----------\n" );
 
@@ -397,7 +444,6 @@ void R_ReloadGLSLPrograms_f( const idCmdArgs &args ) {
 		common->Printf( "GLSL shaders failed to init.\n" );
 		return;
 	}
-
 	common->Printf( "---------------------------------\n" );
 }
 
@@ -415,10 +461,12 @@ GLuint shaderProgram_t::CompileShader( GLint ShaderType, const char *fileName ) 
 	char    *fileBuffer;
 
 	// load the program even if we don't support it
-	fileSystem->ReadFile( fileName, (void **)&fileBuffer, NULL );
+	fileSystem->ReadFile( fileName, ( void ** )&fileBuffer, NULL );
+
 	if ( !fileBuffer ) {
-		if ( ShaderType != GL_GEOMETRY_SHADER )
+		if ( ShaderType != GL_GEOMETRY_SHADER ) {
 			common->Warning( "shaderCompileFromFile: \'%s\' not found", fileName );
+		}
 		return 0;
 	}
 
@@ -436,18 +484,18 @@ GLuint shaderProgram_t::CompileShader( GLint ShaderType, const char *fileName ) 
 		common->Warning( "Unknown ShaderType in shaderProgram_t::CompileShader" );
 		break;
 	}
-	
 	source = fileBuffer;
 
 	/* create shader object, set the source, and compile */
 	shader = qglCreateShader( ShaderType );
-	length = (GLint)strlen( source );
-	qglShaderSource( shader, 1, (const char **)&source, &length );
+	length = ( GLint )strlen( source );
+	qglShaderSource( shader, 1, ( const char ** )&source, &length );
 	qglCompileShader( shader );
 	fileSystem->FreeFile( fileBuffer );
 
 	/* make sure the compilation was successful */
 	qglGetShaderiv( shader, GL_COMPILE_STATUS, &result );
+
 	if ( result == GL_FALSE ) {
 		char *log;
 
@@ -463,7 +511,6 @@ GLuint shaderProgram_t::CompileShader( GLint ShaderType, const char *fileName ) 
 		qglDeleteShader( shader );
 		return 0;
 	}
-
 	return shader;
 }
 
@@ -486,10 +533,11 @@ void shaderProgram_t::AttachShader( GLint ShaderType, const char *fileName ) {
 		fn.Append( ".fs" );
 		break;
 	default:
-		common->Warning("Unknown ShaderType in shaderProgram_t::AttachShader");
+		common->Warning( "Unknown ShaderType in shaderProgram_t::AttachShader" );
 		break;
 	}
 	GLuint shader = CompileShader( ShaderType, fn.c_str() );
+
 	if ( shader != 0 ) {
 		/* attach the shader to the program */
 		qglAttachShader( program, shader );
@@ -508,8 +556,10 @@ shaderProgram_t::Load
 */
 bool shaderProgram_t::Load( const char *fileName ) {
 	common->Printf( "%s ", fileName );
-	if ( program && qglIsProgram( program ) )
+
+	if ( program && qglIsProgram( program ) ) {
 		qglDeleteProgram( program );
+	}
 	program = qglCreateProgram();
 	AttachShader( GL_VERTEX_SHADER, fileName );
 	AttachShader( GL_GEOMETRY_SHADER, fileName );
@@ -524,6 +574,7 @@ bool shaderProgram_t::Load( const char *fileName ) {
 	GLint result;/* link the program and make sure that there were no errors */
 	qglLinkProgram( program );
 	qglGetProgramiv( program, GL_LINK_STATUS, &result );
+
 	if ( result != GL_TRUE ) {
 		/* get the program info log */
 		GLint length;
@@ -539,12 +590,12 @@ bool shaderProgram_t::Load( const char *fileName ) {
 		program = 0;
 		return false;
 	}
-
 	AfterLoad();
 
 	GLint validProgram;
 	qglValidateProgram( program );
 	qglGetProgramiv( program, GL_VALIDATE_STATUS, &validProgram );
+
 	if ( !validProgram ) {
 		/* get the program info log */
 		GLint length;
@@ -560,8 +611,8 @@ bool shaderProgram_t::Load( const char *fileName ) {
 		program = 0;
 		return false;
 	}
-
 	GL_CheckErrors();
+
 	return true;
 }
 
@@ -621,10 +672,11 @@ void penumbraWedgeProgram_t::AfterLoad() {
 }
 
 void interactionProgram_t::ChooseInteractionProgram() {
-	if ( backEnd.vLight->lightShader->IsAmbientLight() )
+	if ( backEnd.vLight->lightShader->IsAmbientLight() ) {
 		ambientInteractionShader.Use();
-	else
+	} else {
 		pointInteractionShader.Use();
+	}
 	GL_CheckErrors();
 }
 
@@ -668,15 +720,17 @@ void interactionProgram_t::AfterLoad() {
 	lightFalloffCubemap = qglGetUniformLocation( program, "u_lightFalloffCubemap" );
 	GLint diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
 	GLint specularTexture = qglGetUniformLocation( program, "u_specularTexture" );
-	
+
 	// set texture locations
 	qglUseProgram( program );
+
 	// static bindings
 	qglUniform1i( normalTexture, 0 );
 	qglUniform1i( lightFalloffTexture, 1 );
 	qglUniform1i( lightProjectionTexture, 2 );
 	qglUniform1i( diffuseTexture, 3 );
 	qglUniform1i( specularTexture, 4 );
+
 	// can't have sampler2D, usampler2D, samplerCube have the same TMU index
 	qglUniform1i( lightProjectionCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 	qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS + 1 );
@@ -685,8 +739,8 @@ void interactionProgram_t::AfterLoad() {
 
 void interactionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
 	static const float	zero[4]		= { 0, 0, 0, 0 },
-						one[4]		= { 1, 1, 1, 1 },
-						negOne[4]	= { -1, -1, -1, -1 };
+	                    one[4]		= { 1, 1, 1, 1 },
+	                    negOne[4]	= { -1, -1, -1, -1 };
 
 	qglUniform4fv( lightProjectionS, 1, din->lightProjection[0].ToFloatPtr() );
 	qglUniform4fv( lightProjectionT, 1, din->lightProjection[1].ToFloatPtr() );
@@ -713,7 +767,7 @@ void interactionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
 		qglUniform4f( colorAdd, one[0], one[1], one[2], one[3] );
 		break;
 	}
-	if ( backEnd.vLight->lightShader->IsCubicLight() /*|| backEnd.vLight->lightShader->IsAmbientCubicLight()*/ ) {
+	if ( backEnd.vLight->lightShader->IsCubicLight() ) {
 		qglUniform1f( cubic, 1.0 );
 		qglUniform1i( lightProjectionTexture, MAX_MULTITEXTURE_UNITS );
 		qglUniform1i( lightProjectionCubemap, 2 );
@@ -722,9 +776,9 @@ void interactionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
 	} else {
 		qglUniform1f( cubic, 0.0 );
 		qglUniform1i( lightProjectionTexture, 2 );
-		qglUniform1i( lightProjectionCubemap, MAX_MULTITEXTURE_UNITS+1 );
+		qglUniform1i( lightProjectionCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 		qglUniform1i( lightFalloffTexture, 1 );
-		qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS+1 );
+		qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 	}
 	qglUniform4fv( localViewOrigin, 1, din->localViewOrigin.ToFloatPtr() );
 	qglUniform4fv( specularMatrixS, 1, din->specularMatrix[0].ToFloatPtr() );
@@ -748,6 +802,7 @@ void pointInteractionProgram_t::AfterLoad() {
 	auto distanceTexture = qglGetUniformLocation( program, "u_distanceTexture" );
 	// set texture locations
 	qglUseProgram( program );
+
 	// can't have sampler2D, usampler2D, samplerCube, samplerCubeShadow on the same TMU
 	qglUniform1i( shadowMap, 6 );
 	qglUniform1i( stencilTexture, 7 );
@@ -758,7 +813,8 @@ void pointInteractionProgram_t::AfterLoad() {
 
 void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 	qglUniform1f( advanced, r_testARBProgram.GetFloat() );
-	if ( !translucent && (backEnd.vLight->globalShadows || backEnd.vLight->localShadows || r_shadows.GetInteger() == 2) && !backEnd.viewDef->IsLightGem() ) {
+
+	if ( !translucent && ( backEnd.vLight->globalShadows || backEnd.vLight->localShadows || r_shadows.GetInteger() == 2 ) && !backEnd.viewDef->IsLightGem() ) {
 		qglUniform1i( softShadowsQuality, r_softShadowsQuality.GetInteger() );
 		qglUniform1f( softShadowsRadius, r_softShadowsRadius.GetFloat() );
 
@@ -766,7 +822,7 @@ void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 		if ( sampleK > 0 ) { // texcoords for screen-space softener filter
 			if ( g_softShadowsSamples.Num() != sampleK || g_softShadowsSamples.Num() == 0 ) {
 				GeneratePoissonDiskSampling( g_softShadowsSamples, sampleK );
-				qglUniform2fv( softShadowSamples, sampleK, (float*)g_softShadowsSamples.Ptr() );
+				qglUniform2fv( softShadowSamples, sampleK, ( float * )g_softShadowsSamples.Ptr() );
 			}
 		}
 		if ( sampleK < 0 ) { // WIP low res stencil shadows
@@ -779,9 +835,9 @@ void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 	if ( r_shadows.GetInteger() == 2 ) {
 		qglUniform1i( shadowMap, 6 );
 		qglUniform1i( depthTexture, MAX_MULTITEXTURE_UNITS );
-		qglUniform1i( stencilTexture, MAX_MULTITEXTURE_UNITS+2 );
+		qglUniform1i( stencilTexture, MAX_MULTITEXTURE_UNITS + 2 );
 	} else {
-		qglUniform1i( shadowMap, MAX_MULTITEXTURE_UNITS+2 );
+		qglUniform1i( shadowMap, MAX_MULTITEXTURE_UNITS + 2 );
 		qglUniform1i( depthTexture, 6 );
 		qglUniform1i( stencilTexture, 7 );
 	}
@@ -803,7 +859,7 @@ void ambientInteractionProgram_t::AfterLoad() {
 
 void ambientInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
 	interactionProgram_t::UpdateUniforms( din );
-	qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 0 : r_gamma.GetFloat()-1 );
+	qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 0 : r_gamma.GetFloat() - 1 );
 	qglUniform4fv( lightOrigin, 1, din->worldUpLocal.ToFloatPtr() );
 	qglUniformMatrix4fv( modelMatrix, 1, false, din->surf->space->modelMatrix );
 	GL_CheckErrors();
