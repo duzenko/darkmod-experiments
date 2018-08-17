@@ -89,7 +89,7 @@ struct ambientInteractionProgram_t : interactionProgram_t {
 };
 
 struct multiLightInteractionProgram_t : lightProgram_t {
-	//GLint gamma;
+	GLint lightCount, lightOrigin;
 	virtual	void AfterLoad();
 	virtual void UpdateUniforms( const drawInteraction_t *din );
 };
@@ -177,6 +177,17 @@ void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
 	if ( (r_softShadowsQuality.GetBool()) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
 		FB_BindShadowTexture();
 	}
+
+	std::vector<idVec3> lightOrigin;
+	idVec3 localLightOrigin;
+	for ( auto *vLight = backEnd.viewDef->viewLights; vLight; vLight = vLight->next ) {
+		if ( vLight->lightShader->IsAmbientLight() )
+			continue;
+		R_GlobalPointToLocal( din->surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
+		lightOrigin.push_back( localLightOrigin );
+	}
+	qglUniform1i( multiLightShader.lightCount, lightOrigin.size() );
+	qglUniform3fv( multiLightShader.lightOrigin, lightOrigin.size(), lightOrigin[0].ToFloatPtr() );
 
 	// draw it
 	GL_CheckErrors();
@@ -908,7 +919,8 @@ void ambientInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din )
 
 void multiLightInteractionProgram_t::AfterLoad() {
 	lightProgram_t::AfterLoad();
-	//gamma = qglGetUniformLocation( program, "u_gamma" );
+	lightCount = qglGetUniformLocation( program, "u_lightCount" );
+	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
 }
 
 void multiLightInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
