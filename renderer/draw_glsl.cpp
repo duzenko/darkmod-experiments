@@ -177,7 +177,7 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
 		qglVertexAttribPointer( 9, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[0].ToFloatPtr() );
 		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
-		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), &ac->xyz );
+		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 
 		// this may cause RB_GLSL_DrawInteraction to be executed multiple
 		// times with different colors and images if the surface or light have multiple layers
@@ -302,6 +302,7 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	shadowMapShader.Use();
 
 	qglUniform4fv( shadowMapShader.lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	backEnd.currentSpace = NULL;
 
 	for ( ; surf; surf = surf->nextOnLight ) {
 		if ( !surf->material->SurfaceCastsShadow() ) {
@@ -311,11 +312,15 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
 			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
 		}
-		qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
+		if ( backEnd.currentSpace != surf->space ) {
+			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
+			backEnd.currentSpace = surf->space;
+			backEnd.pc.c_matrixLoads++;
+		}
 
 		// set the vertex pointers
 		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
-		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), &ac->xyz );
+		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 		RB_DrawElementsWithCounters( surf->backendGeo );
 	}
 	qglUseProgram( 0 );
