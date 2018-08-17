@@ -81,9 +81,11 @@ struct ambientInteractionProgram_t : interactionProgram_t {
 };
 
 struct multiLightInteractionProgram_t : lightProgram_t {
-	GLint lightCount, lightOrigin;
+	GLint lightCount, lightOrigin, lightColor;
+	GLint bumpMatrix, diffuseMatrix, specularMatrix;
+	const int MAX_LIGHTS = 16;
 	virtual	void AfterLoad();
-	virtual void UpdateUniforms( const drawInteraction_t *din );
+	virtual void Draw( const drawInteraction_t *din );
 };
 
 shaderProgram_t cubeMapShader;
@@ -142,8 +144,6 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
 	// load all the shader parameters
 	GL_CheckErrors();
-	//currrentInteractionShader->UpdateUniforms( din );
-	multiLightShader.Use();
 
 	// set the textures
 	// texture 0 will be the per-surface bump map
@@ -170,23 +170,7 @@ void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
 		FB_BindShadowTexture();
 	}
 
-	std::vector<idVec3> lightOrigin;
-	idVec3 localLightOrigin;
-	for ( auto *vLight = backEnd.viewDef->viewLights; vLight; vLight = vLight->next ) {
-		if ( vLight->lightShader->IsAmbientLight() )
-			continue;
-		R_GlobalPointToLocal( din->surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
-		lightOrigin.push_back( localLightOrigin );
-	}
-	qglUniform1i( multiLightShader.lightCount, lightOrigin.size() );
-	qglUniform3fv( multiLightShader.lightOrigin, lightOrigin.size(), lightOrigin[0].ToFloatPtr() );
-
-	// draw it
-	GL_CheckErrors();
-	RB_DrawElementsWithCounters( din->surf->backendGeo );
-	GL_CheckErrors();
-
-	qglUseProgram( 0 );
+	multiLightShader.Draw( din );
 }
 
 /*
@@ -912,16 +896,43 @@ void multiLightInteractionProgram_t::AfterLoad() {
 	lightProgram_t::AfterLoad();
 	lightCount = qglGetUniformLocation( program, "u_lightCount" );
 	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
+	lightColor = qglGetUniformLocation( program, "u_diffuseColor" );
+	bumpMatrix = qglGetUniformLocation( program, "u_bumpMatrix" );
+	diffuseMatrix = qglGetUniformLocation( program, "u_diffuseMatrix" );
+	specularMatrix = qglGetUniformLocation( program, "u_specularMatrix" );
 	auto diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
 	qglUseProgram( program );
 	qglUniform1i( diffuseTexture, 3 );
 	qglUseProgram( 0 );
 }
 
-void multiLightInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
+void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
+	std::vector<idVec3> lightOrigins, lightColors;
+	for ( auto *vLight = backEnd.viewDef->viewLights; vLight; vLight = vLight->next ) {
+		if ( vLight->lightShader->IsAmbientLight() )
+			continue;
+		idVec3 localLightOrigin;
+		R_GlobalPointToLocal( din->surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
+		lightOrigins.push_back( localLightOrigin );
+		lightColors.push_back( din->diffuseColor.ToVec3() );
+	}
+
+	Use();
 	lightProgram_t::UpdateUniforms( din );
-	/*qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 0 : r_gamma.GetFloat() - 1 );
-	qglUniform4fv( lightOrigin, 1, din->worldUpLocal.ToFloatPtr() );
-	qglUniformMatrix4fv( modelMatrix, 1, false, din->surf->space->modelMatrix );
-	GL_CheckErrors();*/
+	idMat2 texCoordMatrix( din->diffuseMatrix[0].ToVec2(), din->diffuseMatrix[1].ToVec2() );
+	qglUniformMatrix2fv( diffuseMatrix, 1, false, texCoordMatrix.ToFloatPtr() );
+	/*texCoordMatrix[0] = din->bumpMatrix[0].ToVec2();
+	texCoordMatrix[1] = din->bumpMatrix[1].ToVec2();
+	qglUniformMatrix2fv( bumpMatrix, 1, false, texCoordMatrix.ToFloatPtr() );
+	texCoordMatrix[0] = din->specularMatrix[0].ToVec2();
+	texCoordMatrix[1] = din->specularMatrix[1].ToVec2();
+	qglUniformMatrix2fv( specularMatrix, 1, false, texCoordMatrix.ToFloatPtr() );*/
+	for ( int i = 0; i < lightOrigins.size(); i += MAX_LIGHTS ) {
+		int thisCount = min( lightOrigins.size() - i, MAX_LIGHTS );
+		qglUniform1i( lightCount, thisCount );
+		qglUniform3fv( lightOrigin, thisCount, lightOrigins[i].ToFloatPtr() );
+		qglUniform3fv( lightColor, thisCount, lightColors[i].ToFloatPtr() );
+		RB_DrawElementsWithCounters( din->surf->backendGeo );
+	}
+	qglUseProgram( 0 );
 }
