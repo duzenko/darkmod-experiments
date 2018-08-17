@@ -934,6 +934,11 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( tri->ambientCache );
 	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 
+	if ( r_testARBProgram.GetInteger() == 2 ) {
+		extern void RB_CreateMultiDrawInteractions( const drawSurf_t *surf );
+		RB_CreateMultiDrawInteractions( surf );
+	}
+
 	for ( stage = 0; stage < shader->GetNumStages() ; stage++ ) {
 		pStage = shader->GetStage( stage );
 
@@ -1348,7 +1353,8 @@ void RB_STD_DrawView( void ) {
 	RB_STD_FillDepthBuffer( drawSurfs, numDrawSurfs );
 
 	if ( r_useGLSL.GetBool() ) {
-		RB_GLSL_DrawInteractions();
+		if(r_testARBProgram.GetInteger() < 2)
+			RB_GLSL_DrawInteractions();
 	} else {
 		RB_ARB2_DrawInteractions();
 	}	

@@ -88,6 +88,12 @@ struct ambientInteractionProgram_t : interactionProgram_t {
 	virtual void UpdateUniforms( const drawInteraction_t *din );
 };
 
+struct multiLightInteractionProgram_t : lightProgram_t {
+	//GLint gamma;
+	virtual	void AfterLoad();
+	virtual void UpdateUniforms( const drawInteraction_t *din );
+};
+
 shaderProgram_t cubeMapShader;
 oldStageProgram_t oldStageShader;
 depthProgram_t depthShader;
@@ -97,6 +103,7 @@ fogProgram_t fogShader;
 blendProgram_t blendShader;
 pointInteractionProgram_t pointInteractionShader;
 ambientInteractionProgram_t ambientInteractionShader;
+multiLightInteractionProgram_t multiLightShader;
 lightProgram_t *currrentInteractionShader;
 
 /*
@@ -130,7 +137,7 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 	GL_SelectTexture( 4 );
 	din->specularImage->Bind();
 
-	if ( ( r_softShadowsQuality.GetBool() ) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
+	if ( (r_softShadowsQuality.GetBool()) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
 		FB_BindShadowTexture();
 	}
 
@@ -138,6 +145,44 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 	GL_CheckErrors();
 	RB_DrawElementsWithCounters( din->surf->backendGeo );
 	GL_CheckErrors();
+}
+
+void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
+	// load all the shader parameters
+	GL_CheckErrors();
+	//currrentInteractionShader->UpdateUniforms( din );
+	multiLightShader.Use();
+
+	// set the textures
+	// texture 0 will be the per-surface bump map
+	GL_SelectTexture( 0 );
+	din->bumpImage->Bind();
+
+	// texture 1 will be the light falloff texture
+	GL_SelectTexture( 1 );
+	//din->lightFalloffImage->Bind();
+
+	// texture 2 will be the light projection texture
+	GL_SelectTexture( 2 );
+	//din->lightImage->Bind();
+
+	// texture 3 is the per-surface diffuse map
+	GL_SelectTexture( 3 );
+	din->diffuseImage->Bind();
+
+	// texture 4 is the per-surface specular map
+	GL_SelectTexture( 4 );
+	din->specularImage->Bind();
+
+	if ( (r_softShadowsQuality.GetBool()) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
+		FB_BindShadowTexture();
+	}
+
+	// draw it
+	GL_CheckErrors();
+	RB_DrawElementsWithCounters( din->surf->backendGeo );
+	GL_CheckErrors();
+	qglUseProgram( 0 );
 }
 
 /*
@@ -424,6 +469,7 @@ bool R_ReloadGLSLPrograms() {
 	bool ok = true;
 	ok &= pointInteractionShader.Load( "interaction" );				// filenames hardcoded here since they're not used elsewhere
 	ok &= ambientInteractionShader.Load( "ambientInteraction" );
+	ok &= multiLightShader.Load( "interactionN" );
 	ok &= stencilShadowShader.Load( "stencilShadow" );
 	ok &= shadowMapShader.Load( "shadowMap" );
 	ok &= oldStageShader.Load( "oldStage" );
@@ -858,4 +904,17 @@ void ambientInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din )
 	qglUniform4fv( lightOrigin, 1, din->worldUpLocal.ToFloatPtr() );
 	qglUniformMatrix4fv( modelMatrix, 1, false, din->surf->space->modelMatrix );
 	GL_CheckErrors();
+}
+
+void multiLightInteractionProgram_t::AfterLoad() {
+	lightProgram_t::AfterLoad();
+	//gamma = qglGetUniformLocation( program, "u_gamma" );
+}
+
+void multiLightInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
+	lightProgram_t::UpdateUniforms( din );
+	/*qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 0 : r_gamma.GetFloat() - 1 );
+	qglUniform4fv( lightOrigin, 1, din->worldUpLocal.ToFloatPtr() );
+	qglUniformMatrix4fv( modelMatrix, 1, false, din->surf->space->modelMatrix );
+	GL_CheckErrors();*/
 }
