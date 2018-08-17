@@ -193,6 +193,7 @@ void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
 	GL_CheckErrors();
 	RB_DrawElementsWithCounters( din->surf->backendGeo );
 	GL_CheckErrors();
+
 	qglUseProgram( 0 );
 }
 
@@ -921,6 +922,10 @@ void multiLightInteractionProgram_t::AfterLoad() {
 	lightProgram_t::AfterLoad();
 	lightCount = qglGetUniformLocation( program, "u_lightCount" );
 	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
+	auto diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
+	qglUseProgram( program );
+	qglUniform1i( diffuseTexture, 3 );
+	qglUseProgram( 0 );
 }
 
 void multiLightInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {

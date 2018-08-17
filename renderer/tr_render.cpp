@@ -603,7 +603,7 @@ static void RB_SubmittInteraction( drawInteraction_t *din ) {
 			extern void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din );
 			RB_GLSL_DrawInteractionMultiLights( din );
 		} else
-		RB_GLSL_DrawInteraction( din );
+			RB_GLSL_DrawInteraction( din );
 	} else {
 		RB_ARB2_DrawInteraction( din );
 	}
