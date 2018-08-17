@@ -921,10 +921,10 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 	lightProgram_t::UpdateUniforms( din );
 	idMat2 texCoordMatrix( din->diffuseMatrix[0].ToVec2(), din->diffuseMatrix[1].ToVec2() );
 	qglUniformMatrix2fv( diffuseMatrix, 1, false, texCoordMatrix.ToFloatPtr() );
-	/*texCoordMatrix[0] = din->bumpMatrix[0].ToVec2();
+	texCoordMatrix[0] = din->bumpMatrix[0].ToVec2();
 	texCoordMatrix[1] = din->bumpMatrix[1].ToVec2();
 	qglUniformMatrix2fv( bumpMatrix, 1, false, texCoordMatrix.ToFloatPtr() );
-	texCoordMatrix[0] = din->specularMatrix[0].ToVec2();
+	/*texCoordMatrix[0] = din->specularMatrix[0].ToVec2();
 	texCoordMatrix[1] = din->specularMatrix[1].ToVec2();
 	qglUniformMatrix2fv( specularMatrix, 1, false, texCoordMatrix.ToFloatPtr() );*/
 	for ( int i = 0; i < lightOrigins.size(); i += MAX_LIGHTS ) {
