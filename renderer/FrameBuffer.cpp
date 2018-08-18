@@ -21,10 +21,10 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 
 bool primaryOn = false;
 bool depthCopiedThisView = false;
-GLuint fboPrimary, fboResolve, fboShadow, fboPostProcess, fboCurrent, pbo;
+GLuint fboPrimary, fboResolve, fboShadows[MAX_LIGHTS], fboPostProcess, fboCurrent, pbo;
 GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
 GLuint postProcessWidth, postProcessHeight;
-int ShadowMipMap;
+int ShadowFboIndex, ShadowMipMap[MAX_LIGHTS];
 
 void FB_CreatePrimaryResolve( GLuint width, GLuint height, int msaa ) {
 	if ( !fboPrimary ) {
@@ -186,10 +186,10 @@ void FB_CopyRender( const copyRenderCommand_t &cmd ) { // system mem only
 void DeleteFramebuffers() { // force recreate on a cvar change
 	qglDeleteFramebuffers( 1, &fboPrimary );
 	qglDeleteFramebuffers( 1, &fboResolve );
-	qglDeleteFramebuffers( 1, &fboShadow );
+	qglDeleteFramebuffers( MAX_LIGHTS, fboShadows );
 	fboPrimary = 0;
 	fboResolve = 0;
-	fboShadow = 0;
+	memset( fboShadows, 0, sizeof( fboShadows ));
 }
 
 void CheckCreatePrimary() {
@@ -260,7 +260,7 @@ void CheckCreateShadow() {
 		curHeight *= r_fboResolution.GetFloat();
 	}
 	textureType_t type = r_shadows.GetInteger() == 2 ? TT_CUBIC : TT_2D;
-	static textureType_t nowType;
+	static textureType_t nowType[MAX_LIGHTS];
 
 	// reset textures
 	if ( r_fboSeparateStencil.GetBool() ) {
@@ -270,12 +270,13 @@ void CheckCreateShadow() {
 	} else {
 		globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 	}
+	auto *shadowCubeMap = globalImages->shadowCubeMap[ShadowFboIndex];
 
-	if ( globalImages->shadowCubeMap->uploadWidth != r_shadowMapSize.GetInteger() || r_fboDepthBits.IsModified() ) {
+	if ( shadowCubeMap->uploadWidth != r_shadowMapSize.GetInteger() || r_fboDepthBits.IsModified() ) {
 		r_fboDepthBits.ClearModified();
-		globalImages->shadowCubeMap->Bind();
-		globalImages->shadowCubeMap->uploadWidth = r_shadowMapSize.GetInteger();
-		globalImages->shadowCubeMap->uploadHeight = r_shadowMapSize.GetInteger();
+		shadowCubeMap->Bind();
+		shadowCubeMap->uploadWidth = r_shadowMapSize.GetInteger();
+		shadowCubeMap->uploadHeight = r_shadowMapSize.GetInteger();
 
 		for ( int sideId = 0; sideId < 6; sideId++ ) {
 			// revelator: need a real nullptr here as well, NULL = 0 in C++ so not a pointer.
@@ -296,14 +297,15 @@ void CheckCreateShadow() {
 		}
 		globalImages->BindNull();
 	}
-	if ( !fboShadow || nowType != type ) {
+	GLuint &fboShadow = fboShadows[ShadowFboIndex];
+	if ( !fboShadow || nowType[ShadowFboIndex] != type ) {
 		if ( !fboShadow ) {
 			qglGenFramebuffers( 1, &fboShadow );
 		}
 		qglBindFramebuffer( GL_FRAMEBUFFER, fboShadow );
 
 		if ( r_shadows.GetInteger() == 2 ) {
-			GLuint depthTex = globalImages->shadowCubeMap->texnum;
+			GLuint depthTex = shadowCubeMap->texnum;
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 		} else {
@@ -324,7 +326,7 @@ void CheckCreateShadow() {
 			fboShadow = 0; // try from scratch next time
 		}
 		qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
-		nowType = type;
+		nowType[ShadowFboIndex] = type;
 	}
 	GL_CheckErrors();
 }
@@ -357,7 +359,7 @@ void FB_BindShadowTexture() {
 	GL_CheckErrors();
 	if ( r_shadows.GetInteger() == 2 ) {
 		GL_SelectTexture( 6 );
-		globalImages->shadowCubeMap->Bind();
+		globalImages->shadowCubeMap[0]->Bind();
 	} else {
 		GL_SelectTexture( 6 );
 		globalImages->currentDepthImage->Bind();
@@ -383,7 +385,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 
 		if ( !depthCopiedThisView && !r_fboSeparateStencil.GetBool() ) { // most vendors can't do separate stencil so we need to copy depth from the main/default FBO
 			qglDisable( GL_SCISSOR_TEST );
-			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, fboShadow );
+			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, fboShadows[0] );
 			qglBlitFramebuffer( 0, 0, globalImages->currentRenderImage->uploadWidth, globalImages->currentRenderImage->uploadHeight,
 				0, 0, globalImages->currentRenderImage->uploadWidth, globalImages->currentRenderImage->uploadHeight,
 				GL_DEPTH_BUFFER_BIT, GL_NEAREST );
@@ -393,7 +395,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 		}
 		GL_CheckErrors();
 	}
-	qglBindFramebuffer( GL_FRAMEBUFFER, on ? fboShadow : primaryOn ? fboPrimary : 0 );
+	qglBindFramebuffer( GL_FRAMEBUFFER, on ? fboShadows[ShadowFboIndex] : primaryOn ? fboPrimary : 0 );
 	GL_CheckErrors();
 
 	if ( r_shadows.GetInteger() == 2 ) { // additional steps for shadowmaps
@@ -401,16 +403,16 @@ void FB_ToggleShadow( bool on, bool clear ) {
 		GL_Cull( on ? CT_BACK_SIDED : CT_FRONT_SIDED ); // shadow acne fix, requires includeBackFaces in R_CreateLightTris
 		if ( on ) {
 			int mapSize = r_shadowMapSize.GetInteger();
-			ShadowMipMap = 0;
+			ShadowMipMap[ShadowFboIndex] = 0;
 			int lightScreenSize = idMath::Imax( backEnd.vLight->scissorRect.GetWidth(), backEnd.vLight->scissorRect.GetHeight() ),
 			    screenSize = idMath::Imin( glConfig.vidWidth, glConfig.vidHeight );
 
-			while ( lightScreenSize < screenSize && ShadowMipMap < 5 ) {
-				ShadowMipMap++; // select a smaller map for small/distant lights
+			/*while ( lightScreenSize < screenSize && ShadowMipMap[ShadowFboIndex] < 5 ) {
+				ShadowMipMap[ShadowFboIndex]++; // select a smaller map for small/distant lights
 				lightScreenSize <<= 1;
 				mapSize >>= 1;
-			}
-			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap->texnum, ShadowMipMap );
+			}*/
+			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );
 			qglViewport( 0, 0, mapSize, mapSize );
 
 			if ( r_useScissor.GetBool() ) {
@@ -437,7 +439,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 }
 
 void FB_Clear() {
-	fboPrimary = fboResolve = fboShadow = fboPostProcess = pbo = 0;
+	fboPrimary = fboResolve = fboShadows[0] = fboPostProcess = pbo = 0;
 	renderBufferColor = renderBufferDepthStencil = renderBufferPostProcess = 0;
 }
 

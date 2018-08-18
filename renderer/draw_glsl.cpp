@@ -81,9 +81,8 @@ struct ambientInteractionProgram_t : interactionProgram_t {
 };
 
 struct multiLightInteractionProgram_t : lightProgram_t {
-	GLint lightCount, lightOrigin, lightColor;
+	GLint lightCount, lightOrigin, lightColor, shadowMapIndex;
 	GLint bumpMatrix, diffuseMatrix, specularMatrix;
-	const int MAX_LIGHTS = 16;
 	virtual	void AfterLoad();
 	virtual void Draw( const drawInteraction_t *din );
 };
@@ -166,11 +165,23 @@ void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
 	GL_SelectTexture( 4 );
 	din->specularImage->Bind();
 
-	if ( (r_softShadowsQuality.GetBool()) && !backEnd.viewDef->IsLightGem() || r_shadows.GetInteger() == 2 ) {
-		FB_BindShadowTexture();
-	}
-
 	multiLightShader.Draw( din );
+
+	GL_SelectTexture( 4 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 3 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 2 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 1 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 0 );
+
+	qglUseProgram( 0 );
 }
 
 /*
@@ -363,6 +374,28 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	GL_CheckErrors();
 }
 
+void RB_GLSL_GenerateShadowMaps() {
+	ShadowFboIndex = 0;
+	for ( backEnd.vLight = backEnd.viewDef->viewLights; backEnd.vLight; backEnd.vLight = backEnd.vLight->next ) {
+		backEnd.vLight->shadowMapIndex = -1;
+		if ( ShadowFboIndex >= MAX_LIGHTS )
+			continue;
+		if ( backEnd.vLight->lightShader->IsFogLight() ) {
+			continue;
+		}
+		if ( backEnd.vLight->lightShader->IsBlendLight() ) {
+			continue;
+		}
+		// if there are no interactions, get out!
+		if ( !backEnd.vLight->localInteractions && !backEnd.vLight->globalInteractions && !backEnd.vLight->translucentInteractions ) {
+			continue;
+		}
+		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->globalInteractions, true );
+		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions, false );
+		backEnd.vLight->shadowMapIndex = ShadowFboIndex++;
+	}
+}
+
 /*
 ==================
 RB_GLSL_DrawLight_ShadowMap
@@ -382,7 +415,7 @@ void RB_GLSL_DrawLight_ShadowMap() {
 
 			pointInteractionShader.Use();
 			qglUniform1f( pointInteractionShader.shadows, 2 );
-			qglUniform1i( pointInteractionShader.shadowMipMap, ShadowMipMap );
+			qglUniform1i( pointInteractionShader.shadowMipMap, ShadowMipMap[0] );
 			RB_GLSL_CreateDrawInteractions( backEnd.vLight->localInteractions );
 
 			RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions );
@@ -897,28 +930,48 @@ void multiLightInteractionProgram_t::AfterLoad() {
 	lightCount = qglGetUniformLocation( program, "u_lightCount" );
 	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
 	lightColor = qglGetUniformLocation( program, "u_diffuseColor" );
+	shadowMapIndex = qglGetUniformLocation( program, "u_ShadowMapIndex" );
 	bumpMatrix = qglGetUniformLocation( program, "u_bumpMatrix" );
 	diffuseMatrix = qglGetUniformLocation( program, "u_diffuseMatrix" );
 	specularMatrix = qglGetUniformLocation( program, "u_specularMatrix" );
 	auto diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
+	auto shadowMap = qglGetUniformLocation( program, "u_shadowMap" );
 	qglUseProgram( program );
 	qglUniform1i( diffuseTexture, 3 );
+	GLint scmTexNums[MAX_LIGHTS];
+	for ( int i = 0; i < MAX_LIGHTS; i++)
+		//scmTexNums[i] = globalImages->shadowCubeMap[i]->texnum;
+		scmTexNums[i] = MAX_MULTITEXTURE_UNITS - MAX_LIGHTS + i;
+	qglUniform1iv( shadowMap, MAX_LIGHTS, scmTexNums );
 	qglUseProgram( 0 );
 }
 
 void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 	std::vector<idVec3> lightOrigins, lightColors;
+	std::vector<GLint> shadowIndex;
 	for ( auto *vLight = backEnd.viewDef->viewLights; vLight; vLight = vLight->next ) {
 		if ( vLight->lightShader->IsAmbientLight() )
 			continue;
+		if ( vLight->lightShader->IsFogLight() ) {
+			continue;
+		}
+		if ( vLight->lightShader->IsBlendLight() ) {
+			continue;
+		}
+		// if there are no interactions, get out!
+		if ( !vLight->localInteractions && !vLight->globalInteractions && !vLight->translucentInteractions ) {
+			continue;
+		}
 		idVec3 localLightOrigin;
 		R_GlobalPointToLocal( din->surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
 		lightOrigins.push_back( localLightOrigin );
 		lightColors.push_back( din->diffuseColor.ToVec3() );
+		shadowIndex.push_back( vLight->shadowMapIndex );
 	}
 
 	Use();
 	lightProgram_t::UpdateUniforms( din );
+	qglUniformMatrix4fv( modelMatrix, 1, false, din->surf->space->modelMatrix );
 	idMat2 texCoordMatrix( din->diffuseMatrix[0].ToVec2(), din->diffuseMatrix[1].ToVec2() );
 	qglUniformMatrix2fv( diffuseMatrix, 1, false, texCoordMatrix.ToFloatPtr() );
 	texCoordMatrix[0] = din->bumpMatrix[0].ToVec2();
@@ -927,12 +980,25 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 	/*texCoordMatrix[0] = din->specularMatrix[0].ToVec2();
 	texCoordMatrix[1] = din->specularMatrix[1].ToVec2();
 	qglUniformMatrix2fv( specularMatrix, 1, false, texCoordMatrix.ToFloatPtr() );*/
+	
+	for ( int i = 0; i < MAX_LIGHTS; i++ ) {
+		GL_SelectTexture( MAX_MULTITEXTURE_UNITS - MAX_LIGHTS + i );
+		globalImages->shadowCubeMap[i]->Bind();
+	}
+
 	for ( int i = 0; i < lightOrigins.size(); i += MAX_LIGHTS ) {
 		int thisCount = min( lightOrigins.size() - i, MAX_LIGHTS );
 		qglUniform1i( lightCount, thisCount );
 		qglUniform3fv( lightOrigin, thisCount, lightOrigins[i].ToFloatPtr() );
 		qglUniform3fv( lightColor, thisCount, lightColors[i].ToFloatPtr() );
+		qglUniform1iv( shadowMapIndex, thisCount, &shadowIndex[i] );
 		RB_DrawElementsWithCounters( din->surf->backendGeo );
 	}
+
+	for ( int i = 0; i < MAX_LIGHTS; i++ ) {
+		GL_SelectTexture( MAX_MULTITEXTURE_UNITS - MAX_LIGHTS + i );
+		globalImages->BindNull();
+	}
+
 	qglUseProgram( 0 );
 }
