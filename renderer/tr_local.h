@@ -112,7 +112,8 @@ static const int DSF_SHADOW_MAP_IGNORE = 4; // #4641
 static const int DSF_SHADOW_MAP_ONLY = 8; // #4641
 
 typedef struct drawSurf_s {
-	const srfTriangles_t	*frontendGeo;  // do not use in the backend; may be modified by the frontend
+	//const srfTriangles_t	*frontendGeo;  // do not use in the backend; may be modified by the frontend
+	srfTriangles_t			geo;
 	const srfTriangles_t	*backendGeo;
 	const struct viewEntity_s *space;
 	const idMaterial		*material;	// may be NULL for shadow volumes
@@ -124,6 +125,11 @@ typedef struct drawSurf_s {
 	vertCacheHandle_t		dynamicTexCoords;	// float * in vertex cache memory
 	// specular directions for non vertex program cards, skybox texcoords, etc
 	float					particle_radius;	// The radius of individual quads for soft particles #3878
+
+	void CopyGeo( const srfTriangles_t *tri ) {
+		geo = *tri;
+		backendGeo = &geo;
+	}
 } drawSurf_t;
 
 
@@ -1239,7 +1245,7 @@ void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const 
 					const idMaterial *shader, const idScreenRect &scissor, const float soft_particle_radius = -1.0f ); // soft particles in #3878
 
 void R_LinkLightSurf( /*const */drawSurf_t **link, const srfTriangles_t *tri, const viewEntity_t *space,
-					  const idRenderLightLocal *light, const idMaterial *shader, const idScreenRect &scissor, bool viewInsideShadow );
+					const idMaterial *shader, const idScreenRect &scissor, bool viewInsideShadow );
 
 bool R_CreateAmbientCache( srfTriangles_t *tri, bool needsLighting );
 void R_CreatePrivateShadowCache( srfTriangles_t *tri );
