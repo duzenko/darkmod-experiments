@@ -434,12 +434,20 @@ void RB_GLSL_DrawLight_ShadowMap() {
 	GL_CheckErrors();
 }
 
+void RB_GLSL_DrawInteractions_MultiLight() {
+	RB_GLSL_GenerateShadowMaps();
+}
+
 /*
 ==================
 RB_GLSL_DrawInteractions
 ==================
 */
 void RB_GLSL_DrawInteractions() {
+	if ( r_testARBProgram.GetInteger() == 2 ) {
+		RB_GLSL_DrawInteractions_MultiLight();
+		return;
+	}
 	GL_PROFILE( "GLSL_DrawInteractions" );
 
 	GL_SelectTexture( 0 );

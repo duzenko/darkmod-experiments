@@ -1367,12 +1367,7 @@ void RB_STD_DrawView( void ) {
 	RB_STD_FillDepthBuffer( drawSurfs, numDrawSurfs );
 
 	if ( r_useGLSL.GetBool() ) {
-		if ( r_testARBProgram.GetInteger() < 2 )
-			RB_GLSL_DrawInteractions();
-		else {
-			extern void RB_GLSL_GenerateShadowMaps();
-			RB_GLSL_GenerateShadowMaps();
-		}
+		RB_GLSL_DrawInteractions();
 	} else {
 		RB_ARB2_DrawInteractions();
 	}	
