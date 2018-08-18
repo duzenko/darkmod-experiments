@@ -600,8 +600,8 @@ static void RB_SubmittInteraction( drawInteraction_t *din ) {
 
 	if ( r_useGLSL.GetBool() ) {
 		if ( r_testARBProgram.GetInteger() == 2 ) {
-			extern void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din );
-			RB_GLSL_DrawInteractionMultiLights( din );
+			extern void RB_GLSL_DrawInteraction_MultiLight( const drawInteraction_t *din );
+			RB_GLSL_DrawInteraction_MultiLight( din );
 		} else
 			RB_GLSL_DrawInteraction( din );
 	} else {

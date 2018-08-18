@@ -934,25 +934,6 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( tri->ambientCache );
 	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 
-	if ( r_testARBProgram.GetInteger() == 2 ) {
-		qglEnableVertexAttribArray( 8 );
-		qglEnableVertexAttribArray( 9 );
-		qglEnableVertexAttribArray( 10 );
-		qglEnableVertexAttribArray( 11 );
-		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
-		qglVertexAttribPointer( 9, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[0].ToFloatPtr() );
-		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
-		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
-
-		extern void RB_CreateMultiDrawInteractions( const drawSurf_t *surf );
-		RB_CreateMultiDrawInteractions( surf );
-
-		qglDisableVertexAttribArray( 8 );
-		qglDisableVertexAttribArray( 9 );
-		qglDisableVertexAttribArray( 10 );
-		qglDisableVertexAttribArray( 11 );
-	}
-
 	for ( stage = 0; stage < shader->GetNumStages() ; stage++ ) {
 		pStage = shader->GetStage( stage );
 

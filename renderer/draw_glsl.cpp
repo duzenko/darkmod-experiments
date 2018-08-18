@@ -140,50 +140,6 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 	GL_CheckErrors();
 }
 
-void RB_GLSL_DrawInteractionMultiLights( const drawInteraction_t *din ) {
-	// load all the shader parameters
-	GL_CheckErrors();
-
-	// set the textures
-	// texture 0 will be the per-surface bump map
-	GL_SelectTexture( 0 );
-	din->bumpImage->Bind();
-
-	// texture 1 will be the light falloff texture
-	GL_SelectTexture( 1 );
-	//din->lightFalloffImage->Bind();
-
-	// texture 2 will be the light projection texture
-	GL_SelectTexture( 2 );
-	//din->lightImage->Bind();
-
-	// texture 3 is the per-surface diffuse map
-	GL_SelectTexture( 3 );
-	din->diffuseImage->Bind();
-
-	// texture 4 is the per-surface specular map
-	GL_SelectTexture( 4 );
-	din->specularImage->Bind();
-
-	multiLightShader.Draw( din );
-
-	GL_SelectTexture( 4 );
-	globalImages->BindNull();
-
-	GL_SelectTexture( 3 );
-	globalImages->BindNull();
-
-	GL_SelectTexture( 2 );
-	globalImages->BindNull();
-
-	GL_SelectTexture( 1 );
-	globalImages->BindNull();
-
-	GL_SelectTexture( 0 );
-
-	qglUseProgram( 0 );
-}
-
 /*
 =============
 RB_GLSL_CreateDrawInteractions
@@ -434,8 +390,83 @@ void RB_GLSL_DrawLight_ShadowMap() {
 	GL_CheckErrors();
 }
 
+void RB_GLSL_DrawInteraction_MultiLight( const drawInteraction_t *din ) {
+	// load all the shader parameters
+	GL_CheckErrors();
+
+	// set the textures
+	// texture 0 will be the per-surface bump map
+	GL_SelectTexture( 0 );
+	din->bumpImage->Bind();
+
+	// texture 1 will be the light falloff texture
+	GL_SelectTexture( 1 );
+	//din->lightFalloffImage->Bind();
+
+	// texture 2 will be the light projection texture
+	GL_SelectTexture( 2 );
+	//din->lightImage->Bind();
+
+	// texture 3 is the per-surface diffuse map
+	GL_SelectTexture( 3 );
+	din->diffuseImage->Bind();
+
+	// texture 4 is the per-surface specular map
+	GL_SelectTexture( 4 );
+	din->specularImage->Bind();
+
+	multiLightShader.Draw( din );
+}
+
 void RB_GLSL_DrawInteractions_MultiLight() {
 	RB_GLSL_GenerateShadowMaps();
+	auto drawSurfs = backEnd.viewDef->drawSurfs;
+	qglEnableVertexAttribArray( 8 );
+	qglEnableVertexAttribArray( 9 );
+	qglEnableVertexAttribArray( 10 );
+	qglEnableVertexAttribArray( 11 );
+	for ( int i = 0; i < backEnd.viewDef->numDrawSurfs; i++ ) {
+		if ( drawSurfs[i]->material->SuppressInSubview() ) {
+			continue;
+		}
+		if ( drawSurfs[i]->material->GetSort() < SS_OPAQUE ) {
+			continue;
+		}
+
+		if ( drawSurfs[i]->material->GetSort() >= SS_POST_PROCESS ) {
+			break;
+		}
+		
+		auto tri = drawSurfs[i]->backendGeo;
+		idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( tri->ambientCache );
+		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
+		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
+		qglVertexAttribPointer( 9, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[0].ToFloatPtr() );
+		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
+		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
+
+		extern void RB_CreateMultiDrawInteractions( const drawSurf_t *surf );
+		RB_CreateMultiDrawInteractions( drawSurfs[i] );
+	}
+	GL_SelectTexture( 4 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 3 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 2 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 1 );
+	globalImages->BindNull();
+
+	GL_SelectTexture( 0 );
+
+	qglUseProgram( 0 );
+	qglDisableVertexAttribArray( 8 );
+	qglDisableVertexAttribArray( 9 );
+	qglDisableVertexAttribArray( 10 );
+	qglDisableVertexAttribArray( 11 );
 }
 
 /*
