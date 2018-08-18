@@ -943,6 +943,7 @@ void multiLightInteractionProgram_t::AfterLoad() {
 		//scmTexNums[i] = globalImages->shadowCubeMap[i]->texnum;
 		scmTexNums[i] = MAX_MULTITEXTURE_UNITS - MAX_LIGHTS + i;
 	qglUniform1iv( shadowMap, MAX_LIGHTS, scmTexNums );
+	//qglUniform1i( shadowMap, MAX_MULTITEXTURE_UNITS - MAX_LIGHTS );
 	qglUseProgram( 0 );
 }
 
