@@ -104,7 +104,7 @@ void RB_ARB2_DrawInteraction( const drawInteraction_t *din ) {
 	din->specularImage->Bind();
 
 	// draw it
-	RB_DrawElementsWithCounters( din->surf->backendGeo );
+	RB_DrawElementsWithCounters( din->surf );
 }
 
 /*
@@ -177,7 +177,7 @@ void RB_ARB2_CreateDrawInteractions( const drawSurf_t *surf ) {
 		// perform setup here that will not change over multiple interaction passes
 
 		// set the vertex pointers
-		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 		qglVertexAttribPointer( 3, 4, GL_UNSIGNED_BYTE, true, sizeof( idDrawVert ), &ac->color );
 		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
 		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
@@ -292,7 +292,7 @@ void RB_ARB2_CreateDrawInteractions_simple( const drawSurf_t *surf ) {
 		// perform setup here that will not change over multiple interaction passes
 
 		// set the vertex pointers
-		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 		qglVertexAttribPointer( 3, 4, GL_UNSIGNED_BYTE, true, sizeof( idDrawVert ), &ac->color );
 		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
 		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
@@ -383,7 +383,7 @@ void RB_ARB2_DrawInteractions( void ) {
 			backEnd.currentScissor = vLight->scissorRect;
 
 			if ( r_useScissor.GetBool() ) {
-				qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
+				GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
 				            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 				            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 				            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );

@@ -120,7 +120,7 @@ void RB_SimpleSurfaceSetup( const drawSurf_t *drawSurf ) {
 	// change the scissor if needed
 	if ( r_useScissor.GetBool() && !backEnd.currentScissor.Equals( drawSurf->scissorRect ) ) {
 		backEnd.currentScissor = drawSurf->scissorRect;
-		qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
+		GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
 			backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 			backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 			backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
@@ -137,7 +137,7 @@ void RB_SimpleWorldSetup( void ) {
 	qglLoadMatrixf( backEnd.viewDef->worldSpace.modelViewMatrix );
 
 	backEnd.currentScissor = backEnd.viewDef->scissor;
-	qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
+	GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
 		backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 		backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 		backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
@@ -178,7 +178,7 @@ RB_ShowDestinationAlpha
 */
 void RB_ShowDestinationAlpha( void ) {
 	GL_State( GLS_SRCBLEND_DST_ALPHA | GLS_DSTBLEND_ZERO | GLS_DEPTHMASK | GLS_DEPTHFUNC_ALWAYS );
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	RB_PolygonClear();
 }
 
@@ -248,7 +248,6 @@ stencil buffer.  Stencil of 0 = black, 1 = red, 2 = green,
 ===================
 */
 static void R_ColorByStencilBuffer( void ) {
-	int		i;
 	static float colors[8][3] = {
 		{0,0,0},
 		{1,0,0},
@@ -268,7 +267,7 @@ static void R_ColorByStencilBuffer( void ) {
 	// now draw color for each stencil value
 	qglStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
 
-	for ( i = 0 ; i < 6 ; i++ ) {
+	for ( int i = 0 ; i < 6 ; i++ ) {
 		qglColor3fv( colors[i] );
 		qglStencilFunc( GL_EQUAL, i, 255 );
 		RB_PolygonClear();
@@ -284,12 +283,12 @@ RB_ShowOverdraw
 ==================
 */
 void RB_ShowOverdraw( void ) {
-	const idMaterial *	material;
+	const idMaterial	*material;
 	int					i;
-	drawSurf_t * *		drawSurfs;
-	const drawSurf_t *	surf;
+	drawSurf_t			**drawSurfs;
+	const drawSurf_t	*surf;
 	int					numDrawSurfs;
-	viewLight_t *		vLight;
+	viewLight_t			*vLight;
 
 	if ( r_showOverDraw.GetInteger() == 0 ) {
 		return;
@@ -399,7 +398,7 @@ void RB_ShowIntensity( void ) {
     qglOrtho( 0, 1, 0, 1, -1, 1 );
 	qglRasterPos2f( 0, 0 );
 	qglPopMatrix();
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	globalImages->BindNull();
 	qglMatrixMode( GL_MODELVIEW );
 
@@ -434,7 +433,7 @@ void RB_ShowDepthBuffer( void ) {
 	qglPopMatrix();
 
 	GL_State( GLS_DEPTHFUNC_ALWAYS );
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	globalImages->BindNull();
 
 	depthReadback = R_StaticAlloc( glConfig.vidWidth * glConfig.vidHeight*4 );
@@ -484,12 +483,12 @@ void RB_ShowLightCount( void ) {
 		for ( i = 0 ; i < 2 ; i++ ) {
 			for ( surf = i ? vLight->localInteractions: vLight->globalInteractions; surf; surf = (drawSurf_t *)surf->nextOnLight ) {
 				RB_SimpleSurfaceSetup( surf );
-				if (!surf->backendGeo->ambientCache.IsValid()) {
+				if (!surf->ambientCache.IsValid()) {
 					continue;
 				}
-				const idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+				const idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( surf->ambientCache );
 				qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), &ac->xyz );
-				RB_DrawElementsWithCounters( surf->backendGeo );
+				RB_DrawElementsWithCounters( surf );
 			}
 		}
 	}
@@ -528,7 +527,7 @@ void RB_ShowSilhouette( void ) {
 	qglDisable( GL_TEXTURE_2D );
 	qglDisable( GL_STENCIL_TEST );
 
-	qglColor3f( 0, 0, 0 );
+	GL_FloatColor( 0, 0, 0 );
 
 	GL_State( GLS_POLYMODE_LINE );
 
@@ -541,7 +540,7 @@ void RB_ShowSilhouette( void ) {
 	// now blend in edges that cast silhouettes
 	//
 	RB_SimpleWorldSetup();
-	qglColor3f( 0.5, 0, 0 );
+	GL_FloatColor( 0.5, 0, 0 );
 	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE );
 
 	for ( vLight = backEnd.viewDef->viewLights ; vLight ; vLight = vLight->next ) {
@@ -550,7 +549,7 @@ void RB_ShowSilhouette( void ) {
 				; surf ; surf = (drawSurf_t *)surf->nextOnLight ) {
 				RB_SimpleSurfaceSetup( surf );
 
-				const srfTriangles_t	*tri = surf->backendGeo;
+				const srfTriangles_t	*tri = surf->frontendGeo;
 
 				qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( shadowCache_t ), vertexCache.VertexPosition( tri->shadowCache ) );
 				qglBegin( GL_LINES );
@@ -578,7 +577,7 @@ void RB_ShowSilhouette( void ) {
 	qglEnable( GL_DEPTH_TEST );
 
 	GL_State( GLS_DEFAULT );
-	qglColor3f( 1,1,1 );
+	GL_FloatColor( 1,1,1 );
 	GL_Cull( CT_FRONT_SIDED );
 }
 
@@ -619,7 +618,7 @@ static void RB_ShowShadowCount( void ) {
 			for ( surf = i ? vLight->localShadows : vLight->globalShadows 
 				; surf ; surf = (drawSurf_t *)surf->nextOnLight ) {
 				RB_SimpleSurfaceSetup( surf );
-				const srfTriangles_t	*tri = surf->backendGeo;
+				const srfTriangles_t	*tri = surf->frontendGeo;
 				if ( !tri->shadowCache.IsValid() ) {
 					continue;
 				}
@@ -636,9 +635,9 @@ static void RB_ShowShadowCount( void ) {
 						continue;
 					}
 				}
-				shadowCache_t *cache = (shadowCache_t *)vertexCache.VertexPosition( tri->shadowCache );
+				shadowCache_t *cache = (shadowCache_t *)vertexCache.VertexPosition( surf->shadowCache );
 				qglVertexAttribPointer( 0, 4, GL_FLOAT, false, sizeof( shadowCache_t ), &cache->xyz );
-				RB_DrawElementsWithCounters( tri );
+				RB_DrawElementsWithCounters( surf );
 			}
 		}
 	}
@@ -677,7 +676,7 @@ static void RB_ShowTris( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	qglDisable( GL_TEXTURE_2D );
 	qglDisable( GL_STENCIL_TEST );
 
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 
 	GL_State( GLS_POLYMODE_LINE );
 
@@ -790,7 +789,7 @@ static void RB_ShowViewEntitys( viewEntity_t *vModels ) {
 	qglDisable( GL_TEXTURE_2D );
 	qglDisable( GL_STENCIL_TEST );
 
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 
 	GL_State( GLS_POLYMODE_LINE );
 
@@ -808,11 +807,11 @@ static void RB_ShowViewEntitys( viewEntity_t *vModels ) {
 		}
 
 		// draw the reference bounds in yellow
-		qglColor3f( 1, 1, 0 );
+		GL_FloatColor( 1, 1, 0 );
 		RB_DrawBounds( vModels->entityDef->referenceBounds );
 
 		// draw the model bounds in white
-		qglColor3f( 1, 1, 1 );
+		GL_FloatColor( 1, 1, 1 );
 
 		idRenderModel *model = R_EntityDefDynamicModel( vModels->entityDef );
 
@@ -852,11 +851,11 @@ static void RB_ShowTexturePolarity( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 
 	GL_State( GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA );
 
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 
 	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
 		drawSurf = drawSurfs[i];
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 
 		if ( !tri->verts ) {
 			continue;
@@ -930,7 +929,7 @@ static void RB_ShowUnsmoothedTangents( drawSurf_t **drawSurfs, int numDrawSurfs 
 		}
 		RB_SimpleSurfaceSetup( drawSurf );
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 
 		qglBegin( GL_TRIANGLES );
 
@@ -979,7 +978,7 @@ static void RB_ShowTangentSpace( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 
 		RB_SimpleSurfaceSetup( drawSurf );
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 		if ( !tri->verts ) {
 			continue;
 		}
@@ -1033,7 +1032,7 @@ static void RB_ShowVertexColor( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 
 		RB_SimpleSurfaceSetup( drawSurf );
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 		if ( !tri->verts ) {
 			continue;
 		}
@@ -1042,7 +1041,7 @@ static void RB_ShowVertexColor( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		for ( j = 0 ; j < tri->numIndexes ; j++ ) {
 			const idDrawVert *v;
 			v = &tri->verts[tri->indexes[j]];
-			qglColor4ubv( v->color );
+			GL_ByteColor( v->color );
 			qglVertex3fv( v->xyz.ToFloatPtr() );
 		}
 		qglEnd();
@@ -1095,24 +1094,24 @@ static void RB_ShowNormals( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 
 		RB_SimpleSurfaceSetup( drawSurf );
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 		if ( !tri->verts ) {
 			continue;
 		}
 		qglBegin( GL_LINES );
 
 		for ( j = 0 ; j < tri->numVerts ; j++ ) {
-			qglColor3f( 0, 0, 1 );
+			GL_FloatColor( 0, 0, 1 );
 			qglVertex3fv( tri->verts[j].xyz.ToFloatPtr() );
 			VectorMA( tri->verts[j].xyz, size, tri->verts[j].normal, end );
 			qglVertex3fv( end.ToFloatPtr() );
 
-			qglColor3f( 1, 0, 0 );
+			GL_FloatColor( 1, 0, 0 );
 			qglVertex3fv( tri->verts[j].xyz.ToFloatPtr() );
 			VectorMA( tri->verts[j].xyz, size, tri->verts[j].tangents[0], end );
 			qglVertex3fv( end.ToFloatPtr() );
 
-			qglColor3f( 0, 1, 0 );
+			GL_FloatColor( 0, 1, 0 );
 			qglVertex3fv( tri->verts[j].xyz.ToFloatPtr() );
 			VectorMA( tri->verts[j].xyz, size, tri->verts[j].tangents[1], end );
 			qglVertex3fv( end.ToFloatPtr() );
@@ -1124,7 +1123,7 @@ static void RB_ShowNormals( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		RB_SimpleWorldSetup();
 		for ( i = 0 ; i < numDrawSurfs ; i++ ) {
 			drawSurf = drawSurfs[i];
-			tri = drawSurf->backendGeo;
+			tri = drawSurf->frontendGeo;
 			if ( !tri->verts ) {
 				continue;
 			}
@@ -1167,7 +1166,7 @@ static void RB_ShowTextureVectors( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
 		drawSurf = drawSurfs[i];
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 
 		if ( !tri->verts ) {
 			continue;
@@ -1227,11 +1226,11 @@ static void RB_ShowTextureVectors( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 			tangents[0] = mid + tangents[0] * r_showTextureVectors.GetFloat();
 			tangents[1] = mid + tangents[1] * r_showTextureVectors.GetFloat();
 
-			qglColor3f( 1, 0, 0 );
+			GL_FloatColor( 1, 0, 0 );
 			qglVertex3fv( mid.ToFloatPtr() );
 			qglVertex3fv( tangents[0].ToFloatPtr() );
 
-			qglColor3f( 0, 1, 0 );
+			GL_FloatColor( 0, 1, 0 );
 			qglVertex3fv( mid.ToFloatPtr() );
 			qglVertex3fv( tangents[1].ToFloatPtr() );
 		}
@@ -1266,7 +1265,7 @@ static void RB_ShowDominantTris( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
 		drawSurf = drawSurfs[i];
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 
 		if ( !tri->verts ) {
 			continue;
@@ -1276,7 +1275,7 @@ static void RB_ShowDominantTris( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		}
 		RB_SimpleSurfaceSetup( drawSurf );
 
-		qglColor3f( 1, 1, 0 );
+		GL_FloatColor( 1, 1, 0 );
 		qglBegin( GL_LINES );
 
 		for ( j = 0 ; j < tri->numVerts ; j++ ) {
@@ -1323,7 +1322,7 @@ static void RB_ShowEdges( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
 		drawSurf = drawSurfs[i];
 
-		tri = drawSurf->backendGeo;
+		tri = drawSurf->frontendGeo;
 
 		idDrawVert *ac = (idDrawVert *)tri->verts;
 
@@ -1333,7 +1332,7 @@ static void RB_ShowEdges( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		RB_SimpleSurfaceSetup( drawSurf );
 
 		// draw non-shared edges in yellow
-		qglColor3f( 1, 1, 0 );
+		GL_FloatColor( 1, 1, 0 );
 		qglBegin( GL_LINES );
 
 		for ( j = 0 ; j < tri->numIndexes ; j+= 3 ) {
@@ -1375,7 +1374,7 @@ static void RB_ShowEdges( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 		// is the dangling edge
 		danglePlane = tri->numIndexes / 3;
 
-		qglColor3f( 1, 0, 0 );
+		GL_FloatColor( 1, 0, 0 );
 
 		qglBegin( GL_LINES );
 
@@ -1434,17 +1433,17 @@ void RB_ShowLights( void ) {
 		// depth buffered planes
 		if ( r_showLights.GetInteger() >= 2 ) {
 			GL_State( GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA | GLS_DEPTHMASK );
-			qglColor4f( 0, 0, 1, 0.25 );
+			GL_FloatColor( 0, 0, 1, 0.25 );
 			qglEnable( GL_DEPTH_TEST );
-			RB_RenderTriangleSurface( tri );
+			RB_DrawElementsImmediate( tri );
 		}
 
 		// non-hidden lines
 		if ( r_showLights.GetInteger() >= 3 ) {
 			GL_State( GLS_POLYMODE_LINE | GLS_DEPTHMASK  );
 			qglDisable( GL_DEPTH_TEST );
-			qglColor3f( 1, 1, 1 );
-			RB_RenderTriangleSurface( tri );
+			GL_FloatColor( 1, 1, 1 );
+			RB_DrawElementsImmediate( tri );
 		}
 		int index = backEnd.viewDef->renderWorld->lightDefs.FindIndex( vLight->lightDef );
 
@@ -1831,7 +1830,7 @@ void RB_ShowDebugLines( void ) {
 	line = rb_debugLines;
 	for ( i = 0 ; i < rb_numDebugLines; i++, line++ ) {
 		if ( line->depthTest ) {
-			qglColor4fv( line->rgb.ToFloatPtr() );
+			GL_FloatColor( line->rgb.ToFloatPtr() );
 			qglVertex3fv( line->start.ToFloatPtr() );
 			qglVertex3fv( line->end.ToFloatPtr() );
 		}
@@ -1927,7 +1926,7 @@ void RB_ShowDebugPolygons( void ) {
 	poly = rb_debugPolygons;
 
 	for ( i = 0 ; i < rb_numDebugPolygons; i++, poly++ ) {
-		qglColor4fv( poly->rgb.ToFloatPtr() );
+		GL_FloatColor( poly->rgb.ToFloatPtr() );
 
 		qglBegin( GL_POLYGON );
 
@@ -2028,7 +2027,7 @@ void RB_TestGamma( void ) {
 
 	qglMatrixMode( GL_PROJECTION );
 	GL_State( GLS_DEPTHFUNC_ALWAYS );
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	qglPushMatrix();
 	qglLoadIdentity(); 
 	qglDisable( GL_TEXTURE_2D );
@@ -2076,7 +2075,7 @@ static void RB_TestGammaBias( void ) {
 	qglLoadIdentity();
 	qglMatrixMode( GL_PROJECTION );
 	GL_State( GLS_DEPTHFUNC_ALWAYS );
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	qglPushMatrix();
 	qglLoadIdentity(); 
 	qglDisable( GL_TEXTURE_2D );
@@ -2129,7 +2128,7 @@ void RB_TestImage( void ) {
 
 	qglMatrixMode( GL_PROJECTION );
 	GL_State( GLS_DEPTHFUNC_ALWAYS | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA );
-	qglColor3f( 1, 1, 1 );
+	GL_FloatColor( 1, 1, 1 );
 	qglPushMatrix();
 	qglLoadIdentity(); 
     qglOrtho( 0, 1, 0, 1, -1, 1 );
@@ -2171,7 +2170,7 @@ void RB_RenderDebugTools( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 
 	GL_State( GLS_DEFAULT );
 	backEnd.currentScissor = backEnd.viewDef->scissor;
-	qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
+	GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1, 
 		backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 		backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 		backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );

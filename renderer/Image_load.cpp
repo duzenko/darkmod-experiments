@@ -601,7 +601,6 @@ void idImage::GenerateImage( const byte *pic, int width, int height,
 
 // FBO attachments need specific setup, rarely changed
 void idImage::GenerateAttachment( int width, int height, GLint format ) {
-	//PurgeImage(); // force a reload
 	bool changed = ( uploadWidth != width || uploadHeight != height || internalFormat != format );
 	if ( ( format == GL_DEPTH || format == GL_DEPTH_STENCIL ) && r_fboDepthBits.IsModified() ) {
 		changed = true;
@@ -631,11 +630,9 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	switch ( format ) {
 		case GL_DEPTH_STENCIL:
-			if ( r_fboDepthBits.GetInteger() == 32 ) {
-				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH32F_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, nullptr );
-			} else {
-				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr );
-			}
+			// revert to old behaviour, switches are to specific
+			qglTexImage2D( GL_TEXTURE_2D, 0, ( r_fboDepthBits.GetInteger() == 32 ) ? GL_DEPTH32F_STENCIL8 : GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, 
+											 ( r_fboDepthBits.GetInteger() == 32 ) ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, nullptr );
 			common->Printf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
 			break;
 		case GL_COLOR:
@@ -1052,62 +1049,6 @@ void idImage::WritePrecompressedImage() {
 
 /*
 ================
-ShouldImageBePartialCached
-
-Returns true if there is a precompressed image, and it is large enough
-to be worth caching
-================
-*/
-bool idImage::ShouldImageBePartialCached() {
-	if ( !glConfig.textureCompressionAvailable ) {
-		return false;
-	}
-
-	if ( !globalImages->image_useCache.GetBool() ) {
-		return false;
-	}
-
-	// the allowDownSize flag does double-duty as don't-partial-load
-	if ( !allowDownSize ) {
-		return false;
-	}
-
-	if ( globalImages->image_cacheMinK.GetInteger() <= 0 ) {
-		return false;
-	}
-	char	filename[MAX_IMAGE_NAME];
-
-	ImageProgramStringToCompressedFileName( imgName, filename );
-
-	// get the file timestamp
-	fileSystem->ReadFile( filename, NULL, &timestamp );
-
-	if ( timestamp == FILE_NOT_FOUND_TIMESTAMP ) {
-		return false;
-	}
-
-	// open it and get the file size
-	idFile *f;
-
-	f = fileSystem->OpenFileRead( filename );
-
-	if ( !f ) {
-		return false;
-	}
-	int	len = f->Length();
-
-	fileSystem->CloseFile( f );
-
-	if ( len <= globalImages->image_cacheMinK.GetInteger() * 1024 ) {
-		return false;
-	}
-
-	// we do want to do a partial load
-	return true;
-}
-
-/*
-================
 CheckPrecompressedImage
 
 If fullLoad is false, only the small mip levels of the image will be loaded
@@ -1156,9 +1097,6 @@ bool idImage::CheckPrecompressedImage( bool fullLoad ) {
 		return false;
 	}
 
-	if ( !fullLoad && len > globalImages->image_cacheMinK.GetInteger() * 1024 ) {
-		len = globalImages->image_cacheMinK.GetInteger() * 1024;
-	}
 	byte *data = ( byte * )R_StaticAlloc( len );
 
 	f->Read( data, len );
@@ -1341,17 +1279,6 @@ void idImage::ActuallyLoadImage( bool checkForPrecompressed, bool fromBackEnd ) 
 		return;
 	}
 
-	// if we are a partial image, we are only going to load from a compressed file
-	if ( isPartialImage ) {
-		if ( CheckPrecompressedImage( false ) ) {
-			return;
-		}
-		// this is an error -- the partial image failed to load
-		common->Warning( "Failed to load partial image : %s", imgName.c_str() );
-		MakeDefault();
-		return;
-	}
-
 	//
 	// load the image from disk
 	//
@@ -1446,35 +1373,10 @@ void idImage::Bind() {
 	}
 #endif
 
-	// if this is an image that we are caching, move it to the front of the LRU chain
-	if ( isPartialImage ) {
-		if ( cacheUsageNext ) {
-			// unlink from old position
-			cacheUsageNext->cacheUsagePrev = cacheUsagePrev;
-			cacheUsagePrev->cacheUsageNext = cacheUsageNext;
-		}
-		// link in at the head of the list
-		cacheUsageNext = globalImages->cacheLRU.cacheUsageNext;
-		cacheUsagePrev = &globalImages->cacheLRU;
-
-		cacheUsageNext->cacheUsagePrev = this;
-		cacheUsagePrev->cacheUsageNext = this;
-	}
-
 	// load the image if necessary (FIXME: not SMP safe!)
 	if ( texnum == TEXTURE_NOT_LOADED ) {
-		if ( isPartialImage ) {
-			// if we have a partial image, go ahead and use that
-			this->partialImage->Bind();
-
-			// start a background load of the full thing if it isn't already in the queue
-			if ( !backgroundLoadInProgress ) {
-				StartBackgroundImageLoad();
-			}
-			return;
-		}
-
 		// load the image on demand here, which isn't our normal game operating mode
+		// duzenko: useful for fast map loading / quick debugging
 		ActuallyLoadImage( true, true );	// check for precompressed, load is from back end
 	}
 
@@ -1534,36 +1436,10 @@ void idImage::BindFragment() {
 		RB_LogComment( "idImage::BindFragment %s )\n", imgName.c_str() );
 	}
 #endif
-	// if this is an image that we are caching, move it to the front of the LRU chain
-	if ( isPartialImage ) {
-		if ( cacheUsageNext ) {
-			// unlink from old position
-			cacheUsageNext->cacheUsagePrev = cacheUsagePrev;
-			cacheUsagePrev->cacheUsageNext = cacheUsageNext;
-		}
-
-		// link in at the head of the list
-		cacheUsageNext = globalImages->cacheLRU.cacheUsageNext;
-		cacheUsagePrev = &globalImages->cacheLRU;
-
-		cacheUsageNext->cacheUsagePrev = this;
-		cacheUsagePrev->cacheUsageNext = this;
-	}
-
 	// load the image if necessary (FIXME: not SMP safe!)
 	if ( texnum == TEXTURE_NOT_LOADED ) {
-		if ( isPartialImage ) {
-			// if we have a partial image, go ahead and use that
-			this->partialImage->BindFragment();
-
-			// start a background load of the full thing if it isn't already in the queue
-			if ( !backgroundLoadInProgress ) {
-				StartBackgroundImageLoad();
-			}
-			return;
-		}
-
 		// load the image on demand here, which isn't our normal game operating mode
+		// duzenko: useful for fast map loading / quick debugging
 		ActuallyLoadImage( true, true );	// check for precompressed, load is from back end
 	}
 
@@ -1595,19 +1471,7 @@ void idImage::CopyFramebuffer( int x, int y, int imageWidth, int imageHeight, bo
 	     ( !useOversizedBuffer && ( uploadWidth != imageWidth || uploadHeight != imageHeight ) ) ) {
 		uploadWidth = imageWidth;
 		uploadHeight = imageHeight;
-		// NULL means reserve texture memory, but texels are undefined
-		// REVELATOR: misconception here.
-		// in C++ NULL = integer 0 allways, ask bjarne stroustrup he developed C++ and was my teacher though not in programming :) 
-		// i was barely a teen when he started his work on C++, but i asked him for clarification today so.
-		// in C NULL is a pointer to 0,
-		// it has this form #define NULL (void *)0
-		// while '\0' is a null byte in octal form which is mostly used for terminating a string,
-		// in C++ NULL has this form #define NULL 0 so an octal integer 0, 
-		// you could also use 0x00000000 which is a 32 bit hexadecimal 0 or 0x00000000'00000000 for a 64 bit one.
-		// in practice though its usually enough to just use 0 the compiler will sort out the bit lenght.
-		// if you want a real null pointer in C++ use C++11 features where nullptr exists.
-		// using 0 is fine in most cases, in C it would be a whole other ballpark of trouble,
-		// because you would basically send a pointer into something that does not use a pointer context ;).
+		// bim bada bum, looks away...
 		qglCopyTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, x, y, imageWidth, imageHeight, 0 );
 	}   //REVELATOR: dont need an else condition here.
 
@@ -1622,6 +1486,7 @@ void idImage::CopyFramebuffer( int x, int y, int imageWidth, int imageHeight, bo
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	backEnd.c_copyFrameBuffer++;
 
+	// Debug
 	GL_CheckErrors();
 }
 
@@ -1651,15 +1516,15 @@ void idImage::CopyDepthBuffer( int x, int y, int imageWidth, int imageHeight, bo
 		// and then subsequent captures to the texture put the depth component into the RGB channels
 		// this part sets depthbits to the max value the gfx card supports, it could also be used for FBO.
 		switch ( glConfig.depthBits ) {
-		case 16:
-			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
-			break;
-		case 32:
-			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
-			break;
-		default:
-			qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
-			break;
+			case 16:
+				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
+				break;
+			case 32:
+				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
+				break;
+			default:
+				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
+				break;
 		}
 	}   //REVELATOR: dont need an else condition here.
 
@@ -1674,7 +1539,7 @@ void idImage::CopyDepthBuffer( int x, int y, int imageWidth, int imageHeight, bo
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	backEnd.c_copyDepthBuffer++;
 
-	// debug this as well
+	// Debug this as well
 	GL_CheckErrors();
 }
 
@@ -1755,7 +1620,11 @@ void idImage::UploadScratch( const byte *data, int cols, int rows ) {
 	}
 }
 
-
+/*
+==================
+SetClassification
+==================
+*/
 void idImage::SetClassification( int tag ) {
 	classification = tag;
 }

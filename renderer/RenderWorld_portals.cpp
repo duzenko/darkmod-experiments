@@ -455,7 +455,9 @@ void idRenderWorldLocal::FlowLightThroughPortals( idRenderLightLocal *light ) {
 		idRenderMatrix::GetFrustumPlanes( frustumPlanes, light->baseLightProject, true, true );
 
 		memset( &ps, 0, sizeof( ps ) );
+
 		ps.numPortalPlanes = 6;
+
 		for ( int i = 0; i < 6; i++ ) {
 			ps.portalPlanes[i] = -frustumPlanes[i];
 		}
@@ -470,6 +472,7 @@ void idRenderWorldLocal::FlowLightThroughPortals( idRenderLightLocal *light ) {
 		memset( &ps, 0, sizeof( ps ) );
 
 		ps.numPortalPlanes = 6;
+
 		for ( int i = 0; i < 6; i++ ) {
 			ps.portalPlanes[i] = light->frustum[i];
 		}
@@ -1185,15 +1188,21 @@ void idRenderWorldLocal::ShowPortals() {
 		if ( area.areaViewCount != viewCount ) { 
 			continue; 
 		}
+		common->Printf( " %i", area.areaNum );
 		for ( auto p : area.areaPortals ) {
+			char *sColor = "";
 			// Changed to show 3 colours. -- SteveL #4162
 			if ( p->doublePortal->portalViewCount == viewCount ) { 
-				qglColor3f( 0, 1, 0 ); 	// green = we see through this portal
+				GL_FloatColor( 0, 1, 0 ); 	// green = we see through this portal
+				sColor = "^2";
 			} else if ( portalAreas[p->intoArea].areaViewCount == viewCount )	{ 
-				qglColor3f( 1, 1, 0 );	// yellow = we see into this visleaf but not through this portal
-			} else { 
-				qglColor3f( 1, 0, 0 ); 	// red = can't see
+				GL_FloatColor( 1, 1, 0 );	// yellow = we see into this visleaf but not through this portal
+				sColor = "^3";
+			} else {
+				GL_FloatColor( 1, 0, 0 ); 	// red = can't see
+				sColor = "^1";
 			}
+			common->Printf( "%s-%i", sColor, p->intoArea );
 			qglBegin( GL_LINE_LOOP );
 			for ( j = 0; j < p->w.GetNumPoints(); j++ )	{ 
 				qglVertex3fv( p->w[j].ToFloatPtr() ); 
@@ -1201,4 +1210,5 @@ void idRenderWorldLocal::ShowPortals() {
 			qglEnd();
 		}
 	}
+	common->Printf( "\n" );
 }
