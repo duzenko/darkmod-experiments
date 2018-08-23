@@ -292,7 +292,6 @@ static bool	R_ClipTriangleToLight( const idVec3 &a, const idVec3 &b, const idVec
 			}
 		}
 	}
-
 	return true;
 }
 
@@ -836,6 +835,11 @@ bool idInteraction::CullInteractionByViewFrustum( const idFrustum &viewFrustum )
 	return false;
 }
 
+/*
+===================
+R_CullModelBoundsToLight
+===================
+*/
 ID_INLINE bool R_CullModelBoundsToLight( const idRenderLightLocal * light, const idBounds & localBounds, const idRenderMatrix & modelRenderMatrix ) {
 	idRenderMatrix modelLightProject;
 	idRenderMatrix::Multiply( light->baseLightProject, modelRenderMatrix, modelLightProject );
@@ -904,8 +908,8 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 		srfTriangles_t	*tri;
 
 		surf = model->Surface( c );
-
 		tri = surf->geometry;
+
 		if ( !tri ) {
 			continue;
 		}

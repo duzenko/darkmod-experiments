@@ -135,7 +135,7 @@ idCVar r_lightScale( "r_lightScale", "2", CVAR_RENDERER | CVAR_FLOAT, "all light
 idCVar r_lightSourceRadius( "r_lightSourceRadius", "0", CVAR_RENDERER | CVAR_FLOAT, "for soft-shadow sampling" );
 idCVar r_flareSize( "r_flareSize", "1", CVAR_RENDERER | CVAR_FLOAT, "scale the flare deforms from the material def" );
 
-idCVar r_useExternalShadows( "r_useExternalShadows", "1", CVAR_RENDERER | CVAR_INTEGER, "1 = skip drawing caps when outside the light volume, 2 = force to no caps for testing", 0, 2, idCmdSystem::ArgCompletion_Integer<0, 2> );
+idCVar r_useExternalShadows( "r_useExternalShadows", "1", CVAR_RENDERER | CVAR_INTEGER, "1 = skip drawing caps when outside the light volume", 0, 1, idCmdSystem::ArgCompletion_Integer<0, 1> );
 idCVar r_useOptimizedShadows( "r_useOptimizedShadows", "1", CVAR_RENDERER | CVAR_BOOL, "use the dmap generated static shadow volumes" );
 idCVar r_useScissor( "r_useScissor", "1", CVAR_RENDERER | CVAR_BOOL, "scissor clip as portals and lights are processed" );
 idCVar r_useDepthBoundsTest( "r_useDepthBoundsTest", "1", CVAR_RENDERER | CVAR_BOOL, "use depth bounds test to reduce shadow fill" );
@@ -233,11 +233,10 @@ idCVar r_postprocess_bloomKernelSize( "r_postprocess_bloomKernelSize", "2", CVAR
 idCVar r_useAnonreclaimer( "r_useBfgPortalCulling", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "test anonreclaimer culling patch" );
 idCVar r_ambient_testadd( "r_ambient_testadd", "0", CVAR_RENDERER | CVAR_FLOAT, "Added ambient brightness for testing purposes. ", 0, 1 );
 idCVar r_useGLSL( "r_useGLSL", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use GLSL shaders instead of ARB" );
-idCVar r_useMultiDraw( "r_useMultiDraw", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use glMultiDrawXXX functions for batch processing" );
 
 // FBO
 idCVar r_useFbo( "r_useFBO", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Use framebuffer objects" );
-idCVar r_nvidiaOverride( "r_nvidiaOverride", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Force FBO if Soft Shadows are enabled with Nvidia hardware" );
+idCVar r_nVidiaOverride( "r_nVidiaOverride", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "Force FBO if Soft Shadows are enabled with Nvidia hardware" );
 idCVar r_fboDebug( "r_fboDebug", "0", CVAR_RENDERER | CVAR_INTEGER, "0-3 individual fbo attachments" );
 idCVar r_fboColorBits( "r_fboColorBits", "32", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "15, 32" );
 idCVar r_fboDepthBits( "r_fboDepthBits", "24", CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "16, 24, 32" );
@@ -406,6 +405,7 @@ static void R_CheckPortableExtensions( void ) {
 	common->Printf( "Max texture coords: %d\n", glConfig.maxTextureCoords );
 	qglGetIntegerv( GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &glConfig.maxTextures );
 	common->Printf( "Max active textures: %d\n", glConfig.maxTextures );
+
 	if ( glConfig.maxTextures < MAX_MULTITEXTURE_UNITS ) {
 		common->Error( "   Too few!\n" );
 	}
@@ -580,8 +580,6 @@ static void R_CheckPortableExtensions( void ) {
 		qglFramebufferTextureLayer = ( PFNGLFRAMEBUFFERTEXTURELAYERPROC )GLimp_ExtensionPointer( "glFramebufferTextureLayer" );
 		qglDrawBuffers = ( PFNGLDRAWBUFFERSPROC )GLimp_ExtensionPointer( "glDrawBuffers" );
 		qglCopyImageSubData = ( PFNGLCOPYIMAGESUBDATANVPROC )GLimp_ExtensionPointer( "glCopyImageSubData" );
-		// State management
-		//qglBlendEquation = (PFNGLBLENDEQUATIONPROC)GLimp_ExtensionPointer( "glBlendEquation" );
 	} else {
 		glConfig.framebufferObjectAvailable = R_CheckExtension( "GL_EXT_framebuffer_object" );
 		glConfig.framebufferBlitAvailable = R_CheckExtension( "GL_EXT_framebuffer_blit" );
@@ -624,7 +622,7 @@ static void R_CheckPortableExtensions( void ) {
 		qglPopDebugGroup = ( PFNGLPOPDEBUGGROUPPROC )GLimp_ExtensionPointer( "glPopDebugGroup" );
 	}
 
-//	 -----====+++|   END TDM ~SS Extensions   |+++====-----   */
+	//	 -----====+++|   END TDM ~SS Extensions   |+++====-----   */
 	glConfig.pixelBufferAvailable = R_CheckExtension("GL_ARB_pixel_buffer_object");
 
 	glConfig.fenceSyncAvailable = R_CheckExtension( "GL_ARB_sync" );
@@ -782,14 +780,18 @@ void R_InitOpenGL( void ) {
 	glConfig.version_string = ( const char * )qglGetString( GL_VERSION );
 	glConfig.extensions_string = ( const char * )qglGetString( GL_EXTENSIONS );
 
-	if ( strcmp( glConfig.vendor_string, "Intel" ) == 0 )
-	{ glConfig.vendor = glvIntel; }
-	if ( strcmp( glConfig.vendor_string, "ATI Technologies Inc." ) == 0 )
-	{ glConfig.vendor = glvAMD; }
-	if ( strncmp( glConfig.vendor_string, "NVIDIA", 6 ) == 0
-	        || strncmp( glConfig.vendor_string, "Nvidia", 6 ) == 0
-	        || strncmp( glConfig.vendor_string, "nvidia", 6 ) == 0 ) {
-		glConfig.vendor = glvNVIDIA;
+	if ( strcmp( glConfig.vendor_string, "Intel" ) == 0 ) { 
+		glConfig.vendor = glvIntel; 
+	}
+
+	if ( strcmp( glConfig.vendor_string, "ATI Technologies Inc." ) == 0 ) { 
+		glConfig.vendor = glvAMD; 
+	}
+
+	if ( strncmp( glConfig.vendor_string, "NVIDIA", 6 ) == 0 || 
+		 strncmp( glConfig.vendor_string, "Nvidia", 6 ) == 0 || 
+		 strncmp( glConfig.vendor_string, "nvidia", 6 ) == 0 ) {
+		 glConfig.vendor = glvNVIDIA;
 	}
 
 	// OpenGL driver constants
@@ -824,7 +826,7 @@ void R_InitOpenGL( void ) {
 	// Reset our gamma
 	R_SetColorMappings();
 
-	if ( ( glConfig.vendor == glvNVIDIA ) && r_softShadowsQuality.GetBool() && r_nvidiaOverride.GetBool() ) {
+	if ( ( glConfig.vendor == glvNVIDIA ) && r_softShadowsQuality.GetBool() && r_nVidiaOverride.GetBool() ) {
 		common->Printf( "Nvidia Hardware Detected. Forcing FBO\n" );
 		r_useFbo.SetBool( true );
 	}
@@ -839,7 +841,7 @@ void R_InitOpenGL( void ) {
 				Sys_GrabMouseCursor( false );
 			}
 			int ret = MessageBox( NULL, "Please install OpenGL drivers from your graphics hardware vendor to run " GAME_NAME ".\nYour OpenGL functionality is limited.",
-			                      "Insufficient OpenGL capabilities", MB_OKCANCEL | MB_ICONWARNING | MB_TASKMODAL );
+										"Insufficient OpenGL capabilities", MB_OKCANCEL | MB_ICONWARNING | MB_TASKMODAL );
 			if ( ret == IDCANCEL ) {
 				cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
 				cmdSystem->ExecuteCommandBuffer();
@@ -1122,8 +1124,7 @@ void R_ReportImageDuplication_f( const idCmdArgs &args ) {
 	for ( int i = 0 ; i < globalImages->images.Num() ; i++ ) {
 		idImage	*image1 = globalImages->images[i];
 
-		if ( image1->isPartialImage     || // ignore background loading stubs
-		     image1->generatorFunction  || // ignore procedural images
+		if ( image1->generatorFunction  || // ignore procedural images
 		     image1->type != TT_2D		|| // ignore cube maps
 		     image1->imageHash == 0		|| // FIXME: This is a hack - Some images are not being hashed - Fonts/gui mainly
 		     image1->imageHash == -1	|| // FIXME: This is a hack - Some images are not being hashed - Fonts/gui mainly
@@ -1142,8 +1143,7 @@ void R_ReportImageDuplication_f( const idCmdArgs &args ) {
 
 		for ( int j = 0 ; j < i ; j++ ) {
 			idImage	*image2 = globalImages->images[j];
-			if ( image2->isPartialImage     || // ignore background loading stubs
-			     image2->generatorFunction  || // ignore procedural images
+			if ( image2->generatorFunction  || // ignore procedural images
 			     image2->type != TT_2D		|| // ignore cube maps
 			     image2->imageHash == 0		|| // FIXME: This is a hack - Some images are not being hashed - Fonts/gui mainly
 			     image2->imageHash == -1	|| // FIXME: This is a hack - Some images are not being hashed - Fonts/gui mainly

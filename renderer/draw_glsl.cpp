@@ -136,7 +136,7 @@ void RB_GLSL_DrawInteraction( const drawInteraction_t *din ) {
 
 	// draw it
 	GL_CheckErrors();
-	RB_DrawElementsWithCounters( din->surf->backendGeo );
+	RB_DrawElementsWithCounters( din->surf );
 	GL_CheckErrors();
 }
 
@@ -171,7 +171,7 @@ void RB_GLSL_CreateDrawInteractions( const drawSurf_t *surf ) {
 		}
 
 		// set the vertex pointers
-		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 		qglVertexAttribPointer( 3, 4, GL_UNSIGNED_BYTE, true, sizeof( idDrawVert ), &ac->color );
 		qglVertexAttribPointer( 11, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->normal.ToFloatPtr() );
 		qglVertexAttribPointer( 10, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[1].ToFloatPtr() );
@@ -236,7 +236,7 @@ void RB_GLSL_DrawLight_Stencil() {
 		backEnd.currentScissor = backEnd.vLight->scissorRect;
 
 		if ( r_useScissor.GetBool() ) {
-			qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
+			GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
 			            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 			            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 			            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
@@ -312,6 +312,7 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
 			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
 		}
+
 		if ( backEnd.currentSpace != surf->space ) {
 			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
 			backEnd.currentSpace = surf->space;
@@ -319,9 +320,9 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		}
 
 		// set the vertex pointers
-		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->backendGeo->ambientCache );
+		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
-		RB_DrawElementsWithCounters( surf->backendGeo );
+		RB_DrawElementsWithCounters( surf );
 	}
 	qglUseProgram( 0 );
 
@@ -437,8 +438,7 @@ void RB_GLSL_DrawInteractions_MultiLight() {
 			break;
 		}
 		
-		auto tri = drawSurfs[i]->backendGeo;
-		idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( tri->ambientCache );
+		idDrawVert *ac = (idDrawVert *)vertexCache.VertexPosition( drawSurfs[i]->ambientCache );
 		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
 		qglVertexAttribPointer( 9, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->tangents[0].ToFloatPtr() );
@@ -1032,7 +1032,7 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 		qglUniform3fv( lightOrigin, thisCount, lightOrigins[i].ToFloatPtr() );
 		qglUniform3fv( lightColor, thisCount, lightColors[i].ToFloatPtr() );
 		qglUniform1iv( shadowMapIndex, thisCount, &shadowIndex[i] );
-		RB_DrawElementsWithCounters( din->surf->backendGeo );
+		RB_DrawElementsWithCounters( din->surf );
 	}
 
 	for ( int i = 0; i < MAX_LIGHTS; i++ ) {

@@ -145,9 +145,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	const shaderStage_t		*pStage;
 	const float				*regs;
 	float					color[4];
-	const srfTriangles_t	*tri;
 
-	tri = surf->backendGeo;
 	shader = surf->material;
 
 	if ( !shader->IsDrawn() ) {
@@ -155,7 +153,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	}
 
 	// some deforms may disable themselves by setting numIndexes = 0
-	if ( !tri->numIndexes ) {
+	if ( !surf->numIndexes ) {
 		return;
 	}
 
@@ -165,7 +163,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 		return;
 	}
 
-	if ( !tri->ambientCache.IsValid() ) {
+	if ( !surf->ambientCache.IsValid() ) {
 		common->Printf( "RB_T_FillDepthBuffer: !tri->ambientCache\n" );
 		return;
 	}
@@ -210,7 +208,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 		color[2] = 0;
 		color[3] = 1;
 	}
-	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( tri->ambientCache );
+	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 
 	bool drawSolid = false;
@@ -262,7 +260,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 			RB_PrepareStageTexturing( pStage, surf, ac );
 
 			// draw it
-			RB_DrawElementsWithCounters( tri );
+			RB_DrawElementsWithCounters( surf );
 
 			// take down texture matrix and texGens
 			RB_FinishStageTexturing( pStage, surf, ac );
@@ -280,7 +278,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	// draw the entire surface solid
 	if ( drawSolid ) {
 		// draw it
-		RB_DrawElementsWithCounters( tri );
+		RB_DrawElementsWithCounters( surf );
 	}
 
 	// reset polygon offset
@@ -292,86 +290,6 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	if ( shader->GetSort() == SS_SUBVIEW ) {
 		qglUniform4fv( depthShader.color, 1, colorBlack.ToFloatPtr() );
 		GL_State( GLS_DEPTHFUNC_LESS );
-	}
-}
-
-/*
-work in progress, hidden by the r_useMultiDraw cvar
-non-solid or non-static geometry not affected, passed through to RB_T_FillDepthBuffer
-solid static surfaces are expected to be in a single VBO => call VertexAttribPointer only once
-also sort by surface.space to minimize matrix switches
-TODO instanced draw
-*/
-ID_NOINLINE void RB_FillDepthBuffer_Multi( drawSurf_t **drawSurfs, int numDrawSurfs ) {
-	static idCVar r_showMultiDraw( "r_showMultiDraw", "0", CVAR_RENDERER, "1 = print to console, 2 - visualize" );
-	std::vector<drawSurf_t *> stat;
-	stat.reserve( numDrawSurfs );
-
-	// step 1 - filter static solid geometry
-	auto passedThrough = ( drawSurf_t ** ) alloca( sizeof( drawSurf_t * )*numDrawSurfs );
-	int passedThroughNum = 0;
-
-	for ( int i = 0; i < numDrawSurfs; i++ ) {
-		auto tri = drawSurfs[i]->backendGeo;
-
-		// filters solid static here
-		if ( tri->ambientCache.isStatic && drawSurfs[i]->material->Coverage() == MC_OPAQUE ) {
-			stat.push_back( drawSurfs[i] );
-			continue;
-		}
-		passedThrough[passedThroughNum++] = drawSurfs[i];
-
-		if ( r_showMultiDraw.GetInteger() == 2 ) {
-			gameRenderWorld->DebugBox( colorDkGrey, idBox( tri->bounds, drawSurfs[i]->space->modelMatrix ), 5000 );
-		}
-	}
-	RB_RenderDrawSurfListWithFunction( passedThrough, passedThroughNum, RB_T_FillDepthBuffer );
-
-	if ( !stat.size() ) {
-		return;
-	}
-
-	// legacy render does per-surface scissor, we don't want that
-	backEnd.currentScissor = backEnd.viewDef->scissor;
-	qglScissor( tr.viewportOffset[0] + backEnd.viewDef->viewport.x1 + backEnd.viewDef->scissor.x1,
-	            tr.viewportOffset[1] + backEnd.viewDef->viewport.y1 + backEnd.viewDef->scissor.y1,
-	            backEnd.viewDef->scissor.x2 + 1 - backEnd.viewDef->scissor.x1,
-	            backEnd.viewDef->scissor.y2 + 1 - backEnd.viewDef->scissor.y1 );
-
-	// step 2 - sort surfaces to minimize matrix loads
-	std::sort( stat.begin(), stat.end(), []( const drawSurf_t *a, const drawSurf_t *b ) {
-		return a->space < b->space;
-	} );
-
-	// step 3 - call VertexAttribPointer once, then call DrawElementsBaseVertex per surface
-	int matrixLoads = 0, vapCalls = 0;
-
-	for ( size_t i = 0; i < stat.size(); i++ ) {
-		if ( stat[i]->space != backEnd.currentSpace ) { // multiple surfaces of the same model
-			qglLoadMatrixf( stat[i]->space->modelViewMatrix );
-			backEnd.currentSpace = stat[i]->space;
-			matrixLoads++;
-		}
-		auto tri = stat[i]->backendGeo;
-		/*if ( r_showMultiDraw.GetInteger() == 2 )
-			gameRenderWorld->DebugBox( ac.offset == tri->ambientCache.offset ? colorGreen : colorYellow,
-				idBox( tri->bounds, stat[i]->space->modelMatrix ), 5000 );*/
-		auto cachePointer = ( size_t )vertexCache.VertexPosition( tri->ambientCache );
-		size_t baseVertex = cachePointer / sizeof( idDrawVert ), offset = cachePointer % sizeof( idDrawVert );
-
-		if ( !i ) {
-			qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), reinterpret_cast< GLvoid * >( offset ) );
-			vapCalls++;
-		}
-		RB_DrawElementsWithCountersBaseVertex( tri, static_cast< int >( baseVertex ) );
-	}
-
-	if ( r_showMultiDraw.GetBool() ) {
-		common->Printf( "Surfaces:%i/%i, matrix loads:%i, AttribPointer calls:%i\n", stat.size(), numDrawSurfs, matrixLoads, vapCalls );
-	}
-
-	if ( r_showMultiDraw.GetInteger() == 2 ) {
-		r_showMultiDraw.SetInteger( 0 );
 	}
 }
 
@@ -438,12 +356,8 @@ void RB_STD_FillDepthBuffer( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	qglEnable( GL_STENCIL_TEST );
 	qglStencilFunc( GL_ALWAYS, 1, 255 );
 
-	// breaks skyportals atm: Revelator
-	if ( r_useMultiDraw.GetBool() ) {
-		RB_FillDepthBuffer_Multi( drawSurfs, numDrawSurfs );
-	} else {
-		RB_RenderDrawSurfListWithFunction( drawSurfs, numDrawSurfs, RB_T_FillDepthBuffer );
-	}
+	// removed the multidraw function for now. #7627
+	RB_RenderDrawSurfListWithFunction( drawSurfs, numDrawSurfs, RB_T_FillDepthBuffer );
 
 	// Make the early depth pass available to shaders. #3877
 	if ( !backEnd.viewDef->IsLightGem() && !r_skipDepthCapture.GetBool() ) {
@@ -609,10 +523,10 @@ void RB_STD_T_RenderShaderPasses_OldStage( idDrawVert *ac, const shaderStage_t *
 		cubeMapShader.Use();
 		break;
 	case TG_REFLECT_CUBE:
-		qglColor4fv( color );
+		GL_FloatColor( color );
 		break;
 	case TG_SCREEN:
-		qglColor4fv( color );
+		GL_FloatColor( color );
 	default:
 		qglEnableVertexAttribArray( 8 );
 		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
@@ -646,9 +560,8 @@ void RB_STD_T_RenderShaderPasses_OldStage( idDrawVert *ac, const shaderStage_t *
 	// set the state
 	GL_State( pStage->drawStateBits );
 
-	const srfTriangles_t	*tri = surf->backendGeo;
 	// draw it
-	RB_DrawElementsWithCounters( tri );
+	RB_DrawElementsWithCounters( surf );
 
 	RB_FinishStageTexturing( pStage, surf, ac );
 
@@ -695,11 +608,10 @@ void RB_STD_T_RenderShaderPasses_NewStage( idDrawVert *ac, const shaderStage_t *
 	newShaderStage_t *newStage = pStage->newStage;
 	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, newStage->vertexProgram );
 	qglEnable( GL_VERTEX_PROGRAM_ARB );
-	const srfTriangles_t *tri = surf->backendGeo;
 
 	// megaTextures bind a lot of images and set a lot of parameters
 	if ( newStage->megaTexture ) {
-		newStage->megaTexture->SetMappingForSurface( tri );
+		newStage->megaTexture->SetMappingForSurface( surf->frontendGeo ); // FIXME
 		idVec3	localViewer;
 		R_GlobalPointToLocal( surf->space->modelMatrix, backEnd.viewDef->renderView.vieworg, localViewer );
 		newStage->megaTexture->BindForViewOrigin( localViewer );
@@ -725,7 +637,7 @@ void RB_STD_T_RenderShaderPasses_NewStage( idDrawVert *ac, const shaderStage_t *
 	qglEnable( GL_FRAGMENT_PROGRAM_ARB );
 
 	// draw it
-	RB_DrawElementsWithCounters( tri );
+	RB_DrawElementsWithCounters( surf );
 
 	for ( int i = 1; i < newStage->numFragmentProgramImages; i++ ) {
 		if ( newStage->fragmentProgramImages[i] ) {
@@ -776,7 +688,7 @@ void RB_STD_T_RenderShaderPasses_SoftParticle( idDrawVert *ac, const shaderStage
 		color[1] = regs[pStage->color.registers[1]];
 		color[2] = regs[pStage->color.registers[2]];
 		color[3] = regs[pStage->color.registers[3]];
-		qglColor4fv( color );
+		GL_FloatColor( color );
 	} else {
 		// A properly set-up particle shader
 		qglEnableVertexAttribArray( 3 );
@@ -830,10 +742,8 @@ void RB_STD_T_RenderShaderPasses_SoftParticle( idDrawVert *ac, const shaderStage
 	}
 	qglProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, 6, parm );
 
-	const srfTriangles_t *tri = surf->backendGeo;
-
 	// draw it
-	RB_DrawElementsWithCounters( tri );
+	RB_DrawElementsWithCounters( surf );
 
 	// Clean up GL state
 	GL_SelectTexture( 1 );
@@ -863,9 +773,7 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 	const idMaterial		*shader;
 	const shaderStage_t		*pStage;
 	const float				*regs;
-	const srfTriangles_t	*tri;
 
-	tri = surf->backendGeo;
 	shader = surf->material;
 
 	if ( !shader->HasAmbient() ) {
@@ -892,18 +800,18 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 	// change the scissor if needed
 	if ( r_useScissor.GetBool() && !backEnd.currentScissor.Equals( surf->scissorRect ) ) {
 		backEnd.currentScissor = surf->scissorRect;
-		qglScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
+		GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
 		            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
 		            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
 		            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
 	}
 
 	// some deforms may disable themselves by setting numIndexes = 0
-	if ( !tri->numIndexes ) {
+	if ( !surf->numIndexes ) {
 		return;
 	}
 
-	if ( !tri->ambientCache.IsValid() ) {
+	if ( !surf->ambientCache.IsValid() ) {
 		common->Printf( "RB_T_RenderShaderPasses: !tri->ambientCache\n" );
 		return;
 	}
@@ -931,7 +839,7 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 		// an older way to slightly "soften" particles
 		RB_EnterModelDepthHack( surf->space->modelDepthHack );
 	}
-	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( tri->ambientCache );
+	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
 
 	for ( stage = 0; stage < shader->GetNumStages() ; stage++ ) {
@@ -1060,10 +968,6 @@ RB_T_BlendLight
 =====================
 */
 static void RB_T_BlendLight( const drawSurf_t *surf ) {
-	const srfTriangles_t *tri;
-
-	tri = surf->backendGeo;
-
 	if ( backEnd.currentSpace != surf->space ) {
 		idPlane	lightProject[4];
 		int		i;
@@ -1078,14 +982,14 @@ static void RB_T_BlendLight( const drawSurf_t *surf ) {
 	}
 
 	// this gets used for both blend lights and shadow draws
-	if ( tri->ambientCache.IsValid() ) {
-		idDrawVert	*ac = ( idDrawVert * )vertexCache.VertexPosition( tri->ambientCache );
+	if ( surf->ambientCache.IsValid() ) {
+		idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
 		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
-	} else if ( tri->shadowCache.IsValid() ) {
-		shadowCache_t	*sc = ( shadowCache_t * )vertexCache.VertexPosition( tri->shadowCache );
+	} else if ( surf->shadowCache.IsValid() ) {
+		shadowCache_t *sc = ( shadowCache_t * )vertexCache.VertexPosition( surf->shadowCache );
 		qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( shadowCache_t ), sc->xyz.ToFloatPtr() );
 	}
-	RB_DrawElementsWithCounters( tri );
+	RB_DrawElementsWithCounters( surf );
 }
 
 /*
@@ -1170,8 +1074,6 @@ RB_T_BasicFog
 =====================
 */
 static void RB_T_BasicFog( const drawSurf_t *surf ) {
-	const srfTriangles_t *tri = surf->backendGeo;
-
 	if ( backEnd.currentSpace != surf->space ) {
 		idPlane	local;
 
@@ -1211,7 +1113,11 @@ static void RB_FogPass( const drawSurf_t *drawSurfs,  const drawSurf_t *drawSurf
 
 	if ( !backEnd.vLight->noFogBoundary ) { // No need to create the drawsurf if we're not fogging the bounding box -- #3664
 		ds.space = &backEnd.viewDef->worldSpace;
-		ds.backendGeo = frustumTris;
+		//ds.backendGeo = frustumTris;
+		ds.frontendGeo = frustumTris; // FIXME JIC
+		ds.numIndexes = frustumTris->numIndexes;
+		ds.indexCache = frustumTris->indexCache;
+		ds.ambientCache = frustumTris->ambientCache;
 		ds.scissorRect = backEnd.viewDef->scissor;
 	}
 

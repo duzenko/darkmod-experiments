@@ -112,9 +112,12 @@ static const int DSF_SHADOW_MAP_IGNORE = 4; // #4641
 static const int DSF_SHADOW_MAP_ONLY = 8; // #4641
 
 typedef struct drawSurf_s {
-	//const srfTriangles_t	*frontendGeo;  // do not use in the backend; may be modified by the frontend
-	srfTriangles_t			geo;
-	const srfTriangles_t	*backendGeo;
+	const srfTriangles_t	*frontendGeo;			// do not use in the backend; may be modified by the frontend
+	int						numIndexes;				// these four are frame-safe copies for backend use
+	vertCacheHandle_t		indexCache;				// int				
+	vertCacheHandle_t		ambientCache;			// idDrawVert
+	vertCacheHandle_t		shadowCache;			// shadowCache_t
+
 	const struct viewEntity_s *space;
 	const idMaterial		*material;	// may be NULL for shadow volumes
 	float					sort;		// material->sort, modified by gui / entity sort offsets
@@ -127,8 +130,11 @@ typedef struct drawSurf_s {
 	float					particle_radius;	// The radius of individual quads for soft particles #3878
 
 	void CopyGeo( const srfTriangles_t *tri ) {
-		geo = *tri;
-		backendGeo = &geo;
+		frontendGeo = tri;
+		numIndexes = tri->numIndexes;
+		indexCache = tri->indexCache;
+		ambientCache = tri->ambientCache;
+		shadowCache = tri->shadowCache;
 	}
 } drawSurf_t;
 
@@ -1022,7 +1028,7 @@ extern idCVar r_useAnonreclaimer;
 extern idCVar r_cinematic_legacyRoq;
 
 // nbohr1more nvidia driver workarounds
-extern idCVar r_nvidiaOverride;
+extern idCVar r_nVidiaOverride;
 
 // HDR related - J.C.Denton
 extern idCVar r_postprocess;
@@ -1051,9 +1057,25 @@ void	GL_CheckErrors( void );
 void	GL_ClearStateDelta( void );
 void	GL_State( int stateVector );
 void	GL_Cull( int cullType );
+void	GL_Scissor( int x /* left*/, int y /* bottom */, int w, int h );
+void	GL_Viewport( int x /* left */, int y /* bottom */, int w, int h );
 //anon begin
 void    GL_DepthBoundsTest( const float zmin, const float zmax );
 //anon end
+
+// overloaded color functions vector first
+void	GL_FloatColor( const idVec3 &color );
+void	GL_FloatColor( const idVec4 &color );
+
+// float type
+void	GL_FloatColor( const float *color );
+void	GL_FloatColor( float r, float g, float b );
+void	GL_FloatColor( float r, float g, float b, float a );
+
+// byte type
+void	GL_ByteColor( const byte *color );
+void	GL_ByteColor( byte r, byte g, byte b );
+void	GL_ByteColor( byte r, byte g, byte b, byte a );
 
 const int GLS_SRCBLEND_ONE						= 0x0;
 const int GLS_SRCBLEND_ZERO						= 0x00000001;
@@ -1244,7 +1266,7 @@ viewLight_t *R_SetLightDefViewLight( idRenderLightLocal *def );
 void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const renderEntity_t *renderEntity,
 					const idMaterial *shader, const idScreenRect &scissor, const float soft_particle_radius = -1.0f ); // soft particles in #3878
 
-void R_LinkLightSurf( /*const */drawSurf_t **link, const srfTriangles_t *tri, const viewEntity_t *space,
+void R_LinkLightSurf( drawSurf_t **link, const srfTriangles_t *tri, const viewEntity_t *space,
 					const idMaterial *shader, const idScreenRect &scissor, bool viewInsideShadow );
 
 bool R_CreateAmbientCache( srfTriangles_t *tri, bool needsLighting );
@@ -1312,7 +1334,7 @@ void RB_EnterWeaponDepthHack();
 void RB_EnterModelDepthHack( float depth );
 void RB_LeaveDepthHack();
 void RB_DrawElementsImmediate( const srfTriangles_t *tri );
-void RB_RenderTriangleSurface( const srfTriangles_t *tri );
+void RB_RenderTriangleSurface( const drawSurf_t *surf );
 void RB_T_RenderTriangleSurface( const drawSurf_t *surf );
 void RB_RenderDrawSurfListWithFunction( drawSurf_t **drawSurfs, int numDrawSurfs,
 										void ( *triFunc_ )( const drawSurf_t * ) );
@@ -1320,7 +1342,7 @@ void RB_RenderDrawSurfChainWithFunction( const drawSurf_t *drawSurfs,
 		void ( *triFunc_ )( const drawSurf_t * ) );
 void RB_LoadShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture );
 void RB_GetShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture, float matrix[16] );
-void RB_CreateSingleDrawInteractions( const drawSurf_t *surf/*, void (*DrawInteraction)(const drawInteraction_t *)*/ );
+void RB_CreateSingleDrawInteractions( const drawSurf_t *surf );
 
 void RB_DrawView();
 
@@ -1334,10 +1356,8 @@ DRAW_STANDARD
 ============================================================
 */
 
-void RB_DrawElementsWithCounters( const srfTriangles_t *tri );
-// revelator : this was named the same as the above function causing an unintentional overload (renamed and moved the extern here).
-void RB_DrawElementsWithCountersBaseVertex( const srfTriangles_t *tri, int baseVertex );
-void RB_DrawShadowElementsWithCounters( const srfTriangles_t *tri, int numIndexes );
+void RB_DrawElementsWithCounters( const drawSurf_t *surf );
+void RB_DrawShadowElementsWithCounters( const drawSurf_t *surf );
 void RB_BindVariableStageImage( const textureStage_t *texture, const float *shaderRegisters );
 void RB_FinishStageTexture( const textureStage_t *texture, const drawSurf_t *surf );
 void RB_StencilShadowPass( const drawSurf_t *drawSurfs );

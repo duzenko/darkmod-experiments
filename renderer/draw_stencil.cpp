@@ -34,7 +34,6 @@ the shadow volumes face INSIDE
 */
 static void RB_T_Shadow( const drawSurf_t *surf ) {
 	GL_CheckErrors();
-	const srfTriangles_t	*tri;
 	int softCheck = r_softShadowsQuality.GetInteger();
 
 	// set the light position if we are using a vertex program to project the rear surfaces
@@ -48,40 +47,20 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 			qglProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_ORIGIN, localLight.ToFloatPtr() );
 		}
 	}
-	tri = surf->backendGeo;
 
-	if ( !tri->shadowCache.IsValid() ) {
+	if ( !surf->shadowCache.IsValid() ) {
 		return;
 	}
-	qglVertexAttribPointer( 0, 4, GL_FLOAT, false, sizeof( shadowCache_t ), vertexCache.VertexPosition( tri->shadowCache ) );
+	qglVertexAttribPointer( 0, 4, GL_FLOAT, false, sizeof( shadowCache_t ), vertexCache.VertexPosition( surf->shadowCache ) );
 
 	// we always draw the sil planes, but we may not need to draw the front or rear caps
-	int	numIndexes;
+	const int numIndexes = surf->numIndexes;
 	bool external = false;
 
-	if ( !r_useExternalShadows.GetInteger() ) {
-		numIndexes = tri->numIndexes;
-	} else if ( r_useExternalShadows.GetInteger() == 2 ) { // force to no caps for testing
-		numIndexes = tri->numShadowIndexesNoCaps;
-	} else if ( !( surf->dsFlags & DSF_VIEW_INSIDE_SHADOW ) ) {
-		// if we aren't inside the shadow projection, no caps are ever needed needed
-		numIndexes = tri->numShadowIndexesNoCaps;
+	// #7627 simplify a bit revelator.
+	// 1 = skip drawing caps when outside the light volume
+	if ( r_useExternalShadows.GetInteger() && !( surf->dsFlags & DSF_VIEW_INSIDE_SHADOW ) ) {
 		external = true;
-	} else if ( !backEnd.vLight->viewInsideLight && !( surf->backendGeo->shadowCapPlaneBits & SHADOW_CAP_INFINITE ) ) {
-		// if we are inside the shadow projection, but outside the light, and drawing
-		// a non-infinite shadow, we can skip some caps
-		if ( backEnd.vLight->viewSeesShadowPlaneBits & surf->backendGeo->shadowCapPlaneBits ) {
-			// we can see through a rear cap, so we need to draw it, but we can skip the
-			// caps on the actual surface
-			numIndexes = tri->numShadowIndexesNoFrontCaps;
-		} else {
-			// we don't need to draw any caps
-			numIndexes = tri->numShadowIndexesNoCaps;
-		}
-		external = true;
-	} else {
-		// must draw everything
-		numIndexes = tri->numIndexes;
 	}
 
 	// set depth bounds
@@ -98,33 +77,16 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 
 		if ( r_showShadows.GetInteger() == 3 ) {
 			if ( external ) {
-				qglColor3f( 0.1 / backEnd.overBright, 1 / backEnd.overBright, 0.1 / backEnd.overBright );
+				GL_FloatColor( 0.1f / backEnd.overBright, 1.0f / backEnd.overBright, 0.1f / backEnd.overBright );
 			} else {
 				// these are the surfaces that require the reverse
-				qglColor3f( 1 / backEnd.overBright, 0.1 / backEnd.overBright, 0.1 / backEnd.overBright );
-			}
-		} else {
-			// draw different color for turboshadows
-			if ( surf->backendGeo->shadowCapPlaneBits & SHADOW_CAP_INFINITE ) {
-				if ( numIndexes == tri->numIndexes ) {
-					qglColor3f( .5 / backEnd.overBright, 0.1 / backEnd.overBright, 0.1 / backEnd.overBright );
-				} else {
-					qglColor3f( .5 / backEnd.overBright, 0.4 / backEnd.overBright, 0.1 / backEnd.overBright );
-				}
-			} else {
-				if ( numIndexes == tri->numIndexes ) {
-					qglColor3f( 0.1 / backEnd.overBright, 1 / backEnd.overBright, 0.1 / backEnd.overBright );
-				} else if ( numIndexes == tri->numShadowIndexesNoFrontCaps ) {
-					qglColor3f( 0.1 / backEnd.overBright, 1 / backEnd.overBright, 0.6 / backEnd.overBright );
-				} else {
-					qglColor3f( 0.6 / backEnd.overBright, 1 / backEnd.overBright, 0.1 / backEnd.overBright );
-				}
+				GL_FloatColor( 1.0f / backEnd.overBright, 0.1f / backEnd.overBright, 0.1f / backEnd.overBright );
 			}
 		}
 		qglStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
 		qglDisable( GL_STENCIL_TEST );
 		GL_Cull( CT_TWO_SIDED );
-		RB_DrawShadowElementsWithCounters( tri, numIndexes );
+		RB_DrawShadowElementsWithCounters( surf );
 		GL_Cull( CT_FRONT_SIDED );
 		qglEnable( GL_STENCIL_TEST );
 		GL_CheckErrors();
@@ -138,17 +100,17 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 			qglStencilOpSeparate( backEnd.viewDef->isMirror ? GL_FRONT : GL_BACK, GL_KEEP, tr.stencilDecr, GL_KEEP );
 			qglStencilOpSeparate( backEnd.viewDef->isMirror ? GL_BACK : GL_FRONT, GL_KEEP, tr.stencilIncr, GL_KEEP );
 			GL_Cull( CT_TWO_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 		} else {
 			// "preload" the stencil buffer with the number of volumes
 			// that get clipped by the near or far clip plane
 			qglStencilOp( GL_KEEP, tr.stencilDecr, tr.stencilDecr );
 			GL_Cull( CT_FRONT_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 
 			qglStencilOp( GL_KEEP, tr.stencilIncr, tr.stencilIncr );
 			GL_Cull( CT_BACK_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 		}
 	} else {
 		// traditional depth-pass stencil shadows
@@ -156,15 +118,15 @@ static void RB_T_Shadow( const drawSurf_t *surf ) {
 			qglStencilOpSeparate( backEnd.viewDef->isMirror ? GL_FRONT : GL_BACK, GL_KEEP, GL_KEEP, tr.stencilIncr );
 			qglStencilOpSeparate( backEnd.viewDef->isMirror ? GL_BACK : GL_FRONT, GL_KEEP, GL_KEEP, tr.stencilDecr );
 			GL_Cull( CT_TWO_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 		} else {
 			qglStencilOp( GL_KEEP, GL_KEEP, tr.stencilIncr );
 			GL_Cull( CT_FRONT_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 
 			qglStencilOp( GL_KEEP, GL_KEEP, tr.stencilDecr );
 			GL_Cull( CT_BACK_SIDED );
-			RB_DrawShadowElementsWithCounters( tri, numIndexes );
+			RB_DrawShadowElementsWithCounters( surf );
 		}
 	}
 
