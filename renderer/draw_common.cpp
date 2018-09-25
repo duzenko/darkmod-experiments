@@ -144,7 +144,7 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 	const idMaterial		*shader;
 	const shaderStage_t		*pStage;
 	const float				*regs;
-	float					color[4];
+	//float					color[4];
 
 	shader = surf->material;
 
@@ -194,102 +194,11 @@ void RB_T_FillDepthBuffer( const drawSurf_t *surf ) {
 		qglPolygonOffset( r_offsetFactor.GetFloat(), r_offsetUnits.GetFloat() * shader->GetPolygonOffset() );
 	}
 
-	// subviews will just down-modulate the color buffer by overbright
-	if ( shader->GetSort() == SS_SUBVIEW ) {
-		GL_State( GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO | GLS_DEPTHFUNC_LESS );
-		color[0] =
-		color[1] =
-		color[2] = ( 1.0 / backEnd.overBright );
-		color[3] = 1;
-	} else {
-		// others just draw black
-		color[0] = 0;
-		color[1] = 0;
-		color[2] = 0;
-		color[3] = 1;
-	}
-	idDrawVert *ac = ( idDrawVert * )vertexCache.VertexPosition( surf->ambientCache );
-	qglVertexAttribPointer( 0, 3, GL_FLOAT, false, sizeof( idDrawVert ), ac->xyz.ToFloatPtr() );
-
-	bool drawSolid = false;
-
-	if ( shader->Coverage() == MC_OPAQUE ) {
-		drawSolid = true;
-	}
-
-	// we may have multiple alpha tested stages
-	if ( shader->Coverage() == MC_PERFORATED ) {
-		// if the only alpha tested stages are condition register omitted,
-		// draw a normal opaque surface
-		bool	didDraw = false;
-
-		qglEnableVertexAttribArray( 8 );
-		qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
-
-		// perforated surfaces may have multiple alpha tested stages
-		for ( stage = 0; stage < shader->GetNumStages() ; stage++ ) {
-			pStage = shader->GetStage( stage );
-
-			if ( !pStage->hasAlphaTest ) {
-				continue;
-			}
-
-			// check the stage enable condition
-			if ( regs[ pStage->conditionRegister ] == 0 ) {
-				continue;
-			}
-
-			// if we at least tried to draw an alpha tested stage,
-			// we won't draw the opaque surface
-			didDraw = true;
-
-			// set the alpha modulate
-			color[3] = regs[ pStage->color.registers[3] ];
-
-			// skip the entire stage if alpha would be black
-			if ( color[3] <= 0 ) {
-				continue;
-			}
-			qglUniform4fv( depthShader.color, 1, color );
-			qglUniform1f( depthShader.alphaTest, regs[pStage->alphaTestRegister] );
-
-			// bind the texture
-			pStage->texture.image->Bind();
-
-			// set texture matrix and texGens
-			RB_PrepareStageTexturing( pStage, surf, ac );
-
-			// draw it
-			RB_DrawElementsWithCounters( surf );
-
-			// take down texture matrix and texGens
-			RB_FinishStageTexturing( pStage, surf, ac );
-
-			qglUniform1f( depthShader.alphaTest, -1 ); // hint the glsl to skip texturing
-		}
-		qglUniform4fv( depthShader.color, 1, colorBlack.ToFloatPtr() );
-		qglDisableVertexAttribArray( 8 );
-
-		if ( !didDraw ) {
-			drawSolid = true;
-		}
-	}
-
-	// draw the entire surface solid
-	if ( drawSolid ) {
-		// draw it
-		RB_DrawElementsWithCounters( surf );
-	}
+	depthShader.FillDepthBuffer( surf );
 
 	// reset polygon offset
 	if ( shader->TestMaterialFlag( MF_POLYGONOFFSET ) ) {
 		qglDisable( GL_POLYGON_OFFSET_FILL );
-	}
-
-	// reset blending
-	if ( shader->GetSort() == SS_SUBVIEW ) {
-		qglUniform4fv( depthShader.color, 1, colorBlack.ToFloatPtr() );
-		GL_State( GLS_DEPTHFUNC_LESS );
 	}
 }
 
@@ -589,7 +498,7 @@ RB_STD_T_RenderShaderPasses_New
 Extracted from the giantic loop in RB_STD_T_RenderShaderPasses
 ==================
 */
-void RB_STD_T_RenderShaderPasses_NewStage( idDrawVert *ac, const shaderStage_t *pStage, const drawSurf_t *surf ) {
+void RB_STD_T_RenderShaderPasses_ARB( idDrawVert *ac, const shaderStage_t *pStage, const drawSurf_t *surf ) {
 	if ( r_skipNewAmbient.GetBool() ) {
 		return;
 	}
@@ -657,6 +566,49 @@ void RB_STD_T_RenderShaderPasses_NewStage( idDrawVert *ac, const shaderStage_t *
 	qglDisableVertexAttribArray( 9 );
 	qglDisableVertexAttribArray( 10 );
 	qglDisableVertexAttribArray( 2 );
+}
+
+void RB_STD_T_RenderShaderPasses_GLSL( idDrawVert *ac, const shaderStage_t *pStage, const drawSurf_t *surf ) {
+	qglVertexAttribPointer( 8, 2, GL_FLOAT, false, sizeof( idDrawVert ), ac->st.ToFloatPtr() );
+	qglEnableVertexAttribArray( 8 );
+	auto newStage = pStage->newStage;
+	for ( int i = 0; i < newStage->numFragmentProgramImages; i++ ) {
+		if ( newStage->fragmentProgramImages[i] ) {
+			GL_SelectTexture( i );
+			newStage->fragmentProgramImages[i]->Bind();
+		}
+	}
+	GL_State( pStage->drawStateBits );
+	qglUseProgram( pStage->newStage->fragmentProgram );
+	
+	
+	idMat4 modelView, proj;
+	memcpy( modelView.ToFloatPtr(), surf->space->modelViewMatrix, sizeof( modelView ) );
+	memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
+	auto MVP = modelView * proj;
+	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
+	
+	float	parm[4][4];
+	const float	*regs = surf->shaderRegisters;
+	for ( int i = 0; i < newStage->numVertexParms; i++ ) {
+		parm[i][0] = regs[newStage->vertexParms[i][0]];
+		parm[i][1] = regs[newStage->vertexParms[i][1]];
+		parm[i][2] = regs[newStage->vertexParms[i][2]];
+		parm[i][3] = regs[newStage->vertexParms[i][3]];
+	}
+	qglUniform4fv( 1, 4, parm[0] );
+
+	RB_DrawElementsWithCounters( surf );
+	qglUseProgram( 0 );
+
+	for ( int i = 1; i < newStage->numFragmentProgramImages; i++ ) {
+		if ( newStage->fragmentProgramImages[i] ) {
+			GL_SelectTexture( i );
+			globalImages->BindNull();
+		}
+	}
+	GL_SelectTexture( 0 );
+	qglDisableVertexAttribArray( 8 );
 }
 
 /*
@@ -864,7 +816,10 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 		newShaderStage_t *newStage = pStage->newStage;
 
 		if ( newStage ) {
-			RB_STD_T_RenderShaderPasses_NewStage( ac, pStage, surf );
+			if(newStage->GLSL )
+				RB_STD_T_RenderShaderPasses_GLSL( ac, pStage, surf );
+			else
+				RB_STD_T_RenderShaderPasses_ARB( ac, pStage, surf );
 			continue;
 		}
 

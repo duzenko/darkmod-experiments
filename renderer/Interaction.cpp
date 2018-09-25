@@ -296,7 +296,7 @@ static bool	R_ClipTriangleToLight( const idVec3 &a, const idVec3 &b, const idVec
 }
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
-// greebo: switch off function inlining for this file in VC++ 2013 release builds
+// greebo: switch off function inlining for this file in VC++ >= 2013 release builds
 // Function inlining seems to cause lighting bugs (triangles are drawn very dark or black)
 #pragma optimize("t", off)
 #endif
@@ -330,7 +330,7 @@ static srfTriangles_t *R_CreateLightTris( const idRenderEntityLocal *ent,
 	indexes = NULL;
 
 	// it is debatable if non-shadowing lights should light back faces. we aren't at the moment
-	includeBackFaces = r_lightAllBackFaces.GetBool() || r_shadows.GetInteger() == 2 ||  // duzenko: need the back faces to work around shadowmap acne
+	includeBackFaces = r_lightAllBackFaces.GetBool() || r_shadows.GetInteger() == 2 ||  // duzenko: need the back faces for SS
 										light->lightShader->LightEffectsBackSides() || 
 										shader->ReceivesLightingOnBackSides() || 
 										ent->parms.noSelfShadow || ent->parms.noShadow;
@@ -953,7 +953,7 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 		}
 
 		// generate a lighted surface and add it
-		if ( shader->ReceivesLighting() || r_shadows.GetInteger() == 2 ) {
+		if ( shader->ReceivesLighting() || ( r_shadows.GetInteger() == 2 && shader->SurfaceCastsShadow() ) ) {
 			if ( tri->ambientViewCount == tr.viewCount ) {
 				sint->lightTris = R_CreateLightTris( entityDef, tri, lightDef, shader, sint->cullInfo );
 			} else {

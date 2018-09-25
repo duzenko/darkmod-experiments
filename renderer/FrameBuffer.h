@@ -36,11 +36,12 @@ extern idCVar r_fboSeparateStencil;
 extern idCVar r_fboResolution;
 extern idCVar r_shadowMapSize;
 
-extern int ShadowMipMap;
+extern uint ShadowFboIndex;
 
 void FB_Clear();
 void FB_CopyColorBuffer();
 void FB_CopyDepthBuffer();
+void FB_ApplyScissor( int x, int y, int w, int h );
 void FB_CopyRender( const copyRenderCommand_t &cmd );
 void FB_TogglePrimary( bool on );
 void FB_ToggleShadow( bool on, bool clear = false );
@@ -48,4 +49,4 @@ void FB_BindShadowTexture();
 void FB_SelectPrimary();
 void FB_SelectPostProcess();
 void FB_ResolveMultisampling( GLbitfield mask = GL_COLOR_BUFFER_BIT, GLenum filter = GL_NEAREST );
-void FB_ApplyScissor();
+void FB_ResolveShadowAA();

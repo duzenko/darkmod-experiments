@@ -28,6 +28,8 @@
 
 #define CHECK_BOUNDS_EPSILON			1.0f
 
+idCVar r_maxShadowMapLight( "r_maxShadowMapLight", "1000", CVAR_ARCHIVE | CVAR_RENDERER, "lights bigger than this will be force-sent to stencil" );
+
 /*
 ===========================================================================================
 
@@ -339,6 +341,7 @@ viewLight_t *R_SetLightDefViewLight( idRenderLightLocal *light ) {
 	vLight->lightShader = light->lightShader;
 	vLight->shaderRegisters = NULL;		// allocated and evaluated in R_AddLightSurfaces
 	vLight->noFogBoundary = light->parms.noFogBoundary; // #3664
+	vLight->tooBigForShadowMaps = light->parms.lightRadius.Length() > r_maxShadowMapLight.GetFloat();
 
 	// link the view light
 	vLight->next = tr.viewDef->viewLights;
@@ -481,6 +484,17 @@ void R_LinkLightSurf( drawSurf_t **link, const srfTriangles_t *tri, const viewEn
 	if ( space->entityDef && space->entityDef->parms.noShadow ) {
 		drawSurf->dsFlags |= DSF_SHADOW_MAP_IGNORE;
 	}
+	
+	static idCVar r_skipDynamicShadows( "r_skipDynamicShadows", "0", CVAR_ARCHIVE | CVAR_BOOL | CVAR_RENDERER, "" );
+	if ( r_skipDynamicShadows.GetBool() )
+		for ( auto ent = space; ent; ent = ent->next ) {
+			//&& !space->entityDef->parms.hModel->IsStaticWorldModel() 
+			//	&& space->entityDef->lastModifiedFrameNum == tr.viewCount 
+			if ( ent->entityDef && ent->entityDef->parms.hModel && ent->entityDef->parms.hModel->IsDynamicModel() ) {
+				drawSurf->dsFlags |= DSF_SHADOW_MAP_IGNORE;
+			}
+		}
+
 	drawSurf->particle_radius = 0.0f; // #3878
 
 	if ( viewInsideShadow ) {
@@ -1218,10 +1232,15 @@ R_CalcEntityScissorRectangle
 ==================
 */
 idScreenRect R_CalcEntityScissorRectangle( viewEntity_t *vEntity ) {
-	idBounds bounds;
 	idRenderEntityLocal *def = vEntity->entityDef;
+	auto bounds = def->referenceBounds;
 
-	tr.viewDef->viewFrustum.ProjectionBounds( idBox( def->referenceBounds, def->parms.origin, def->parms.axis ), bounds );
+	// duzenko: the dynamic model does not always fit the reference bounds
+	idRenderModel *model = R_EntityDefDynamicModel( def );
+	if ( model ) 
+		bounds = model->Bounds( &def->parms );
+
+	tr.viewDef->viewFrustum.ProjectionBounds( idBox( bounds, def->parms.origin, def->parms.axis ), bounds );
 
 	return R_ScreenRectFromViewFrustumBounds( bounds );
 }
@@ -1251,11 +1270,11 @@ void R_AddModelSurfaces( void ) {
 	for ( vEntity = tr.viewDef->viewEntitys; vEntity; vEntity = vEntity->next ) {
 
 		idRenderEntityLocal &def = *vEntity->entityDef;
-		if ( r_skipModels.GetInteger() == 1 && def.dynamicModel ) { // debug filters
+		if ( (r_skipModels.GetInteger() == 1 || tr.viewDef->areaNum < 0) && (def.dynamicModel || def.cachedDynamicModel) ) { // debug filters
 			continue;
 		}
 
-		if ( r_skipModels.GetInteger() == 2 && !def.dynamicModel ) {
+		if ( r_skipModels.GetInteger() == 2 && !(def.dynamicModel || def.cachedDynamicModel) ) {
 			continue;
 		}
 
@@ -1409,32 +1428,8 @@ void R_RemoveUnecessaryViewLights( void ) {
 			vLight->scissorRect.Intersect( surfRect );
 		}
 	}
-
-	if (r_useAnonreclaimer.GetBool()) {
-		// sort the viewLights list so the largest lights come first, which will reduce
-		// the chance of GPU pipeline bubbles
-		struct sortLight_t {
-			viewLight_t* 	vLight;
-			int				screenArea;
-			static int sort(const void* a, const void* b) {
-				return ((sortLight_t*)a)->screenArea - ((sortLight_t*)b)->screenArea;
-			}
-		};
-		sortLight_t* sortLights = (sortLight_t*)_alloca(sizeof(sortLight_t)* numViewLights);
-		int	numSortLightsFilled = 0;
-		for (viewLight_t* vLight = tr.viewDef->viewLights; vLight != NULL; vLight = vLight->next) {
-			sortLights[numSortLightsFilled].vLight = vLight;
-			sortLights[numSortLightsFilled].screenArea = vLight->scissorRect.GetArea();
-			numSortLightsFilled++;
-		}
-		qsort(sortLights, numSortLightsFilled, sizeof(sortLights[0]), sortLight_t::sort);
-
-		// rebuild the linked list in order
-		tr.viewDef->viewLights = NULL;
-		for (int i = 0; i < numSortLightsFilled; i++)
-		{
-			sortLights[i].vLight->next = tr.viewDef->viewLights;
-			tr.viewDef->viewLights = sortLights[i].vLight;
-		}
-	}
+	// sort the viewLights list so the largest lights come first, which will reduce the chance of GPU pipeline bubbles
+	LinkedListBubbleSort( &tr.viewDef->viewLights, &viewLight_s::next, [](const viewLight_t &a, const viewLight_t &b) -> bool {
+		return a.scissorRect.GetArea() > b.scissorRect.GetArea();
+	});
 }

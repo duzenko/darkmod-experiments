@@ -50,14 +50,14 @@ public:
 	void		Union( const idScreenRect &rect );
 	bool		Equals( const idScreenRect &rect ) const;
 	bool		IsEmpty() const;
-	int			GetArea() { //anon
+	int			GetArea() const { //anon
 		return GetWidth() * GetHeight();
 	}
 	// duzenko: got tired of all the inline subtractions
-	int GetWidth() {
+	int GetWidth() const {
 		return x2 - x1 + 1;
 	}
-	int GetHeight() {
+	int GetHeight() const {
 		return y2 - y1 + 1;
 	}
 };
@@ -347,8 +347,11 @@ typedef struct viewLight_s {
 	// projection planes that the view is on the negative side of will be set,
 	// allowing us to skip drawing the projected caps of shadows if we can't see the face
 	int						viewSeesShadowPlaneBits;
+	int						shadowMapIndex;
 
 	bool					noFogBoundary;				// Stops fogs drawing and fogging their bounding boxes -- SteveL #3664
+	bool					tooBigForShadowMaps;		// shadow maps annoyingly pixelated
+	bool					singleLightOnly;			// multi-light shader can't handle it
 
 	idVec3					globalLightOrigin;			// global light origin used by backend
 	idPlane					lightProject[4];			// light project used by backend
@@ -668,6 +671,8 @@ typedef struct {
 	int		c_matrixLoads;
 	float	c_overDraw;
 
+	uint	c_interactions, c_interactionSingleLights, c_interactionLights, c_interactionMaxLights, c_interactionMaxShadowMaps;
+
 	int		msec;			// total msec for backend run
 	int		msecLast;		// last msec for backend run
 	char	waitedFor;		// . - backend, F = frontend, S - GPU Sync
@@ -980,6 +985,7 @@ extern idCVar r_showCull;				// report sphere and box culling stats
 extern idCVar r_showInteractions;		// report interaction generation activity
 extern idCVar r_showSurfaces;			// report surface/light/shadow counts
 extern idCVar r_showPrimitives;			// report vertex/index/draw counts
+extern idCVar r_showMultiLight;			// 
 extern idCVar r_showPortals;			// draw portal outlines in color based on passed / not passed
 extern idCVar r_showAlloc;				// report alloc/free counts
 extern idCVar r_showSkel;				// draw the skeleton when model animates
@@ -1341,6 +1347,9 @@ void RB_RenderDrawSurfChainWithFunction( const drawSurf_t *drawSurfs,
 		void ( *triFunc_ )( const drawSurf_t * ) );
 void RB_LoadShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture );
 void RB_GetShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture, float matrix[16] );
+void RB_PrepareStageTexturing( const shaderStage_t *pStage, const drawSurf_t *surf, idDrawVert *ac );
+void RB_FinishStageTexturing( const shaderStage_t *pStage, const drawSurf_t *surf, idDrawVert *ac );
+void RB_CreateMultiDrawInteractions( const drawSurf_t *surf );
 void RB_CreateSingleDrawInteractions( const drawSurf_t *surf );
 
 void RB_DrawView();
@@ -1380,11 +1389,12 @@ DRAW_*
 void	RB_ARB2_DrawInteraction( const drawInteraction_t *din );  // duzenko FIXME ugly extern, Revelator ok ?
 void	RB_ARB2_DrawInteractions( void );
 void	R_ReloadARBPrograms_f( const idCmdArgs &args );
+int		R_FindARBProgram( GLenum target, const char *program );
 
 void    RB_GLSL_DrawInteraction( const drawInteraction_t *din );
 void    RB_GLSL_DrawInteractions( void );
 void	R_ReloadGLSLPrograms_f( const idCmdArgs &args );
-int		R_FindARBProgram( GLenum target, const char *program );
+int		R_FindGLSLProgram( const char *program );
 
 typedef enum {
 	PROG_INVALID,
@@ -1697,7 +1707,6 @@ void RB_ClearDebugLines( int time );
 void RB_AddDebugPolygon( const idVec4 &color, const idWinding &winding, const int lifeTime, const bool depthTest );
 void RB_ClearDebugPolygons( int time );
 void RB_DrawBounds( const idBounds &bounds );
-// revelator: these next two where not changed to follow the functions they represent.
 void RB_ShowLights( void );
 void RB_ShowLightCount( void );
 void RB_PolygonClear( void );

@@ -497,7 +497,7 @@ If one point is clearly clipped by the plane and the
 other point is on the plane, it will be completely removed.
 ===================
 */
-static bool R_ClipLineToLight(	const idVec3 &a, const idVec3 &b, const idPlane frustum[4], 
+static bool R_ClipLineToLight(	const idVec3 &a, const idVec3 &b, const idPlane frustum[6], 
 						   idVec3 &p1, idVec3 &p2 ) {
 	float	*clip;
 	int		j;
@@ -1119,9 +1119,8 @@ srfTriangles_t *R_CreateShadowVolume( const idRenderEntityLocal *ent,
 
 	assert( light != NULL );
 
-	if ( r_shadows.GetInteger() != 1 ) {
+	if ( r_shadows.GetInteger() == 0 || r_shadows.GetInteger() == 2 && light->viewLight && !light->viewLight->tooBigForShadowMaps )
 		return NULL;
-	}
 
 	if ( tri->numSilEdges == 0 || tri->numIndexes == 0 || tri->numVerts == 0 ) {
 		return NULL;

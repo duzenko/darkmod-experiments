@@ -45,7 +45,7 @@ qglDisable( GL_TEXTURE_* )
 ====================================================================
 */
 
-
+const int MAX_SHADOW_MAPS = 3;
 
 typedef enum {
 	IS_UNLOADED,	// no gl texture number
@@ -204,7 +204,7 @@ public:
 	bool		CheckPrecompressedImage( bool fullLoad );
 	void		UploadPrecompressedImage( byte *data, int len );
 	void		ActuallyLoadImage( bool checkForPrecompressed, bool fromBackEnd );
-	void		StartBackgroundImageLoad();
+	//void		StartBackgroundImageLoad();
 	int			BitsForInternalFormat( int internalFormat ) const;
 	//void		UploadCompressedNormalMap( int width, int height, const byte *rgba, int mipLevel );
 	GLenum		SelectInternalFormat( const byte **dataPtrs, int numDataPtrs, int width, int height, textureDepth_t minimumDepth ) const;
@@ -388,7 +388,7 @@ public:
 
 	idImage *			currentDepthImage;			// #3877. Allow shaders to access scene depth
 	idImage *			shadowDepthFbo;
-	idImage *			shadowCubeMap;
+	idImage *			shadowCubeMap[MAX_SHADOW_MAPS];
 	idImage *			currentStencilFbo; // these two are only used on Intel since no one else support separate stencil
 	idImage *			shadowStencilFbo;
 	idImage *			bloomCookedMath;
@@ -419,12 +419,6 @@ public:
 };
 
 extern idImageManager	*globalImages;		// pointer to global list for the rest of the system
-
-// newer use casting in this macro it fucks up with differing types !!!
-#define IMAGE_ROUND_POWER2(in, out) {		\
-	for (out = 1; out < in; out <<= 1)		\
-	;										\
-}
 
 /*
 ====================================================================

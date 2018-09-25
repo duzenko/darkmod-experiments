@@ -408,4 +408,19 @@ void idLinkList<type>::SetOwner( type *object ) {
 	owner = object;
 }
 
+//note: use LinkedListBubbleSort as typesafe wrapper of this code
+void LinkedListBubbleSortRaw(void **ppFirst, ptrdiff_t nextOffset, const void *context, bool (*isLess)(const void *, const void *, const void *));
+
+template<class Node, class Comparator>
+void LinkedListBubbleSort( Node **ppStart, Node* Node::*pmbNext, const Comparator &isLess ) {
+	auto rawIsLess = [](const void *ctx, const void *a, const void *b) -> bool {
+		const Node &va = *(const Node *)a;
+		const Node &vb = *(const Node *)b;
+		const Comparator &isLess = *(const Comparator *)ctx;
+		return isLess(va, vb);
+	};
+	ptrdiff_t offset = (ptrdiff_t) &(((Node*)NULL)->*pmbNext);
+	LinkedListBubbleSortRaw((void**)ppStart, offset, &isLess, rawIsLess);
+}
+
 #endif /* !__LINKLIST_H__ */

@@ -425,8 +425,8 @@ void idImage::GenerateImage( const byte *pic, int width, int height,
 	}
 
 	// make sure it is a power of 2
-	IMAGE_ROUND_POWER2( width, scaled_width );
-	IMAGE_ROUND_POWER2( height, scaled_height );
+	scaled_width = idMath::CeilPowerOfTwo(width);
+	scaled_height = idMath::CeilPowerOfTwo(height);
 
 	if ( scaled_width != width || scaled_height != height ) {
 		common->Error( "R_CreateImage: not a power of 2 image" );
@@ -633,11 +633,11 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 			// revert to old behaviour, switches are to specific
 			qglTexImage2D( GL_TEXTURE_2D, 0, ( r_fboDepthBits.GetInteger() == 32 ) ? GL_DEPTH32F_STENCIL8 : GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, 
 											 ( r_fboDepthBits.GetInteger() == 32 ) ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, nullptr );
-			common->Printf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
+			common->DPrintf( "Generated framebuffer DEPTH_STENCIL attachment: %dx%d\n", width, height );
 			break;
 		case GL_COLOR:
 			qglTexImage2D( GL_TEXTURE_2D, 0, r_fboColorBits.GetInteger() == 15 ? GL_RGB5_A1 : GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr );
-			common->Printf( "Generated framebuffer COLOR attachment: %dx%d\n", width, height );
+			common->DPrintf( "Generated framebuffer COLOR attachment: %dx%d\n", width, height );
 			break;
 		// these two are for Intel separate stencil optimization
 		case GL_DEPTH:
@@ -653,11 +653,11 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 					break;
 			}
 			r_fboDepthBits.ClearModified();
-			common->Printf( "Generated framebuffer DEPTH attachment: %dx%d\n", width, height );
+			common->DPrintf( "Generated framebuffer DEPTH attachment: %dx%d\n", width, height );
 			break;
 		case GL_STENCIL:
 			qglTexImage2D( GL_TEXTURE_2D, 0, GL_STENCIL_INDEX8, width, height, 0, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, nullptr );
-			common->Printf( "Generated framebuffer STENCIL attachment: %dx%d\n", width, height );
+			common->DPrintf( "Generated framebuffer STENCIL attachment: %dx%d\n", width, height );
 			break;
 		default:
 			common->Error( "Unsupported format in GenerateAttachment\n" );
@@ -1473,12 +1473,11 @@ void idImage::CopyFramebuffer( int x, int y, int imageWidth, int imageHeight, bo
 		uploadHeight = imageHeight;
 		// bim bada bum, looks away...
 		qglCopyTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, x, y, imageWidth, imageHeight, 0 );
-	}   //REVELATOR: dont need an else condition here.
-
-	// otherwise, just subimage upload it so that drivers can tell we are going to be changing
-	// it and don't try and do a texture compression or some other silliness
-	qglCopyTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, x, y, imageWidth, imageHeight );
-
+	} else {
+		// otherwise, just subimage upload it so that drivers can tell we are going to be changing
+		// it and don't try and do a texture compression or some other silliness
+		qglCopyTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, x, y, imageWidth, imageHeight );
+	}
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 
@@ -1515,7 +1514,7 @@ void idImage::CopyDepthBuffer( int x, int y, int imageWidth, int imageHeight, bo
 		// It resizes the texture to a power of two that can hold the screen,
 		// and then subsequent captures to the texture put the depth component into the RGB channels
 		// this part sets depthbits to the max value the gfx card supports, it could also be used for FBO.
-		switch ( glConfig.depthBits ) {
+		switch ( r_fboDepthBits.GetInteger() ) {
 			case 16:
 				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16_ARB, imageWidth, imageHeight, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr );
 				break;

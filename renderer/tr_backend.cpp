@@ -153,18 +153,17 @@ void GL_Cull( const int cullType ) {
 ====================
 GL_Scissor
 
-Utility function, 
+Utility function,
 if you absolutly must
 check for anything out of the ordinary,
 then do it here.
 ====================
 */
 void GL_Scissor( int x /* left*/, int y /* bottom */, int w, int h ) {
-	// values will be forced to non negative
-	x = abs( x );
-	y = abs( y );
-	w = abs( w );
-	h = abs( h );
+	// x and y can be negative, but neither width nor height must be.
+	if ( w <= 0 || h <= 0 ) {
+		return;
+	}
 	qglScissor( x, y, w, h );
 }
 
@@ -172,18 +171,17 @@ void GL_Scissor( int x /* left*/, int y /* bottom */, int w, int h ) {
 ====================
 GL_Viewport
 
-Utility function, 
+Utility function,
 if you absolutly must
 check for anything out of the ordinary,
 then do it here.
 ====================
 */
 void GL_Viewport( int x /* left */, int y /* bottom */, int w, int h ) {
-	// values will be forced to non negative
-	x = abs( x );
-	y = abs( y );
-	w = abs( w );
-	h = abs( h );
+	// x and y can be negative, but neither width nor height must be.
+	if ( w <= 0 || h <= 0 ) {
+		return;
+	}
 	qglViewport( x, y, w, h );
 }
 
@@ -568,6 +566,45 @@ static void	RB_SetBuffer( const void *data ) {
 
 /*
 =============
+RB_DumpFramebuffer
+
+Bloom related debug tool
+=============
+*/
+void RB_DumpFramebuffer( const char *fileName ) {
+	renderCrop_t r;
+
+	qglGetIntegerv( GL_VIEWPORT, &r.x );
+
+	if (!r_useFbo.GetBool()) {
+		qglReadBuffer( GL_BACK );
+	}
+
+	// calculate pitch of buffer that will be returned by qglReadPixels()
+	int alignment;
+	qglGetIntegerv( GL_PACK_ALIGNMENT, &alignment );
+
+	int pitch = r.width * 4 + alignment - 1;
+	pitch = pitch - pitch % alignment;
+
+	byte *data = (byte *)R_StaticAlloc( pitch * r.height );
+
+	// GL_RGBA/GL_UNSIGNED_BYTE seems to be the safest option
+	qglReadPixels( r.x, r.y, r.width, r.height, GL_RGBA, GL_UNSIGNED_BYTE, data );
+
+	byte *data2 = (byte *)R_StaticAlloc( r.width * r.height * 4 );
+
+	for ( int y = 0; y < r.height; y++ ) {
+		memcpy( data2 + y * r.width * 4, data + y * pitch, r.width * 4 );
+	}
+	R_WriteTGA( fileName, data2, r.width, r.height, true );
+
+	R_StaticFree( data );
+	R_StaticFree( data2 );
+}
+
+/*
+=============
 RB_CheckTools
 
 Revelator: Check for any rendertool and mark it
@@ -590,7 +627,7 @@ static bool RB_CheckTools( int width, int height ) {
 	     r_showTexturePolarity.GetBool() ||
 	     r_showTangentSpace.GetBool() ||
 	     r_showDepth.GetBool() ) {
-		 return true;
+		return true;
 	}
 	return false;
 }
@@ -620,7 +657,7 @@ void RB_DrawFullScreenQuad( void ) {
 RB_Bloom
 
 Originally in front renderer (idPlayerView::dnPostProcessManager)
-Moved to backend: Revelator 
+Moved to backend: Revelator
 =============
 */
 void RB_Bloom( void ) {
@@ -820,8 +857,7 @@ void RB_CopyRender( const void *data ) {
 ====================
 RB_ExecuteBackEndCommands
 
-This function will be called syncronously if running without
-smp extensions, or asyncronously by another thread.
+Always runs on the main thread
 ====================
 */
 void RB_ExecuteBackEndCommands( const emptyCommand_t *cmds ) {
