@@ -93,7 +93,7 @@ struct multiLightInteractionProgram_t : basicInteractionProgram_t {
 	virtual void Draw( const drawInteraction_t *din );
 };
 
-struct volumetricLight_t : lightProgram_t {
+struct volumetricLight_t: shaderProgram_t {
 	virtual void Draw();
 };
 
@@ -1261,13 +1261,34 @@ void volumetricLight_t::Draw() {
 		return;
 	backEnd.depthFunc = GLS_DEPTHFUNC_ALWAYS;
 	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | backEnd.depthFunc );
-	extern void RB_SimpleWorldSetup( void );
-	RB_SimpleWorldSetup();
-	//globalImages->currentDepthImage->Bind();
-	GL_Cull( CT_TWO_SIDED );
+	GL_Cull( CT_BACK_SIDED );
+
+	GL_SelectTexture( 0 );
+	backEnd.vLight->lightShader->GetStage( 0 )->texture.image->Bind();
+	GL_SelectTexture( 1 );
+	backEnd.vLight->falloffImage->Bind();
+
 	Use();
-	qglUniform3fv( lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+
+	idMat4 modelView, proj;
+	memcpy( modelView.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( modelView ) );
+	memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
+	auto MVP = modelView * proj;
+	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
+
+	qglUniform3fv( 1, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
+	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
+
 	auto tris = backEnd.vLight->frustumTris;
 	RB_DrawElementsImmediate( tris );
+
 	qglUseProgram( 0 );
+
+	GL_SelectTexture( 1 );
+	globalImages->BindNull();
+	GL_SelectTexture( 0 );
+	globalImages->BindNull();
+
+	GL_Cull( CT_FRONT_SIDED );
 }

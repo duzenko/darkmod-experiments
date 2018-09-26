@@ -581,7 +581,6 @@ void RB_STD_T_RenderShaderPasses_GLSL( idDrawVert *ac, const shaderStage_t *pSta
 	GL_State( pStage->drawStateBits );
 	qglUseProgram( pStage->newStage->fragmentProgram );
 	
-	
 	idMat4 modelView, proj;
 	memcpy( modelView.ToFloatPtr(), surf->space->modelViewMatrix, sizeof( modelView ) );
 	memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
