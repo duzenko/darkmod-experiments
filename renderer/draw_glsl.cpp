@@ -1259,14 +1259,14 @@ void shadowMapProgram_t::AfterLoad() {
 void volumetricLight_t::Draw() {
 	if ( backEnd.vLight->lightShader->IsAmbientLight() )
 		return;
-	backEnd.depthFunc = GLS_DEPTHFUNC_ALWAYS;
-	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | backEnd.depthFunc );
-	GL_Cull( CT_BACK_SIDED );
+	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_ALWAYS );
 
 	GL_SelectTexture( 0 );
 	backEnd.vLight->lightShader->GetStage( 0 )->texture.image->Bind();
 	GL_SelectTexture( 1 );
 	backEnd.vLight->falloffImage->Bind();
+	GL_SelectTexture( 2 );
+	globalImages->currentDepthImage->Bind();
 
 	Use();
 
@@ -1280,15 +1280,27 @@ void volumetricLight_t::Draw() {
 	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
 
+	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;
 	RB_DrawElementsImmediate( tris );
-
+	
+	GL_Cull( CT_FRONT_SIDED );
+	/*for ( auto surf = backEnd.vLight->globalInteractions; surf; surf = surf->nextOnLight ) {
+		idMat4 modelView, proj;
+		memcpy( modelView.ToFloatPtr(), surf->space->modelViewMatrix, sizeof( modelView ) );
+		memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
+		auto MVP = modelView * proj;
+		qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
+		RB_DrawElementsImmediate( surf->frontendGeo );
+	}*/
 	qglUseProgram( 0 );
 
+	GL_SelectTexture( 2 );
+	globalImages->BindNull();
 	GL_SelectTexture( 1 );
 	globalImages->BindNull();
 	GL_SelectTexture( 0 );
 	globalImages->BindNull();
 
-	GL_Cull( CT_FRONT_SIDED );
+	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_EQUAL );
 }
