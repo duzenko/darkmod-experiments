@@ -35,7 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "Profiling.h"
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
-#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
+//#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
 #endif
 
 struct shadowMapProgram_t : basicDepthProgram_t {
@@ -93,10 +93,6 @@ struct multiLightInteractionProgram_t : basicInteractionProgram_t {
 	virtual void Draw( const drawInteraction_t *din );
 };
 
-struct volumetricLight_t : lightProgram_t {
-	virtual void Draw();
-};
-
 shaderProgram_t cubeMapShader;
 oldStageProgram_t oldStageShader;
 depthProgram_t depthShader;
@@ -107,7 +103,6 @@ blendProgram_t blendShader;
 pointInteractionProgram_t pointInteractionShader;
 ambientInteractionProgram_t ambientInteractionShader;
 multiLightInteractionProgram_t multiLightShader;
-volumetricLight_t volumetricLight;
 
 interactionProgram_t *currrentInteractionShader; // dynamic, either pointInteractionShader or ambientInteractionShader
 
@@ -438,12 +433,18 @@ void RB_GLSL_DrawInteraction_MultiLight( const drawInteraction_t *din ) {
 
 void RB_GLSL_DrawInteractions_SingleLight() {
 	// do fogging later
-	if ( backEnd.vLight->lightShader->IsFogLight() || backEnd.vLight->lightShader->IsBlendLight() )
+	if ( backEnd.vLight->lightShader->IsFogLight() ) {
 		return;
+	}
+
+	if ( backEnd.vLight->lightShader->IsBlendLight() ) {
+		return;
+	}
 
 	// if there are no interactions, get out!
-	if ( !backEnd.vLight->localInteractions && !backEnd.vLight->globalInteractions && !backEnd.vLight->translucentInteractions )
+	if ( !backEnd.vLight->localInteractions && !backEnd.vLight->globalInteractions && !backEnd.vLight->translucentInteractions ) {
 		return;
+	}
 
 	if ( r_shadows.GetInteger() == 2 && !backEnd.vLight->tooBigForShadowMaps ) {
 		RB_GLSL_DrawLight_ShadowMap();
@@ -458,9 +459,6 @@ void RB_GLSL_DrawInteractions_SingleLight() {
 	qglStencilFunc( GL_ALWAYS, 128, 255 );
 	backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
-	static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
-	if( r_testVolumetric.GetBool() )
-		volumetricLight.Draw();
 	backEnd.depthFunc = GLS_DEPTHFUNC_EQUAL;
 }
 
@@ -592,7 +590,6 @@ bool R_ReloadGLSLPrograms() {
 	ok &= fogShader.Load( "fog" );
 	ok &= blendShader.Load( "blend" );
 	ok &= cubeMapShader.Load( "cubeMap" );
-	ok &= volumetricLight.Load( "volumetric" );
 	for ( auto it = dynamicShaders.begin(); it != dynamicShaders.end(); ++it ) {
 		auto& fileName = it->first;
 		auto& shader = it->second;
@@ -1254,20 +1251,4 @@ void shadowMapProgram_t::AfterLoad() {
 	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
 	modelMatrix = qglGetUniformLocation( program, "u_modelMatrix" );
 	acceptsTranslucent = true;
-}
-
-void volumetricLight_t::Draw() {
-	if ( backEnd.vLight->lightShader->IsAmbientLight() )
-		return;
-	backEnd.depthFunc = GLS_DEPTHFUNC_ALWAYS;
-	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | backEnd.depthFunc );
-	extern void RB_SimpleWorldSetup( void );
-	RB_SimpleWorldSetup();
-	//globalImages->currentDepthImage->Bind();
-	GL_Cull( CT_TWO_SIDED );
-	Use();
-	qglUniform3fv( lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
-	auto tris = backEnd.vLight->frustumTris;
-	RB_DrawElementsImmediate( tris );
-	qglUseProgram( 0 );
 }
