@@ -20,48 +20,18 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "glsl.h"
 
 // all false at start
-static bool primaryOn = false, shadowOn = false;
-static bool depthCopiedThisView = false;
-static GLuint fboPrimary, fboResolve, fboPostProcess, fboShadowStencil, pbo;
-static std::vector<GLuint> fboShadowMaps;
-static GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
-static GLuint postProcessWidth, postProcessHeight;
+bool primaryOn = false, shadowOn = false;
+bool depthCopiedThisView = false;
+GLuint fboPrimary, fboResolve, fboPostProcess, fboShadowStencil, pbo;
+std::vector<GLuint> fboShadowMaps;
+GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
+GLuint postProcessWidth, postProcessHeight;
 uint ShadowFboIndex;
-static float shadowResolution;
+float shadowResolution;
 
-void FB_Resize( GLuint *width, GLuint *height, GLfloat scale ) {
-
-	// make sure we can contain these resolutions
-	if( *width > glConfig.maxRenderbufferSize )	{
-		common->Error( "FB_Resize: bad width %i", width );
-	}
-
-	if( *height > glConfig.maxRenderbufferSize ) {
-		common->Error( "FB_Resize: bad height %i", height );
-	}
-
-	// update screen resolution if mode changes
-    if ( r_mode.IsModified() ) {
-        int w, h;
-        if ( R_GetModeInfo( &w, &h, r_mode.GetInteger() ) ) {
-            glConfig.vidWidth = w;
-            glConfig.vidHeight = h;
-        }
-        r_mode.ClearModified();
-    }
-
-	// copy of screen resolution
-    GLuint renderWidth = *width;
-    GLuint renderHeight = *height;
-
-	// will be 1 if not scaling
-	renderWidth *= scale;
-	renderHeight *= scale;
-
-	// uploading possibly scaled resolution
-	*width = renderWidth;
-	*height = renderHeight;
-}
+#if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
+#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
+#endif
 
 void FB_CreatePrimaryResolve( GLuint width, GLuint height, int msaa ) {
 	if ( !fboPrimary ) {
@@ -215,7 +185,7 @@ void FB_CopyRender( const copyRenderCommand_t &cmd ) {
 			}
 			qglBindBufferARB( GL_PIXEL_PACK_BUFFER, pbo );
 
-			byte *ptr = static_cast< byte * >( qglMapBufferARB( GL_PIXEL_PACK_BUFFER, GL_READ_ONLY ) );
+			byte *ptr = reinterpret_cast< byte * >( qglMapBufferARB( GL_PIXEL_PACK_BUFFER, GL_READ_ONLY ) );
 
 			// #4395 moved to initializer
 			if ( ptr ) {
@@ -260,10 +230,7 @@ void CheckCreatePrimary() {
 	GL_CheckErrors();
 
 	// virtual resolution as a modern alternative for actual desktop resolution affecting all other windows
-	GLuint curWidth = glConfig.vidWidth, curHeight = glConfig.vidHeight;
-
-	// resize for virtual resolution
-	FB_Resize( &curWidth, &curHeight, r_fboResolution.GetFloat() );
+	GLuint curWidth = r_fboResolution.GetFloat() * glConfig.vidWidth, curHeight = r_fboResolution.GetFloat() * glConfig.vidHeight;
 
 	if ( r_fboSeparateStencil.IsModified() || ( curWidth != globalImages->currentRenderImage->uploadWidth ) ) {
 		r_fboSeparateStencil.ClearModified();
@@ -278,10 +245,8 @@ void CheckCreatePrimary() {
 	// intel optimization
 	if ( r_fboSeparateStencil.GetBool() ) {
 		globalImages->currentDepthImage->GenerateAttachment( curWidth, curHeight, GL_DEPTH );
-		// currentStencilFbo will be initialized in CheckCreateShadow with possibly different resolution
-		if ( !r_softShadowsQuality.GetBool() ) {
+		if ( !r_softShadowsQuality.GetBool() ) // currentStencilFbo will be initialized in CheckCreateShadow with possibly different resolution
 			globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
-		}
 	} else { // AMD/nVidia fast enough already, separate depth/stencil not supported
 		globalImages->currentDepthImage->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 	}
@@ -333,17 +298,17 @@ void CheckCreateShadow() {
 	// (re-)attach textures to FBO
 	GLuint curWidth = glConfig.vidWidth;
 	GLuint curHeight = glConfig.vidHeight;
-	FB_Resize( &curWidth, &curHeight, 1.0f );
 	if ( primaryOn ) {
 		float shadowRes = 1.0f;
 		if ( r_softShadowsQuality.GetInteger() < 0 ) {
 			shadowRes = r_softShadowsQuality.GetFloat() / -100.0f;
 		}
+
 		curWidth *= r_fboResolution.GetFloat() * shadowRes;
 		curHeight *= r_fboResolution.GetFloat() * shadowRes;
 	}
-	bool depthBitsModified = r_fboDepthBits.IsModified();
 
+	bool depthBitsModified = r_fboDepthBits.IsModified();
 	// reset textures
 	if ( r_fboSeparateStencil.GetBool() ) {
 		// currentDepthImage is initialized there
@@ -374,15 +339,16 @@ void CheckCreateShadow() {
 				break;
 			}
 		}
+		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE );
+		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE );
 
-		// aha this is for PCF ( fixed now ) jaggies are minimal even with low softshadow quality.
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE );				// added depth texture mode
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE );	//GL_COMPARE_REF_TO_TEXTURE
+		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE );
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
 
 		// 3.2 required for geometry shader anyway but still don't want crashes
@@ -442,12 +408,8 @@ void FB_SelectPostProcess() {
 	if ( !primaryOn ) {
 		return;
 	}
-
-	// resize for virtual resolution
-	GLuint curWidth = glConfig.vidWidth;
-	GLuint curHeight = glConfig.vidHeight;
-
-	FB_Resize( &curWidth, &curHeight, r_fboResolution.GetFloat() );
+	GLuint curWidth = glConfig.vidWidth * r_fboResolution.GetFloat();
+	GLuint curHeight = glConfig.vidHeight * r_fboResolution.GetFloat();
 
 	if ( !fboPostProcess || curWidth != postProcessWidth || curHeight != postProcessHeight ) {
 		FB_CreatePostProcess( curWidth, curHeight );
@@ -480,14 +442,17 @@ void FB_BindShadowTexture() {
 	GL_CheckErrors();
 }
 
-// now takes the same values as GL_Scissor avoids confusion.
-void FB_ApplyScissor( int x, int y, int w, int h ) {
+// accidentally deleted
+void FB_ApplyScissor() {
 	if ( r_useScissor.GetBool() ) {
-		float resFactor = 1.0F;
+		float resFactor = 1.0f;
 		if ( shadowOn ) {
 			resFactor *= shadowResolution;
 		}
-		GL_Scissor( x * resFactor, y * resFactor, w * resFactor, h * resFactor );
+		GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1 * resFactor,
+		            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1 * resFactor,
+		            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1 * resFactor,
+		            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 * resFactor );
 	}
 }
 
@@ -500,6 +465,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 				FB_ResolveMultisampling( GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
 				qglBindFramebuffer( GL_READ_FRAMEBUFFER, fboResolve );
 			}
+
 			qglDisable( GL_SCISSOR_TEST );
 			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, fboShadowStencil );
 			qglBlitFramebuffer( 0, 0, globalImages->currentRenderImage->uploadWidth, globalImages->currentRenderImage->uploadHeight,
@@ -512,7 +478,6 @@ void FB_ToggleShadow( bool on, bool clear ) {
 		GL_CheckErrors();
 	}
 	qglBindFramebuffer( GL_FRAMEBUFFER, on ? (r_shadows.GetInteger() == 1 ? fboShadowStencil : fboShadowMaps[ShadowFboIndex]) : primaryOn ? fboPrimary : 0 );
-
 	if( on && r_shadows.GetInteger() == 1 && r_multiSamples.GetInteger() > 1 && r_softShadowsQuality.GetInteger() >= 0 ) {
 		// with MSAA on, we need to render against the multisampled primary buffer, otherwise stencil is drawn
 		// against a lower-quality depth map which may cause render errors with shadows
@@ -526,20 +491,14 @@ void FB_ToggleShadow( bool on, bool clear ) {
 			if ( on ) {
 				shadowResolution = r_softShadowsQuality.GetFloat() / -100.0f;
 				GL_Viewport( 0, 0, glConfig.vidWidth * shadowResolution * r_fboResolution.GetFloat(), glConfig.vidHeight * shadowResolution * r_fboResolution.GetFloat() );
-				FB_ApplyScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
-								 backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
-								 backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
-								 backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
+				FB_ApplyScissor();
 			} else {
 				if( primaryOn ) {
 					GL_Viewport( 0, 0, glConfig.vidWidth * r_fboResolution.GetFloat(), glConfig.vidHeight * r_fboResolution.GetFloat() );
 				} else {
 					GL_Viewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 				}
-				FB_ApplyScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
-								 backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
-								 backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
-								 backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
+				FB_ApplyScissor();
 			}
 		} else {
 			shadowResolution = 1.0f;
@@ -563,7 +522,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 				mapSize >>= 1;
 			}
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );*/
-			GL_Viewport( 0, 0, mapSize, mapSize );
+			qglViewport( 0, 0, mapSize, mapSize );
 
 			if ( r_useScissor.GetBool() ) {
 				GL_Scissor( 0, 0, mapSize, mapSize );
@@ -635,14 +594,8 @@ void LeavePrimary() {
 	}
 	GL_CheckErrors();
 
-	// resize for virtual resolution
-	GLuint cropWidth = glConfig.vidWidth;
-	GLuint cropHeight = glConfig.vidHeight;
-
-	FB_Resize( &cropWidth, &cropHeight, 1.0F );
-
-    GL_Viewport( 0, 0, cropWidth, cropHeight );
-    GL_Scissor( 0, 0, cropWidth, cropHeight );
+	GL_Viewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	GL_Scissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 
 	if ( r_multiSamples.GetInteger() > 1 ) {
 		FB_ResolveMultisampling( GL_COLOR_BUFFER_BIT );

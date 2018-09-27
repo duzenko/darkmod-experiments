@@ -1242,6 +1242,7 @@ idScreenRect R_CalcEntityScissorRectangle( viewEntity_t *vEntity ) {
 
 	tr.viewDef->viewFrustum.ProjectionBounds( idBox( bounds, def->parms.origin, def->parms.axis ), bounds );
 
+
 	return R_ScreenRectFromViewFrustumBounds( bounds );
 }
 

@@ -408,8 +408,6 @@ static void R_CheckPortableExtensions( void ) {
 	common->Printf( "Max texture units: %d\n", glConfig.maxTextureUnits );
 	qglGetIntegerv( GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &glConfig.maxTextures );
 	common->Printf( "Max active textures: %d\n", glConfig.maxTextures );
-	qglGetIntegerv( GL_MAX_RENDERBUFFER_SIZE_EXT, &glConfig.maxRenderbufferSize );
-	common->Printf( "Max render buffers: %d\n", glConfig.maxRenderbufferSize );
 
 	if ( glConfig.maxTextures < MAX_MULTITEXTURE_UNITS ) {
 		common->Error( "   Too few!\n" );
@@ -678,7 +676,7 @@ static int	s_numVidModes = ( sizeof( r_vidModes ) / sizeof( r_vidModes[0] ) );
 #if MACOS_X
 bool R_GetModeInfo( int *width, int *height, int mode ) {
 #else
-bool R_GetModeInfo( int *width, int *height, int mode ) {
+static bool R_GetModeInfo( int *width, int *height, int mode ) {
 #endif
 	vidmode_t	*vm;
 
