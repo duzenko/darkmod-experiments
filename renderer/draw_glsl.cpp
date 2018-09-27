@@ -458,9 +458,11 @@ void RB_GLSL_DrawInteractions_SingleLight() {
 	qglStencilFunc( GL_ALWAYS, 128, 255 );
 	backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
-	static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
-	if( r_testVolumetric.GetBool() )
-		volumetricLight.Draw();
+	if ( backEnd.vLight->lightShader->IsVolumetricLight() && backEnd.vLight->lightDef->index == 2 ) {
+		static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
+		if ( r_testVolumetric.GetBool() )
+			volumetricLight.Draw();
+	}
 	backEnd.depthFunc = GLS_DEPTHFUNC_EQUAL;
 }
 
@@ -1276,9 +1278,10 @@ void volumetricLight_t::Draw() {
 	auto MVP = modelView * proj;
 	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
 
-	qglUniform3fv( 1, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	//qglUniform3fv( 1, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
 	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
+	qglUniform4fv( 4, 6, backEnd.vLight->lightDef->frustum[0].ToFloatPtr() );
 
 	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;

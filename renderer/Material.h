@@ -464,6 +464,8 @@ public:
 	
 						// nbohr1more #3881: cubemap based lighting
 	bool				IsCubicLight() const { return cubicLight; }
+	
+	bool				IsVolumetricLight() const { return volumetricLight; }
 
 						// implicitly no-shadows lights (ambients, fogs, etc) will never cast shadows
 						// but individual light entities can also override this value
@@ -663,6 +665,7 @@ private:
 	bool				blendLight;
 	bool				ambientLight;
 	bool				cubicLight;          // nbohr1more #3881: cubemap based lighting
+	bool				volumetricLight;
 	bool				unsmoothedTangents;
 	bool				hasSubview;			// mirror, remote render, etc
 	bool				allowOverlays;

@@ -1945,6 +1945,10 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			cubicLight = true;
 			continue;
 		}
+		else if ( !token.Icmp( "volumetric" ) ) {
+			volumetricLight = true;
+			continue;
+		}
 		// mirror
 		else if ( !token.Icmp( "mirror" ) ) {
 			sort = SS_SUBVIEW;
