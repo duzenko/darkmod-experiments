@@ -90,6 +90,7 @@ void idMaterial::CommonInit() {
 	blendLight = false;
 	ambientLight = false;
 	cubicLight = false;  //nbohr1more #3881: cubemap based lighting
+	volumetricLight = false;
 	noFog = false;
 	hasSubview = false;
 	allowOverlays = true;

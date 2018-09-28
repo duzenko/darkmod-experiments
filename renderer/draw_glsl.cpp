@@ -458,7 +458,7 @@ void RB_GLSL_DrawInteractions_SingleLight() {
 	qglStencilFunc( GL_ALWAYS, 128, 255 );
 	backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
-	if ( backEnd.vLight->lightShader->IsVolumetricLight() && backEnd.vLight->lightDef->index == 2 ) {
+	if ( backEnd.vLight->lightShader->IsVolumetricLight() ) {
 		static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
 		if ( r_testVolumetric.GetBool() )
 			volumetricLight.Draw();
