@@ -458,7 +458,7 @@ void RB_GLSL_DrawInteractions_SingleLight() {
 	qglStencilFunc( GL_ALWAYS, 128, 255 );
 	backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
-	if ( backEnd.vLight->lightShader->IsVolumetricLight() ) {
+	if ( backEnd.vLight->lightShader->GetVolumetric() > 0 ) {
 		static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
 		if ( r_testVolumetric.GetBool() )
 			volumetricLight.Draw();
@@ -1272,13 +1272,26 @@ void volumetricLight_t::Draw() {
 
 	Use();
 
+	// MVP matrix uniform
 	idMat4 modelView, proj;
 	memcpy( modelView.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( modelView ) );
 	memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
 	auto MVP = modelView * proj;
 	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
 
-	//qglUniform3fv( 1, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	// light color uniform
+	auto vLight = backEnd.vLight;
+	const float			*lightRegs = vLight->shaderRegisters;
+	const idMaterial	*lightShader = vLight->lightShader;
+	const shaderStage_t	*lightStage = lightShader->GetStage( 0 );
+	float lightColor[4] = {
+		lightColor[0] = backEnd.lightScale * vLight->lightShader->GetVolumetric() * lightRegs[lightStage->color.registers[0]],
+		lightColor[1] = backEnd.lightScale * vLight->lightShader->GetVolumetric() * lightRegs[lightStage->color.registers[1]],
+		lightColor[2] = backEnd.lightScale * vLight->lightShader->GetVolumetric() * lightRegs[lightStage->color.registers[2]],
+		lightColor[3] = lightRegs[lightStage->color.registers[3]]
+	};
+	qglUniform4fv( 1, 1, lightColor );
+
 	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
 	qglUniform4fv( 4, 6, backEnd.vLight->lightDef->frustum[0].ToFloatPtr() );
@@ -1288,14 +1301,6 @@ void volumetricLight_t::Draw() {
 	RB_DrawElementsImmediate( tris );
 	
 	GL_Cull( CT_FRONT_SIDED );
-	/*for ( auto surf = backEnd.vLight->globalInteractions; surf; surf = surf->nextOnLight ) {
-		idMat4 modelView, proj;
-		memcpy( modelView.ToFloatPtr(), surf->space->modelViewMatrix, sizeof( modelView ) );
-		memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
-		auto MVP = modelView * proj;
-		qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
-		RB_DrawElementsImmediate( surf->frontendGeo );
-	}*/
 	qglUseProgram( 0 );
 
 	GL_SelectTexture( 2 );

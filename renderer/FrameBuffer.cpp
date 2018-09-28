@@ -392,9 +392,9 @@ void CheckCreateShadow() {
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE );
 
 		// aha this is for PCF ( fixed now ) jaggies are minimal even with low softshadow quality.
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE );				// added depth texture mode
+		/*qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE );				// added depth texture mode
 		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE );	//GL_COMPARE_REF_TO_TEXTURE
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
+		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );*/
 
 		// 3.2 required for geometry shader anyway but still don't want crashes
 		if ( qglGenerateMipmap ) {
