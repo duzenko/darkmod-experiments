@@ -317,37 +317,7 @@ void CheckCreateShadow() {
 		globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 	}
 	
-	auto shadowCubeMap = globalImages->shadowAtlas;
-	if ( shadowCubeMap->uploadWidth != r_shadowMapSize.GetInteger() || depthBitsModified ) {
-		r_fboDepthBits.ClearModified();
-		shadowCubeMap->Bind();
-		shadowCubeMap->uploadWidth = 3072;// r_shadowMapSize.GetInteger();
-		shadowCubeMap->uploadHeight = 1024;// r_shadowMapSize.GetInteger();
-
-			switch ( r_fboDepthBits.GetInteger() ) {
-			case 16:
-				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			case 32:
-				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			default:
-				qglTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			}
-		
-		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST );
-		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE );
-		//qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
-
-		globalImages->BindNull();
-	}
+	globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), GL_DEPTH );
 
 	auto check = []( GLuint &fbo ) {
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -365,7 +335,7 @@ void CheckCreateShadow() {
 		while ( !fboShadowAtlas ) {
 			qglGenFramebuffers( 1, &fboShadowAtlas );
 			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowAtlas );
-			GLuint depthTex = shadowCubeMap->texnum;
+			GLuint depthTex = globalImages->shadowAtlas->texnum;
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 			check( fboShadowAtlas );

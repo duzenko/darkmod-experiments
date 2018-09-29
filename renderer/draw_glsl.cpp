@@ -330,22 +330,26 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		qglEnable( GL_POLYGON_OFFSET_FILL );
 	}
 
-	for ( ; surf; surf = surf->nextOnLight ) {
-		if ( !surf->material->SurfaceCastsShadow() ) {
-			continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
-		}
+	for ( int i = 0; i < 6; i++ ) { // temporary crutch
+		qglViewport( i * r_shadowMapSize.GetInteger(), 0, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger() );
+		qglUniform1i( 1, i );
+		for ( ; surf; surf = surf->nextOnLight ) {
+			if ( !surf->material->SurfaceCastsShadow() ) {
+				continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
+			}
 
-		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
-			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
-		}
+			if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
+				continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+			}
 
-		if ( backEnd.currentSpace != surf->space ) {
-			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
-			backEnd.currentSpace = surf->space;
-			backEnd.pc.c_matrixLoads++;
-		}
+			if ( backEnd.currentSpace != surf->space ) {
+				qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
+				backEnd.currentSpace = surf->space;
+				backEnd.pc.c_matrixLoads++;
+			}
 
-		shadowMapShader.FillDepthBuffer( surf );
+			shadowMapShader.FillDepthBuffer( surf );
+		}
 	}
 	
 	if(backfaces)
@@ -580,11 +584,11 @@ R_ReloadGLSLPrograms
 */
 bool R_ReloadGLSLPrograms() {
 	bool ok = true;
-	ok &= pointInteractionShader.Load( "interaction" );				// filenames hardcoded here since they're not used elsewhere
+	ok &= pointInteractionShader.Load( "interactionA" );				// filenames hardcoded here since they're not used elsewhere
 	ok &= ambientInteractionShader.Load( "ambientInteraction" );
 	ok &= multiLightShader.Load( "interactionN" );
 	ok &= stencilShadowShader.Load( "stencilShadow" );
-	ok &= shadowMapShader.Load( "shadowMap" );
+	ok &= shadowMapShader.Load( "shadowMapA" );
 	ok &= oldStageShader.Load( "oldStage" );
 	ok &= depthShader.Load( "depthAlpha" );
 	ok &= fogShader.Load( "fog" );
