@@ -318,10 +318,6 @@ void CheckCreateShadow() {
 	}
 	
 	globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), GL_DEPTH );
-	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR ); // FIXME move to GenerateAttachment
-	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE );
-	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LESS );
 
 	auto check = []( GLuint &fbo ) {
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
