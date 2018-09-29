@@ -37,3 +37,4 @@ include/boost/
 linux/
 macosx/
 Darkmod.log
+*.log

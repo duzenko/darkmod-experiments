@@ -26,6 +26,7 @@ GLuint fboPrimary, fboResolve, fboPostProcess, fboShadowStencil, pbo, fboShadowA
 GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
 GLuint postProcessWidth, postProcessHeight;
 uint ShadowAtlasIndex;
+renderCrop_t ShadowAtlasPages[42];
 float shadowResolution;
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
@@ -317,7 +318,7 @@ void CheckCreateShadow() {
 		globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 	}
 	
-	globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), GL_DEPTH );
+	globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), 6 * r_shadowMapSize.GetInteger(), GL_DEPTH );
 
 	auto check = []( GLuint &fbo ) {
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -332,13 +333,33 @@ void CheckCreateShadow() {
 	};
 
 	if ( r_shadows.GetInteger() == 2 ) {
-		while ( !fboShadowAtlas ) {
+		if( !fboShadowAtlas ) {
 			qglGenFramebuffers( 1, &fboShadowAtlas );
 			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowAtlas );
 			GLuint depthTex = globalImages->shadowAtlas->texnum;
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 			check( fboShadowAtlas );
+		}
+		if ( ShadowAtlasPages[0].width != r_shadowMapSize.GetInteger() ) {
+			for ( int i = 0; i < 2; i++ ) { // 2x full size pages
+				ShadowAtlasPages[i].x = 0;
+				ShadowAtlasPages[i].y = r_shadowMapSize.GetInteger() * i;
+				ShadowAtlasPages[i].width = r_shadowMapSize.GetInteger();
+			}
+			for ( int i = 0; i < 8; i++ ) { // 8x 1/4 pages
+				ShadowAtlasPages[2 + i].x = 0;
+				ShadowAtlasPages[2 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 1) * i;
+				ShadowAtlasPages[2 + i].width = r_shadowMapSize.GetInteger() >> 1;
+			}
+			for ( int i = 0; i < 16; i++ ) { // 32x 1/16-sized pages
+				ShadowAtlasPages[10 + i].x = r_shadowMapSize.GetInteger() * 3;
+				ShadowAtlasPages[10 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 2) * i;
+				ShadowAtlasPages[10 + i].width = r_shadowMapSize.GetInteger() >> 2;
+				ShadowAtlasPages[26 + i].x = r_shadowMapSize.GetInteger() * 4.5;
+				ShadowAtlasPages[26 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 2) * i;
+				ShadowAtlasPages[26 + i].width = r_shadowMapSize.GetInteger() >> 2;
+			}
 		}
 	} else {
 		if ( !fboShadowStencil ) {
@@ -481,11 +502,9 @@ void FB_ToggleShadow( bool on, bool clear ) {
 			}
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );
 			*/
-			qglViewport( 0, 0, globalImages->shadowAtlas->uploadWidth, globalImages->shadowAtlas->uploadHeight );
-
-			if ( r_useScissor.GetBool() ) {
-				GL_Scissor( 0, 0, globalImages->shadowAtlas->uploadWidth, globalImages->shadowAtlas->uploadHeight );
-			}
+			auto &page = ShadowAtlasPages[ShadowAtlasIndex-1];
+			qglViewport( page.x, page.y, page.width * 6, page.width );
+			GL_Scissor( page.x, page.y, page.width * 6, page.width );
 
 			if ( clear ) {
 				qglClear( GL_DEPTH_BUFFER_BIT );

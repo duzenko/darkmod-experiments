@@ -35,7 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "Profiling.h"
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
-//#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
+#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
 #endif
 
 struct shadowMapProgram_t : basicDepthProgram_t {
@@ -70,7 +70,7 @@ struct interactionProgram_t : basicInteractionProgram_t {
 
 struct pointInteractionProgram_t : interactionProgram_t {
 	GLint advanced, shadows, lightOrigin2;
-	GLint softShadowsQuality, softShadowsRadius, softShadowSamples, shadowMipMap, renderResolution;
+	GLint softShadowsQuality, softShadowsRadius, softShadowSamples, shadowRect, renderResolution;
 	GLint shadowMap, stencilTexture, depthTexture;
 	//TODO: is this global variable harming multithreading?
 	idList<idVec2> g_softShadowsSamples;
@@ -331,10 +331,11 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	}
 
 	auto savedSurf = surf;
+	auto &page = ShadowAtlasPages[backEnd.vLight->shadowMapIndex-1];
 	for ( int i = 0; i < 6; i++ ) { // temporary crutch
-		qglViewport( i * r_shadowMapSize.GetInteger(), 0, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger() );
+		qglViewport( page.x + page.width * i, page.y, page.width, page.width );
 		if ( r_useScissor.GetBool() )
-			GL_Scissor( i * r_shadowMapSize.GetInteger(), 0, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger() );
+			GL_Scissor( page.x + page.width * i, page.y, page.width, page.width );
 		qglUniform1i( 1, i );
 		for (surf = savedSurf ; surf; surf = surf->nextOnLight ) {
 			if ( !surf->material->SurfaceCastsShadow() ) {
@@ -397,6 +398,7 @@ void RB_GLSL_DrawLight_ShadowMap() {
 	GL_CheckErrors();
 
 	if ( backEnd.vLight->lightShader->LightCastsShadows() ) {
+		backEnd.vLight->shadowMapIndex = ++ShadowAtlasIndex;
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->globalInteractions, true );
 		RB_GLSL_CreateDrawInteractions( backEnd.vLight->localInteractions );
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions );
@@ -965,7 +967,7 @@ void pointInteractionProgram_t::AfterLoad() {
 	shadowMap = qglGetUniformLocation( program, "u_shadowMap" );
 	renderResolution = qglGetUniformLocation( program, "u_renderResolution" );
 	lightOrigin2 = qglGetUniformLocation( program, "u_lightOrigin2" );
-	shadowMipMap = qglGetUniformLocation( program, "u_shadowMipMap" );
+	shadowRect = qglGetUniformLocation( program, "u_shadowRect" );
 
 	// set texture locations
 	qglUseProgram( program );
@@ -989,8 +991,10 @@ void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 			qglUniform1f( shadows, 1 );
 		else
 			qglUniform1f( shadows, r_shadows.GetInteger() );
-		//qglUniform1i( shadowMipMap, ShadowMipMap[0] ); // don't delete - disabled temporarily
-		qglUniform1i( shadowMipMap, 0 );
+		auto &page = ShadowAtlasPages[vLight->shadowMapIndex-1];
+		idVec4 v( page.x, page.y, 0, page.width );
+		v /= 6 * r_shadowMapSize.GetFloat();
+		qglUniform4fv( shadowRect, 1, v.ToFloatPtr() );
 	} else
 		qglUniform1f( shadows, 0 );
 
