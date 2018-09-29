@@ -481,11 +481,10 @@ void FB_ToggleShadow( bool on, bool clear ) {
 			}
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );
 			*/
-			int mapSize = 512;
-			qglViewport( 0, 0, mapSize, mapSize );
+			qglViewport( 0, 0, globalImages->shadowAtlas->uploadWidth, globalImages->shadowAtlas->uploadHeight );
 
 			if ( r_useScissor.GetBool() ) {
-				GL_Scissor( 0, 0, mapSize, mapSize );
+				GL_Scissor( 0, 0, globalImages->shadowAtlas->uploadWidth, globalImages->shadowAtlas->uploadHeight );
 			}
 
 			if ( clear ) {

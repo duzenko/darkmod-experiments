@@ -330,10 +330,13 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		qglEnable( GL_POLYGON_OFFSET_FILL );
 	}
 
+	auto savedSurf = surf;
 	for ( int i = 0; i < 6; i++ ) { // temporary crutch
 		qglViewport( i * r_shadowMapSize.GetInteger(), 0, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger() );
+		if ( r_useScissor.GetBool() )
+			GL_Scissor( i * r_shadowMapSize.GetInteger(), 0, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger() );
 		qglUniform1i( 1, i );
-		for ( ; surf; surf = surf->nextOnLight ) {
+		for (surf = savedSurf ; surf; surf = surf->nextOnLight ) {
 			if ( !surf->material->SurfaceCastsShadow() ) {
 				continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
 			}
