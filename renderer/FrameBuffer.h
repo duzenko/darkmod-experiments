@@ -36,7 +36,7 @@ extern idCVar r_fboSeparateStencil;
 extern idCVar r_fboResolution;
 extern idCVar r_shadowMapSize;
 
-extern uint ShadowFboIndex;
+extern uint ShadowAtlasIndex;
 
 void FB_Clear();
 void FB_CopyColorBuffer();

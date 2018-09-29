@@ -374,9 +374,9 @@ void RB_GLSL_GenerateShadowMaps() {
 		}
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->globalInteractions, true );
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions, false );
-		backEnd.vLight->shadowMapIndex = ++ShadowFboIndex;
+		backEnd.vLight->shadowMapIndex = ++ShadowAtlasIndex;
 	}
-	ShadowFboIndex = 0;
+	ShadowAtlasIndex = 0;
 }
 
 /*
@@ -491,10 +491,8 @@ void RB_GLSL_DrawInteractions_MultiLight() {
 	qglEnableVertexAttribArray( 10 );
 	qglEnableVertexAttribArray( 11 );
 
-	for ( int i = 0; i < MAX_SHADOW_MAPS; i++ ) {
-		GL_SelectTexture( 5 + i );
-		globalImages->shadowCubeMap[i]->Bind();
-	}
+		GL_SelectTexture( 5 );
+		globalImages->shadowAtlas->Bind();
 
 	multiLightShader.Use();
 
