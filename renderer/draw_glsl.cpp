@@ -330,32 +330,32 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		qglEnable( GL_POLYGON_OFFSET_FILL );
 	}
 
-	auto savedSurf = surf;
 	auto &page = ShadowAtlasPages[backEnd.vLight->shadowMapIndex-1];
-	for ( int i = 0; i < 6; i++ ) { // temporary crutch
-		qglViewport( page.x + page.width * i, page.y, page.width, page.width );
-		if ( r_useScissor.GetBool() )
-			GL_Scissor( page.x + page.width * i, page.y, page.width, page.width );
-		qglUniform1i( 1, i );
-		for (surf = savedSurf ; surf; surf = surf->nextOnLight ) {
-			if ( !surf->material->SurfaceCastsShadow() ) {
-				continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
-			}
-
-			if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
-				continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
-			}
-
-			if ( backEnd.currentSpace != surf->space ) {
-				qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
-				backEnd.currentSpace = surf->space;
-				backEnd.pc.c_matrixLoads++;
-			}
-
-			shadowMapShader.FillDepthBuffer( surf );
+	qglViewport( page.x, page.y, 6*page.width, page.width );
+	if ( r_useScissor.GetBool() )
+		GL_Scissor( page.x, page.y, 6*page.width, page.width );
+	for ( int i = 0; i < 4; i++ )
+		qglEnable( GL_CLIP_PLANE0 + i );
+	for ( ; surf; surf = surf->nextOnLight ) {
+		if ( !surf->material->SurfaceCastsShadow() ) {
+			continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
 		}
+
+		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) {
+			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+		}
+
+		if ( backEnd.currentSpace != surf->space ) {
+			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
+			backEnd.currentSpace = surf->space;
+			backEnd.pc.c_matrixLoads++;
+		}
+
+		shadowMapShader.FillDepthBuffer( surf );
 	}
-	
+	for ( int i = 0; i < 4; i++ )
+		qglDisable( GL_CLIP_PLANE0 + i );
+
 	if(backfaces)
 		GL_Cull( CT_FRONT_SIDED );
 	else
