@@ -35,7 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "Profiling.h"
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
-#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
+//#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
 #endif
 
 struct shadowMapProgram_t : basicDepthProgram_t {
@@ -500,8 +500,8 @@ void RB_GLSL_DrawInteractions_MultiLight() {
 	qglEnableVertexAttribArray( 10 );
 	qglEnableVertexAttribArray( 11 );
 
-		GL_SelectTexture( 5 );
-		globalImages->shadowAtlas->Bind();
+	GL_SelectTexture( 5 );
+	globalImages->shadowAtlas->Bind();
 
 	multiLightShader.Use();
 
