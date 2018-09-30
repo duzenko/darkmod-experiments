@@ -87,7 +87,7 @@ struct ambientInteractionProgram_t : interactionProgram_t {
 
 struct multiLightInteractionProgram_t : basicInteractionProgram_t {
 	const uint MAX_LIGHTS = 16;
-	GLint lightCount, lightOrigin, lightColor, shadowMapIndex;
+	GLint lightCount, lightOrigin, lightColor, shadowRect;
 	GLint gamma;
 	virtual	void AfterLoad();
 	virtual void Draw( const drawInteraction_t *din );
@@ -373,6 +373,7 @@ void RB_GLSL_GenerateShadowMaps() {
 	if ( r_shadows.GetBool() == 0 )
 		return;
 	for ( backEnd.vLight = backEnd.viewDef->viewLights; backEnd.vLight; backEnd.vLight = backEnd.vLight->next ) {
+		backEnd.vLight->shadowMapIndex = ++ShadowAtlasIndex;
 		if ( !backEnd.vLight->lightShader->LightCastsShadows() || backEnd.vLight->tooBigForShadowMaps ) {
 			continue;
 		}
@@ -382,7 +383,6 @@ void RB_GLSL_GenerateShadowMaps() {
 		}
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->globalInteractions, true );
 		RB_GLSL_DrawInteractions_ShadowMap( backEnd.vLight->localInteractions, false );
-		backEnd.vLight->shadowMapIndex = ++ShadowAtlasIndex;
 	}
 	ShadowAtlasIndex = 0;
 }
@@ -1052,26 +1052,20 @@ void multiLightInteractionProgram_t::AfterLoad() {
 	lightCount = qglGetUniformLocation( program, "u_lightCount" );
 	lightOrigin = qglGetUniformLocation( program, "u_lightOrigin" );
 	lightColor = qglGetUniformLocation( program, "u_diffuseColor" );
-	shadowMapIndex = qglGetUniformLocation( program, "u_ShadowMapIndex" );
+	shadowRect = qglGetUniformLocation( program, "u_shadowRect" );
 	gamma = qglGetUniformLocation( program, "u_gamma" );
 	auto diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
 	auto shadowMap = qglGetUniformLocation( program, "u_shadowMap" );
 	qglUseProgram( program );
 	qglUniform1i( diffuseTexture, 3 );
-	GLint scmTexNums[MAX_SHADOW_MAPS];
-	for ( int i = 0; i < MAX_SHADOW_MAPS; i++)
-		//scmTexNums[i] = globalImages->shadowCubeMap[i]->texnum;
-		//scmTexNums[i] = MAX_MULTITEXTURE_UNITS - MAX_LIGHTS + i;
-		scmTexNums[i] = 5 + i;
-	qglUniform1iv( shadowMap, MAX_SHADOW_MAPS, scmTexNums );
-	//qglUniform1i( shadowMap, MAX_MULTITEXTURE_UNITS - MAX_LIGHTS );
+	qglUniform1i( shadowMap, 5 );
 	qglUseProgram( 0 );
 }
 
 void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 	std::vector<idVec3> lightOrigins, lightColors;
 	std::vector<idMat4> projectionFalloff;
-	std::vector<GLint> shadowIndex;
+	std::vector<idVec4> shadowRect;
 	auto surf = din->surf;
 	for ( auto *vLight = backEnd.viewDef->viewLights; vLight; vLight = vLight->next ) {
 		if ( vLight->lightShader->IsFogLight() || vLight->lightShader->IsBlendLight() || vLight->singleLightOnly )
@@ -1115,13 +1109,20 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 		projectionFalloff.push_back( *p );
 
 		if ( vLight->lightShader->IsAmbientLight() )
-			shadowIndex.push_back( -2 );
-		else
-			shadowIndex.push_back( vLight->shadowMapIndex-1 );
+			shadowRect.push_back( idVec4(0, 0, -2, 0) );
+		else {
+			if( vLight->shadowMapIndex <= 0 )
+				shadowRect.push_back( idVec4( 0, 0, -1, 0 ) );
+			auto &page = ShadowAtlasPages[vLight->shadowMapIndex - 1];
+			idVec4 v( page.x, page.y, 0, page.width );
+			v /= 6 * r_shadowMapSize.GetFloat();
+			v.z = vLight->shadowMapIndex - 1;
+			shadowRect.push_back( v );
+		}
 	}
 
 	basicInteractionProgram_t::UpdateUniforms( din );
-	qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 0 : r_gamma.GetFloat() - 1 );
+	qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 1 : r_gamma.GetFloat() );
 	
 	for ( size_t i = 0; i < lightOrigins.size(); i += MAX_LIGHTS ) {
 		int thisCount = idMath::Imin( lightOrigins.size() - i, MAX_LIGHTS );
@@ -1130,7 +1131,7 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 		qglUniform3fv( lightOrigin, thisCount, lightOrigins[i].ToFloatPtr() );
 		qglUniform3fv( lightColor, thisCount, lightColors[i].ToFloatPtr() );
 		qglUniformMatrix4fv( lightProjectionFalloff, thisCount, false, projectionFalloff[i].ToFloatPtr() );
-		qglUniform1iv( shadowMapIndex, thisCount, &shadowIndex[i] );
+		qglUniform4fv( this->shadowRect, thisCount, shadowRect[i].ToFloatPtr() );
 
 		RB_DrawElementsWithCounters( surf );
 
@@ -1138,8 +1139,8 @@ void multiLightInteractionProgram_t::Draw( const drawInteraction_t *din ) {
 			backEnd.pc.c_interactions++;
 			backEnd.pc.c_interactionLights += lightOrigins.size();
 			backEnd.pc.c_interactionMaxLights = idMath::Imax( backEnd.pc.c_interactionMaxLights, lightOrigins.size() );
-			auto shMaps = std::count_if( shadowIndex.begin(), shadowIndex.end(), []( GLint x ) {
-				return x >= 0;
+			auto shMaps = std::count_if( shadowRect.begin(), shadowRect.end(), []( idVec4 v ) {
+				return v.z >= 0;
 			} );
 			if ( backEnd.pc.c_interactionMaxShadowMaps < (uint)shMaps)
 				backEnd.pc.c_interactionMaxShadowMaps = (uint)shMaps;
