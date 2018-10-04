@@ -1269,7 +1269,8 @@ void shadowMapProgram_t::AfterLoad() {
 }
 
 void volumetricLight_t::Draw() {
-	if ( backEnd.vLight->lightShader->IsAmbientLight() )
+	auto vLight = backEnd.vLight;
+	if ( vLight->lightShader->IsAmbientLight() || !vLight->shadowMapIndex )
 		return;
 	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_ALWAYS );
 
@@ -1279,6 +1280,8 @@ void volumetricLight_t::Draw() {
 	backEnd.vLight->falloffImage->Bind();
 	GL_SelectTexture( 2 );
 	globalImages->currentDepthImage->Bind();
+	GL_SelectTexture( 5 );
+	globalImages->shadowAtlas->Bind();
 
 	Use();
 
@@ -1290,7 +1293,6 @@ void volumetricLight_t::Draw() {
 	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
 
 	// light color uniform
-	auto vLight = backEnd.vLight;
 	const float			*lightRegs = vLight->shaderRegisters;
 	const idMaterial	*lightShader = vLight->lightShader;
 	const shaderStage_t	*lightStage = lightShader->GetStage( 0 );
@@ -1306,6 +1308,13 @@ void volumetricLight_t::Draw() {
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
 	qglUniform4fv( 4, 6, backEnd.vLight->lightDef->frustum[0].ToFloatPtr() );
 
+	auto &page = ShadowAtlasPages[vLight->shadowMapIndex - 1];
+	idVec4 v( page.x, page.y, 0, page.width );
+	v /= 6 * r_shadowMapSize.GetFloat();
+	qglUniform4fv( 10, 1, v.ToFloatPtr() );
+
+	qglUniform3fv( 11, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+
 	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;
 	RB_DrawElementsImmediate( tris );
@@ -1313,6 +1322,8 @@ void volumetricLight_t::Draw() {
 	GL_Cull( CT_FRONT_SIDED );
 	qglUseProgram( 0 );
 
+	GL_SelectTexture( 5 );
+	globalImages->BindNull();
 	GL_SelectTexture( 2 );
 	globalImages->BindNull();
 	GL_SelectTexture( 1 );
