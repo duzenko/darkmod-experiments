@@ -20,53 +20,17 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #include "glsl.h"
 
 // all false at start
-static bool primaryOn = false, shadowOn = false;
-static bool depthCopiedThisView = false;
-static GLuint fboPrimary, fboResolve, fboPostProcess, fboShadowMap, fboShadowStencil, pbo;
-static std::vector<GLuint> fboShadowMaps;
-static GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
-static GLuint postProcessWidth, postProcessHeight;
-uint ShadowFboIndex;
-static float shadowResolution;
+bool primaryOn = false, shadowOn = false;
+bool depthCopiedThisView = false;
+GLuint fboPrimary, fboResolve, fboPostProcess, fboShadowStencil, pbo, fboShadowAtlas;
+GLuint renderBufferColor, renderBufferDepthStencil, renderBufferPostProcess;
+GLuint postProcessWidth, postProcessHeight;
+uint ShadowAtlasIndex;
+renderCrop_t ShadowAtlasPages[42];
 
-/* scale resolutions directly, i loove pointers muahaha */
-void FB_Resize( GLuint *width, GLuint *height, GLfloat scale ) {
-	// minor correction, cannot use pointers directly before the end or the function would exit before doing anything.
-	GLuint scaledWidth = *width;
-	GLuint scaledHeight = *height;
-
-	// update screen resolution if mode changes
-    if ( r_mode.IsModified() ) {
-        int w, h;
-        if ( R_GetModeInfo( &w, &h, r_mode.GetInteger() ) ) {
-            scaledWidth = w;
-            scaledHeight = h;
-        }
-        r_mode.ClearModified();
-    }
-
-	// multiply by fbo resolution
-	// PS: if we are not using FBO's dont or the gui will scale to !!!
-	// QE: the pixel buffer is what is causing the blurring at lower scales, but if i guard against it scaling no longer has any effect.
-	if ( r_useFbo.GetBool() ) {
-		scaledWidth *= scale;
-		scaledHeight *= scale;
-	}
-
-	// make sure the framebuffer can handle these resolutions: hint 16x is to much :)
-	// 0.1 blurred mess, 0.5 low res, 1 normal, 1.5 high def, 2 insane, 4 bye bye framerate, 16 would normally crash but i guarded against that.
-	if( scaledWidth > static_cast<GLuint>( glConfig.maxRenderbufferSize ) )	{
-		common->Warning( "FB_Resize: bad width %i", scaledWidth );
-		scaledWidth = glConfig.vidWidth; // reset to screen width
-	}
-
-	if( scaledHeight > static_cast<GLuint>( glConfig.maxRenderbufferSize ) ) {
-		common->Warning( "FB_Resize: bad height %i", scaledHeight );
-		scaledHeight = glConfig.vidHeight; // reset to screen height
-	}
-	*width = scaledWidth;
-	*height = scaledHeight;
-}
+#if defined(_MSC_VER) && _MSC_VER >= 1800 && !defined(DEBUG)
+#pragma optimize("t", off) // duzenko: used in release to enforce breakpoints in inlineable code. Please do not remove
+#endif
 
 void FB_CreatePrimaryResolve( GLuint width, GLuint height, int msaa ) {
 	if ( !fboPrimary ) {
@@ -220,7 +184,7 @@ void FB_CopyRender( const copyRenderCommand_t &cmd ) {
 			}
 			qglBindBufferARB( GL_PIXEL_PACK_BUFFER, pbo );
 
-			byte *ptr = static_cast< byte * >( qglMapBufferARB( GL_PIXEL_PACK_BUFFER, GL_READ_ONLY ) );
+			byte *ptr = reinterpret_cast< byte * >( qglMapBufferARB( GL_PIXEL_PACK_BUFFER, GL_READ_ONLY ) );
 
 			// #4395 moved to initializer
 			if ( ptr ) {
@@ -253,13 +217,11 @@ void DeleteFramebuffers() {
 	qglDeleteFramebuffers( 1, &fboPrimary );
 	qglDeleteFramebuffers( 1, &fboResolve );
 	qglDeleteFramebuffers( 1, &fboShadowStencil );
-	qglDeleteFramebuffers( 1, &fboShadowMap );
-	qglDeleteFramebuffers( int(fboShadowMaps.size()), fboShadowMaps.data() );
+	qglDeleteFramebuffers( 1, &fboShadowAtlas );
 	fboPrimary = 0;
 	fboResolve = 0;
 	fboShadowStencil = 0;
-	fboShadowMap = 0;
-	fboShadowMaps.clear();
+	fboShadowAtlas = 0;
 }
 
 void CheckCreatePrimary() {
@@ -267,10 +229,7 @@ void CheckCreatePrimary() {
 	GL_CheckErrors();
 
 	// virtual resolution as a modern alternative for actual desktop resolution affecting all other windows
-	GLuint curWidth = glConfig.vidWidth, curHeight = glConfig.vidHeight;
-
-	// scaled by r_fboResolution for virtual resolution
-	FB_Resize( &curWidth, &curHeight, r_fboResolution.GetFloat() );
+	GLuint curWidth = r_fboResolution.GetFloat() * glConfig.vidWidth, curHeight = r_fboResolution.GetFloat() * glConfig.vidHeight;
 
 	if ( r_fboSeparateStencil.IsModified() || ( curWidth != globalImages->currentRenderImage->uploadWidth ) ) {
 		r_fboSeparateStencil.ClearModified();
@@ -285,10 +244,8 @@ void CheckCreatePrimary() {
 	// intel optimization
 	if ( r_fboSeparateStencil.GetBool() ) {
 		globalImages->currentDepthImage->GenerateAttachment( curWidth, curHeight, GL_DEPTH );
-		// currentStencilFbo will be initialized in CheckCreateShadow with possibly different resolution
-		if ( !r_softShadowsQuality.GetBool() ) {
+		if ( !r_softShadowsQuality.GetBool() ) // currentStencilFbo will be initialized in CheckCreateShadow with possibly different resolution
 			globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
-		}
 	} else { // AMD/nVidia fast enough already, separate depth/stencil not supported
 		globalImages->currentDepthImage->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 	}
@@ -340,68 +297,28 @@ void CheckCreateShadow() {
 	// (re-)attach textures to FBO
 	GLuint curWidth = glConfig.vidWidth;
 	GLuint curHeight = glConfig.vidHeight;
-
-	// not scaling here, the below will do that.
-	FB_Resize( &curWidth, &curHeight, 1.0F );
-
-	// scale shadows by r_fboResolution and r_softShadowsQuality
 	if ( primaryOn ) {
-		float shadowRes = 1.0F;
+		float shadowRes = 1.0f;
 		if ( r_softShadowsQuality.GetInteger() < 0 ) {
-			shadowRes = r_softShadowsQuality.GetFloat() / -100.0F;
+			shadowRes = r_softShadowsQuality.GetFloat() / -100.0f;
 		}
+
 		curWidth *= r_fboResolution.GetFloat() * shadowRes;
 		curHeight *= r_fboResolution.GetFloat() * shadowRes;
 	}
+
 	bool depthBitsModified = r_fboDepthBits.IsModified();
-
 	// reset textures
-	if ( r_fboSeparateStencil.GetBool() ) {
-		// currentDepthImage is initialized there
-		CheckCreatePrimary();
-		globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
-	} else {
-		globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
-	}
-	auto *shadowCubeMap = globalImages->shadowCubeMap[ShadowFboIndex % MAX_SHADOW_MAPS];
-
-	if ( shadowCubeMap->uploadWidth != r_shadowMapSize.GetInteger() || depthBitsModified ) {
-		r_fboDepthBits.ClearModified();
-		shadowCubeMap->Bind();
-		shadowCubeMap->uploadWidth = r_shadowMapSize.GetInteger();
-		shadowCubeMap->uploadHeight = r_shadowMapSize.GetInteger();
-
-		for ( int sideId = 0; sideId < 6; sideId++ ) {
-			// revert back again, the problem seems to be stencil depth.
-			switch ( r_fboDepthBits.GetInteger() ) {
-			case 16:
-				qglTexImage2D( GL_TEXTURE_CUBE_MAP_POSITIVE_X + sideId, 0, GL_DEPTH_COMPONENT16, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			case 32:
-				qglTexImage2D( GL_TEXTURE_CUBE_MAP_POSITIVE_X + sideId, 0, GL_DEPTH_COMPONENT32F, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			default:
-				qglTexImage2D( GL_TEXTURE_CUBE_MAP_POSITIVE_X + sideId, 0, GL_DEPTH_COMPONENT24, r_shadowMapSize.GetInteger(), r_shadowMapSize.GetInteger(), 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-				break;
-			}
+	if ( r_shadows.GetInteger() == 1 )
+		if ( r_fboSeparateStencil.GetBool() ) {
+			// currentDepthImage is initialized there
+			CheckCreatePrimary();
+			globalImages->currentStencilFbo->GenerateAttachment( curWidth, curHeight, GL_STENCIL );
+		} else {
+			globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 		}
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST );
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE );
-
-		// aha this is for PCF ( fixed now ) jaggies are minimal even with low softshadow quality.
-		/*qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE );				// added depth texture mode
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE );	//GL_COMPARE_REF_TO_TEXTURE
-		qglTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );*/
-
-		// 3.2 required for geometry shader anyway but still don't want crashes
-		if ( qglGenerateMipmap ) {
-			qglGenerateMipmap( GL_TEXTURE_CUBE_MAP );
-		}
-		globalImages->BindNull();
-	}
+	if ( r_shadows.GetInteger() == 2 )
+		globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), 6 * r_shadowMapSize.GetInteger(), GL_DEPTH );
 
 	auto check = []( GLuint &fbo ) {
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -416,15 +333,33 @@ void CheckCreateShadow() {
 	};
 
 	if ( r_shadows.GetInteger() == 2 ) {
-		while ( ShadowFboIndex >= fboShadowMaps.size() ) {
-			qglGenFramebuffers( 1, &fboShadowMap );
-			fboShadowMaps.push_back( fboShadowMap );
-			fboShadowMap = fboShadowMaps[ShadowFboIndex];
-			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowMap );
-			GLuint depthTex = shadowCubeMap->texnum;
-			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, ShadowFboIndex / MAX_SHADOW_MAPS );
+		if( !fboShadowAtlas ) {
+			qglGenFramebuffers( 1, &fboShadowAtlas );
+			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowAtlas );
+			GLuint depthTex = globalImages->shadowAtlas->texnum;
+			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
-			check( fboShadowMap );
+			check( fboShadowAtlas );
+		}
+		if ( ShadowAtlasPages[0].width != r_shadowMapSize.GetInteger() ) {
+			for ( int i = 0; i < 2; i++ ) { // 2x full size pages
+				ShadowAtlasPages[i].x = 0;
+				ShadowAtlasPages[i].y = r_shadowMapSize.GetInteger() * i;
+				ShadowAtlasPages[i].width = r_shadowMapSize.GetInteger();
+			}
+			for ( int i = 0; i < 8; i++ ) { // 8x 1/4 pages
+				ShadowAtlasPages[2 + i].x = 0;
+				ShadowAtlasPages[2 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 1) * i;
+				ShadowAtlasPages[2 + i].width = r_shadowMapSize.GetInteger() >> 1;
+			}
+			for ( int i = 0; i < 16; i++ ) { // 32x 1/16-sized pages
+				ShadowAtlasPages[10 + i].x = r_shadowMapSize.GetInteger() * 3;
+				ShadowAtlasPages[10 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 2) * i;
+				ShadowAtlasPages[10 + i].width = r_shadowMapSize.GetInteger() >> 2;
+				ShadowAtlasPages[26 + i].x = r_shadowMapSize.GetInteger() * 4.5;
+				ShadowAtlasPages[26 + i].y = r_shadowMapSize.GetInteger() * 2 + (r_shadowMapSize.GetInteger() >> 2) * i;
+				ShadowAtlasPages[26 + i].width = r_shadowMapSize.GetInteger() >> 2;
+			}
 		}
 	} else {
 		if ( !fboShadowStencil ) {
@@ -437,7 +372,6 @@ void CheckCreateShadow() {
 				GLuint depthTex = globalImages->shadowDepthFbo->texnum;
 				qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthTex, 0 );
 			}
-			check( fboShadowStencil ); // added this one to check
 		}
 	}
 	GL_CheckErrors();
@@ -453,12 +387,8 @@ void FB_SelectPostProcess() {
 	if ( !primaryOn ) {
 		return;
 	}
-
-	// scaled by r_fboResolution for virtual resolution
-	GLuint curWidth = glConfig.vidWidth;
-	GLuint curHeight = glConfig.vidHeight;
-
-	FB_Resize( &curWidth, &curHeight, r_fboResolution.GetFloat() );
+	GLuint curWidth = glConfig.vidWidth * r_fboResolution.GetFloat();
+	GLuint curHeight = glConfig.vidHeight * r_fboResolution.GetFloat();
 
 	if ( !fboPostProcess || curWidth != postProcessWidth || curHeight != postProcessHeight ) {
 		FB_CreatePostProcess( curWidth, curHeight );
@@ -475,7 +405,7 @@ void FB_BindShadowTexture() {
 	GL_CheckErrors();
 	if ( r_shadows.GetInteger() == 2 ) {
 		GL_SelectTexture( 6 );
-		globalImages->shadowCubeMap[0]->Bind();
+		globalImages->shadowAtlas->Bind();
 	} else {
 		GL_SelectTexture( 6 );
 		globalImages->currentDepthImage->Bind();
@@ -491,14 +421,14 @@ void FB_BindShadowTexture() {
 	GL_CheckErrors();
 }
 
-// now takes the same values as GL_Scissor avoids confusion.
-void FB_ApplyScissor( int x, int y, int w, int h ) {
+// accidentally deleted
+void FB_ApplyScissor() {
 	if ( r_useScissor.GetBool() ) {
-		float resFactor = 1.0F;
-		if ( shadowOn ) {
-			resFactor *= shadowResolution;
-		}
-		GL_Scissor( x * resFactor, y * resFactor, w * resFactor, h * resFactor );
+		float resFactor = 1.0f;
+		GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1 * resFactor,
+		            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1 * resFactor,
+		            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1 * resFactor,
+		            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 * resFactor );
 	}
 }
 
@@ -511,6 +441,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 				FB_ResolveMultisampling( GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
 				qglBindFramebuffer( GL_READ_FRAMEBUFFER, fboResolve );
 			}
+
 			qglDisable( GL_SCISSOR_TEST );
 			qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, fboShadowStencil );
 			qglBlitFramebuffer( 0, 0, globalImages->currentRenderImage->uploadWidth, globalImages->currentRenderImage->uploadHeight,
@@ -522,8 +453,7 @@ void FB_ToggleShadow( bool on, bool clear ) {
 		}
 		GL_CheckErrors();
 	}
-	qglBindFramebuffer( GL_FRAMEBUFFER, on ? (r_shadows.GetInteger() == 1 ? fboShadowStencil : fboShadowMaps[ShadowFboIndex]) : primaryOn ? fboPrimary : 0 );
-
+	qglBindFramebuffer( GL_FRAMEBUFFER, on ? (r_shadows.GetInteger() == 1 ? fboShadowStencil : fboShadowAtlas) : primaryOn ? fboPrimary : 0 );
 	if( on && r_shadows.GetInteger() == 1 && r_multiSamples.GetInteger() > 1 && r_softShadowsQuality.GetInteger() >= 0 ) {
 		// with MSAA on, we need to render against the multisampled primary buffer, otherwise stencil is drawn
 		// against a lower-quality depth map which may cause render errors with shadows
@@ -533,28 +463,6 @@ void FB_ToggleShadow( bool on, bool clear ) {
 	// stencil softshadows
 	if ( r_shadows.GetInteger() == 1 ) {
 		shadowOn = on;
-		if ( r_softShadowsQuality.GetInteger() < 0 ) {
-			if ( on ) {
-				shadowResolution = r_softShadowsQuality.GetFloat() / -100.0f;
-				GL_Viewport( 0, 0, glConfig.vidWidth * shadowResolution * r_fboResolution.GetFloat(), glConfig.vidHeight * shadowResolution * r_fboResolution.GetFloat() );
-				FB_ApplyScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
-								 backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
-								 backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
-								 backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
-			} else {
-				if( primaryOn ) {
-					GL_Viewport( 0, 0, glConfig.vidWidth * r_fboResolution.GetFloat(), glConfig.vidHeight * r_fboResolution.GetFloat() );
-				} else {
-					GL_Viewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
-				}
-				FB_ApplyScissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
-								 backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
-								 backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
-								 backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
-			}
-		} else {
-			shadowResolution = 1.0F;
-		}
 	}
 	GL_CheckErrors();
 
@@ -562,9 +470,9 @@ void FB_ToggleShadow( bool on, bool clear ) {
 	if ( r_shadows.GetInteger() == 2 ) {
 		qglDepthMask( on );
 		if ( on ) {
-			int mipmap = ShadowFboIndex / MAX_SHADOW_MAPS;
+			/*int mipmap = ShadowFboIndex / MAX_SHADOW_MAPS;
 			int mapSize = r_shadowMapSize.GetInteger() >> mipmap;
-			/*ShadowMipMap[ShadowFboIndex] = 0;
+			ShadowMipMap[ShadowFboIndex] = 0;
 			int lightScreenSize = idMath::Imax( backEnd.vLight->scissorRect.GetWidth(), backEnd.vLight->scissorRect.GetHeight() ),
 			         ScreenSize = idMath::Imin( glConfig.vidWidth, glConfig.vidHeight );
 
@@ -573,35 +481,30 @@ void FB_ToggleShadow( bool on, bool clear ) {
 				lightScreenSize <<= 1;
 				mapSize >>= 1;
 			}
-			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );*/
-			GL_Viewport( 0, 0, mapSize, mapSize );
+			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, globalImages->shadowCubeMap[ShadowFboIndex]->texnum, ShadowMipMap[ShadowFboIndex] );
+			*/
+			auto &page = ShadowAtlasPages[ShadowAtlasIndex-1];
+			qglViewport( page.x, page.y, page.width * 6, page.width );
+			GL_Scissor( page.x, page.y, page.width * 6, page.width );
 
-			if ( r_useScissor.GetBool() ) {
-				GL_Scissor( 0, 0, mapSize, mapSize );
-			}
-
-			if ( clear ) {
+			if ( clear ) 
 				qglClear( GL_DEPTH_BUFFER_BIT );
-			}
 			GL_State( GLS_DEPTHFUNC_LESS ); // reset in RB_GLSL_CreateDrawInteractions
 		} else {
 			const idScreenRect &r = backEnd.viewDef->viewport;
 
 			GL_Viewport( r.x1, r.y1, r.x2 - r.x1 + 1, r.y2 - r.y1 + 1 );
 
-			if ( r_useScissor.GetBool() ) {
-				GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
-				            backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
-				            backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
-				            backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
-			}
+			GL_Scissor( backEnd.viewDef->viewport.x1 + backEnd.currentScissor.x1,
+				backEnd.viewDef->viewport.y1 + backEnd.currentScissor.y1,
+				backEnd.currentScissor.x2 + 1 - backEnd.currentScissor.x1,
+				backEnd.currentScissor.y2 + 1 - backEnd.currentScissor.y1 );
 		}
 	}
 }
 
 void FB_Clear() {
-	fboPrimary = fboResolve = fboPostProcess = fboShadowStencil = pbo = 0;
-	fboShadowMaps.clear();
+	fboPrimary = fboResolve = fboPostProcess = fboShadowStencil = fboShadowAtlas = pbo = 0;
 	renderBufferColor = renderBufferDepthStencil = renderBufferPostProcess = 0;
 }
 
@@ -622,20 +525,15 @@ void EnterPrimary() {
 
 	qglBindFramebuffer( GL_FRAMEBUFFER, fboPrimary );
 
-	// set the window clipping
 	GL_Viewport( tr.viewportOffset[0] + backEnd.viewDef->viewport.x1,	// FIXME: must not use tr in backend
 	             tr.viewportOffset[1] + backEnd.viewDef->viewport.y1,
 	             backEnd.viewDef->viewport.x2 + 1 - backEnd.viewDef->viewport.x1,
 	             backEnd.viewDef->viewport.y2 + 1 - backEnd.viewDef->viewport.y1 );
 
-	// the scissor may be smaller than the viewport for subviews
 	GL_Scissor( tr.viewportOffset[0] + backEnd.viewDef->viewport.x1 + backEnd.viewDef->scissor.x1,
 	            tr.viewportOffset[1] + backEnd.viewDef->viewport.y1 + backEnd.viewDef->scissor.y1,
 	            backEnd.viewDef->scissor.x2 + 1 - backEnd.viewDef->scissor.x1,
 	            backEnd.viewDef->scissor.y2 + 1 - backEnd.viewDef->scissor.y1 );
-
-	// also update currentScissor here
-	backEnd.currentScissor = backEnd.viewDef->scissor;
 
 	qglClear( GL_COLOR_BUFFER_BIT ); // otherwise transparent skybox blends with previous frame
 
@@ -651,14 +549,8 @@ void LeavePrimary() {
 	}
 	GL_CheckErrors();
 
-	// back to default resolution
-	GLuint defaultWidth = glConfig.vidWidth;
-	GLuint defaultHeight = glConfig.vidHeight;
-
-	FB_Resize( &defaultWidth, &defaultHeight, 1.0F );
-
-    GL_Viewport( 0, 0, defaultWidth, defaultHeight );
-    GL_Scissor( 0, 0, defaultWidth, defaultHeight );
+	GL_Viewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	GL_Scissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 
 	if ( r_multiSamples.GetInteger() > 1 ) {
 		FB_ResolveMultisampling( GL_COLOR_BUFFER_BIT );
@@ -667,7 +559,7 @@ void LeavePrimary() {
 	qglBindFramebuffer( GL_DRAW_FRAMEBUFFER, 0 );
 	qglBlitFramebuffer( 0, 0, globalImages->currentRenderImage->uploadWidth,
 	                    globalImages->currentRenderImage->uploadHeight,
-	                    0, 0, defaultWidth, defaultHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR );
+	                    0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR );
 
 	if ( r_fboDebug.GetInteger() != 0 ) {
 		if ( r_multiSamples.GetInteger() > 1 ) {
@@ -687,6 +579,9 @@ void LeavePrimary() {
 
 		while ( 1 )	{
 			switch ( r_fboDebug.GetInteger() ) {
+			case 1:
+				globalImages->shadowAtlas->Bind();
+				break;
 			case 2:
 				globalImages->currentDepthImage->Bind();
 				break;

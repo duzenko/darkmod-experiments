@@ -45,8 +45,6 @@ qglDisable( GL_TEXTURE_* )
 ====================================================================
 */
 
-const int MAX_SHADOW_MAPS = 3;
-
 typedef enum {
 	IS_UNLOADED,	// no gl texture number
 	IS_PARTIAL,		// has a texture number and the low mip levels loaded
@@ -204,7 +202,7 @@ public:
 	bool		CheckPrecompressedImage( bool fullLoad );
 	void		UploadPrecompressedImage( byte *data, int len );
 	void		ActuallyLoadImage( bool checkForPrecompressed, bool fromBackEnd );
-	//void		StartBackgroundImageLoad();
+	void		StartBackgroundImageLoad();
 	int			BitsForInternalFormat( int internalFormat ) const;
 	//void		UploadCompressedNormalMap( int width, int height, const byte *rgba, int mipLevel );
 	GLenum		SelectInternalFormat( const byte **dataPtrs, int numDataPtrs, int width, int height, textureDepth_t minimumDepth ) const;
@@ -388,7 +386,7 @@ public:
 
 	idImage *			currentDepthImage;			// #3877. Allow shaders to access scene depth
 	idImage *			shadowDepthFbo;
-	idImage *			shadowCubeMap[MAX_SHADOW_MAPS];
+	idImage *			shadowAtlas;
 	idImage *			currentStencilFbo; // these two are only used on Intel since no one else support separate stencil
 	idImage *			shadowStencilFbo;
 	idImage *			bloomCookedMath;

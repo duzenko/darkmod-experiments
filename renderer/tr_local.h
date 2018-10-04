@@ -672,6 +672,7 @@ typedef struct {
 	float	c_overDraw;
 
 	uint	c_interactions, c_interactionSingleLights, c_interactionLights, c_interactionMaxLights, c_interactionMaxShadowMaps;
+	uint	textureLoads;
 
 	int		msec;			// total msec for backend run
 	int		msecLast;		// last msec for backend run
@@ -879,6 +880,8 @@ extern idCVar r_flareSize;				// scale the flare deforms from the material def
 
 extern idCVar r_gamma;					// changes gamma tables
 extern idCVar r_brightness;				// changes gamma tables
+extern idCVar r_ambientMinLevel;		// tweaking overall ambient brightness
+extern idCVar r_ambientGamma;			// tweaking overall ambient brightness
 
 extern idCVar r_checkBounds;			// compare all surface bounds with precalculated ones
 
@@ -1347,9 +1350,6 @@ void RB_RenderDrawSurfChainWithFunction( const drawSurf_t *drawSurfs,
 		void ( *triFunc_ )( const drawSurf_t * ) );
 void RB_LoadShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture );
 void RB_GetShaderTextureMatrix( const float *shaderRegisters, const textureStage_t *texture, float matrix[16] );
-void RB_PrepareStageTexturing( const shaderStage_t *pStage, const drawSurf_t *surf, idDrawVert *ac );
-void RB_FinishStageTexturing( const shaderStage_t *pStage, const drawSurf_t *surf, idDrawVert *ac );
-void RB_CreateMultiDrawInteractions( const drawSurf_t *surf );
 void RB_CreateSingleDrawInteractions( const drawSurf_t *surf );
 
 void RB_DrawView();
