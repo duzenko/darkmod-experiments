@@ -113,7 +113,7 @@ interactionProgram_t *currrentInteractionShader; // dynamic, either pointInterac
 
 std::map<idStr, shaderProgram_t*> dynamicShaders; // shaders referenced from materials, stored by their file names
 
-idCVar r_testVolumetric( "r_testVolumetric", "60", CVAR_INTEGER, "" );
+idCVar r_testVolumetric( "r_testVolumetric", "60", CVAR_INTEGER | CVAR_ARCHIVE, "" );
 
 /*
 ==================
@@ -1276,7 +1276,9 @@ void volumetricLight_t::Draw() {
 	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_ALWAYS );
 
 	GL_SelectTexture( 0 );
-	backEnd.vLight->lightShader->GetStage( 0 )->texture.image->Bind();
+	auto image = backEnd.vLight->lightShader->GetStage( 0 )->texture.image;
+	auto blurred = globalImages->ImageFromFile( "fastBlur(" + image->imgName + ")", TF_LINEAR, false, TR_CLAMP, TD_HIGH_QUALITY );
+	blurred->Bind();
 	GL_SelectTexture( 1 );
 	backEnd.vLight->falloffImage->Bind();
 	GL_SelectTexture( 2 );

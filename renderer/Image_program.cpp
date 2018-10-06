@@ -229,6 +229,26 @@ static void R_AddNormalMaps( byte *data1, int width1, int height1, byte *data2, 
 	}
 }
 
+ID_NOINLINE void R_FastBlur( byte *data, int width, int height ) {
+	int lineSize = 4 * width, totSize = height * lineSize;
+	byte *orig = (byte *)R_StaticAlloc( totSize );
+	const int N = 16;
+	for ( int direction = 0; direction < 2; direction++ ) {
+		memcpy( orig, data, totSize );
+		for ( int i = 0; i < totSize; i += 4 ) {
+			int c[4] = { 0, 0, 0, 0 };
+			for ( int j = 0; j < N; j++ ) {
+				int x = (i + (direction ? j * 4 : j * lineSize)) % totSize;
+				for ( int k = 0; k < 4; k++ )
+					c[k] += orig[x + k];
+			}
+			for ( int k = 0; k < 4; k++ )
+				data[i + k] = c[k] / N;
+		}
+	}
+	R_StaticFree( orig );
+}
+
 /*
 ================
 R_SmoothNormalMap
@@ -429,6 +449,16 @@ static bool R_ParseImageProgram_r( idLexer &src, byte **pic, int *width, int *he
 				*depth = TD_BUMP;
 			}
 		}
+		MatchAndAppendToken( src, ")" );
+		return true;
+	}
+
+	if ( !token.Icmp( "fastBlur" ) ) {
+		MatchAndAppendToken( src, "(" );
+		if ( !R_ParseImageProgram_r( src, pic, width, height, timestamps, depth ) ) 
+			return false;
+		if ( pic )
+			R_FastBlur( *pic, *width, *height );
 		MatchAndAppendToken( src, ")" );
 		return true;
 	}
