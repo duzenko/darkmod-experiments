@@ -113,6 +113,8 @@ interactionProgram_t *currrentInteractionShader; // dynamic, either pointInterac
 
 std::map<idStr, shaderProgram_t*> dynamicShaders; // shaders referenced from materials, stored by their file names
 
+idCVar r_testVolumetric( "r_testVolumetric", "60", CVAR_INTEGER, "" );
+
 /*
 ==================
 RB_GLSL_DrawInteraction
@@ -470,7 +472,6 @@ void RB_GLSL_DrawInteractions_SingleLight() {
 	backEnd.depthFunc = GLS_DEPTHFUNC_LESS;
 	RB_GLSL_CreateDrawInteractions( backEnd.vLight->translucentInteractions );
 	if ( backEnd.vLight->lightShader->GetVolumetric() > 0 ) {
-		static idCVar r_testVolumetric( "r_testVolumetric", "1", CVAR_BOOL, "" );
 		if ( r_testVolumetric.GetBool() )
 			volumetricLight.Draw();
 	}
@@ -1314,6 +1315,7 @@ void volumetricLight_t::Draw() {
 	qglUniform4fv( 10, 1, v.ToFloatPtr() );
 
 	qglUniform3fv( 11, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	qglUniform1i( 12, r_testVolumetric.GetInteger() );
 
 	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;
