@@ -337,7 +337,7 @@ void CheckCreateShadow() {
 			qglGenFramebuffers( 1, &fboShadowAtlas );
 			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowAtlas );
 			GLuint depthTex = globalImages->shadowAtlas->texnum;
-			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex, 0 );
+			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 			check( fboShadowAtlas );
 		}
@@ -577,7 +577,6 @@ void LeavePrimary() {
 		qglDisable( GL_DEPTH_TEST );
 		qglColor3f( 1, 1, 1 );
 
-		GL_SelectTexture( 0 );
 		switch ( r_fboDebug.GetInteger() ) {
 		case 1:
 			globalImages->shadowAtlas->Bind();
@@ -593,10 +592,11 @@ void LeavePrimary() {
 			globalImages->currentRenderImage->Bind();
 		}
 		RB_DrawFullScreenQuad();
-		globalImages->BindNull();
+
 		qglEnable( GL_DEPTH_TEST );
 		qglPopMatrix();
 		qglMatrixMode( GL_MODELVIEW );
+		GL_SelectTexture( 0 );
 	}
 	qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
 
