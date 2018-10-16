@@ -57,7 +57,7 @@ struct interactionProgram_t : basicInteractionProgram_t {
 	GLint rgtc;
 
 	GLint cubic;
-	GLint lightProjectionCubemap, lightProjectionTexture, lightFalloffCubemap, lightFalloffTexture;
+	GLint lightProjectionCubemap, lightProjectionTexture, lightFalloffTexture;
 
 	GLint diffuseColor, specularColor;
 
@@ -79,7 +79,7 @@ struct pointInteractionProgram_t : interactionProgram_t {
 };
 
 struct ambientInteractionProgram_t : interactionProgram_t {
-	GLint minLevel, gamma;
+	GLint minLevel, gamma, lightFalloffCubemap;
 	virtual	void AfterLoad();
 	virtual void UpdateUniforms( const drawInteraction_t *din );
 };
@@ -309,6 +309,16 @@ void RB_GLSL_DrawLight_Stencil() {
 	qglUseProgram( 0 );	// if there weren't any globalInteractions, it would have stayed on
 }
 
+
+static float GetEffectiveLightRadius() {
+	float lightRadius = backEnd.vLight->lightDef->parms.radius;
+	if (r_softShadowsRadius.GetFloat() < 0.0)
+		lightRadius = -r_softShadowsRadius.GetFloat();	//override
+	else if (lightRadius < 0.0)
+		lightRadius = r_softShadowsRadius.GetFloat();	//default value
+	return lightRadius;
+}
+
 /*
 =============
 RB_GLSL_CreateDrawInteractions
@@ -326,16 +336,11 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	GL_SelectTexture( 0 );
 
 	qglUniform4fv( shadowMapShader.lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
-	float lightRadius = backEnd.vLight->lightDef->parms.radius;
-	if ( lightRadius < 0 )
-		lightRadius = r_softShadowsRadius.GetFloat();
-	qglUniform1f( shadowMapShader.lightRadius, lightRadius );
+	qglUniform1f( shadowMapShader.lightRadius, GetEffectiveLightRadius() );
 	backEnd.currentSpace = NULL;
 
-	const bool backfaces = true;
-	if ( backfaces )
-		GL_Cull( CT_BACK_SIDED );
-	qglPolygonOffset( -1, 0 );
+	GL_Cull( CT_TWO_SIDED );
+	qglPolygonOffset( 0, 0 );
 	qglEnable( GL_POLYGON_OFFSET_FILL );
 
 	auto &page = ShadowAtlasPages[backEnd.vLight->shadowMapIndex-1];
@@ -353,7 +358,7 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 
 		float customOffset = surf->space->entityDef->parms.shadowMapOffset + surf->material->GetShadowMapOffset();
 		if ( customOffset != 0 )
-			qglPolygonOffset( -1 + customOffset, 0 );
+			qglPolygonOffset( customOffset, 0 );
 
 		if ( backEnd.currentSpace != surf->space ) {
 			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
@@ -364,14 +369,13 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 		shadowMapShader.FillDepthBuffer( surf );
 
 		if ( customOffset != 0 )
-			qglPolygonOffset( -1, 0 );
+			qglPolygonOffset( 0, 0 );
 	}
 	for ( int i = 0; i < 4; i++ )
 		qglDisable( GL_CLIP_PLANE0 + i );
 
 	qglDisable( GL_POLYGON_OFFSET_FILL );
-	if(backfaces)
-		GL_Cull( CT_FRONT_SIDED );
+	GL_Cull( CT_FRONT_SIDED );
 
 	backEnd.currentSpace = NULL; // or else conflicts with qglLoadMatrixf
 	qglUseProgram( 0 );
@@ -922,7 +926,6 @@ void interactionProgram_t::AfterLoad() {
 	lightProjectionTexture = qglGetUniformLocation( program, "u_lightProjectionTexture" );
 	lightProjectionCubemap = qglGetUniformLocation( program, "u_lightProjectionCubemap" );
 	lightFalloffTexture = qglGetUniformLocation( program, "u_lightFalloffTexture" );
-	lightFalloffCubemap = qglGetUniformLocation( program, "u_lightFalloffCubemap" );
 	GLint diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
 	GLint specularTexture = qglGetUniformLocation( program, "u_specularTexture" );
 
@@ -938,7 +941,6 @@ void interactionProgram_t::AfterLoad() {
 
 	// can't have sampler2D, usampler2D, samplerCube have the same TMU index
 	qglUniform1i( lightProjectionCubemap, 5 );
-	qglUniform1i( lightFalloffCubemap, 5 );
 	qglUseProgram( 0 );
 }
 
@@ -953,13 +955,11 @@ void interactionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
 		qglUniform1i( lightProjectionTexture, MAX_MULTITEXTURE_UNITS );
 		qglUniform1i( lightProjectionCubemap, 2 );
 		qglUniform1i( lightFalloffTexture, MAX_MULTITEXTURE_UNITS );
-		qglUniform1i( lightFalloffCubemap, 1 );
 	} else {
 		qglUniform1f( cubic, 0.0 );
 		qglUniform1i( lightProjectionTexture, 2 );
 		qglUniform1i( lightProjectionCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 		qglUniform1i( lightFalloffTexture, 1 );
-		qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS + 1 );
 	}
 	qglUniform4fv( localViewOrigin, 1, din->localViewOrigin.ToFloatPtr() );
 }
@@ -1001,20 +1001,22 @@ void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 		else
 			qglUniform1f( shadows, r_shadows.GetInteger() );
 		auto &page = ShadowAtlasPages[vLight->shadowMapIndex-1];
-		idVec4 v( page.x, page.y, 0, page.width-1 );
-		//v /= 6 * r_shadowMapSize.GetFloat() - 1;
-		v.ToVec2() = (v.ToVec2() * 2 + idVec2( 1, 1 )) / (2 * 6 * r_shadowMapSize.GetInteger()); // https://stackoverflow.com/questions/5879403/opengl-texture-coordinates-in-pixel-space
-		v.w /= 6 * r_shadowMapSize.GetFloat();
-		qglUniform4fv( shadowRect, 1, v.ToFloatPtr() );
+		if ( 0 ) { // select the pixels to TexCoords method for interactionA.fs
+			idVec4 v( page.x, page.y, 0, page.width );
+			v /= 6 * r_shadowMapSize.GetFloat();
+			qglUniform4fv( shadowRect, 1, v.ToFloatPtr() );
+		} else { // https://stackoverflow.com/questions/5879403/opengl-texture-coordinates-in-pixel-space
+			idVec4 v( page.x, page.y, 0, page.width-1 );
+			v.ToVec2() = (v.ToVec2() * 2 + idVec2( 1, 1 )) / (2 * 6 * r_shadowMapSize.GetInteger());
+			v.w /= 6 * r_shadowMapSize.GetFloat();
+			qglUniform4fv( shadowRect, 1, v.ToFloatPtr() );
+		}
 	} else
 		qglUniform1f( shadows, 0 );
 
 	if ( !translucent && ( backEnd.vLight->globalShadows || backEnd.vLight->localShadows || r_shadows.GetInteger() == 2 ) && !backEnd.viewDef->IsLightGem() ) {
 		qglUniform1i( softShadowsQuality, r_softShadowsQuality.GetInteger() );
-		float lightRadius = backEnd.vLight->lightDef->parms.radius;
-		if ( lightRadius < 0 )
-			lightRadius = r_softShadowsRadius.GetFloat();
-		qglUniform1f( softShadowsRadius, lightRadius );
+		qglUniform1f( softShadowsRadius, GetEffectiveLightRadius() );
 
 		int sampleK = r_softShadowsQuality.GetInteger();
 		if ( sampleK > 0 ) { // texcoords for screen-space softener filter
@@ -1024,7 +1026,7 @@ void pointInteractionProgram_t::UpdateUniforms( bool translucent ) {
 			}
 		}
 		if ( sampleK < 0 ) { // WIP low res stencil shadows
-			qglUniform2f( renderResolution, glConfig.vidWidth, glConfig.vidHeight );
+			//qglUniform2f( renderResolution, glConfig.vidWidth, glConfig.vidHeight );
 		}
 	} else {
 		qglUniform1i( softShadowsQuality, 0 );
@@ -1053,6 +1055,10 @@ void ambientInteractionProgram_t::AfterLoad() {
 	interactionProgram_t::AfterLoad();
 	minLevel = qglGetUniformLocation( program, "u_minLevel" );
 	gamma = qglGetUniformLocation( program, "u_gamma" );
+	lightFalloffCubemap = qglGetUniformLocation( program, "u_lightFalloffCubemap" );
+	qglUseProgram( program );
+	qglUniform1i( lightFalloffCubemap, 5 );
+	qglUseProgram( 0 );
 }
 
 void ambientInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din ) {
@@ -1060,6 +1066,11 @@ void ambientInteractionProgram_t::UpdateUniforms( const drawInteraction_t *din )
 	qglUniform1f( minLevel, backEnd.viewDef->IsLightGem() ? 0 : r_ambientMinLevel.GetFloat() );
 	qglUniform1f( gamma, backEnd.viewDef->IsLightGem() ? 1 : r_ambientGamma.GetFloat() );
 	qglUniform4fv( lightOrigin, 1, din->worldUpLocal.ToFloatPtr() );
+	if ( backEnd.vLight->lightShader->IsCubicLight() ) {
+		qglUniform1i( lightFalloffCubemap, 1 );
+	} else {
+		qglUniform1i( lightFalloffCubemap, MAX_MULTITEXTURE_UNITS + 1 );
+	}
 	GL_CheckErrors();
 }
 
