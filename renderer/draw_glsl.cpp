@@ -316,7 +316,7 @@ static float GetEffectiveLightRadius() {
 		lightRadius = -r_softShadowsRadius.GetFloat();	//override
 	else if (lightRadius < 0.0)
 		lightRadius = r_softShadowsRadius.GetFloat();	//default value
-	return lightRadius;
+	return lightRadius == 0 ? 1 : lightRadius;
 }
 
 /*
@@ -1337,6 +1337,7 @@ void volumetricLight_t::Draw() {
 
 	qglUniform3fv( 11, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
 	qglUniform1i( 12, r_testVolumetric.GetInteger() );
+	qglUniform1f( 13, GetEffectiveLightRadius() );
 
 	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;
