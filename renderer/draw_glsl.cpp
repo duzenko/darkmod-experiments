@@ -1308,11 +1308,10 @@ void volumetricLight_t::Draw() {
 	Use();
 
 	// MVP matrix uniform
-	idMat4 modelView, proj;
-	memcpy( modelView.ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( modelView ) );
-	memcpy( proj.ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( proj ) );
-	auto MVP = modelView * proj;
-	qglUniformMatrix4fv( 0, 1, false, MVP.ToFloatPtr() );
+	idMat4 MV_P[2];
+	memcpy( MV_P[0].ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( idMat4 ) );
+	memcpy( MV_P[1].ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( idMat4 ) );
+	qglUniformMatrix4fv( 0, 2, false, (GLfloat*)MV_P );
 
 	// light color uniform
 	const float			*lightRegs = vLight->shaderRegisters;
@@ -1324,7 +1323,6 @@ void volumetricLight_t::Draw() {
 		lightColor[2] = backEnd.lightScale * vLight->lightShader->GetVolumetric() * lightRegs[lightStage->color.registers[2]],
 		lightColor[3] = lightRegs[lightStage->color.registers[3]]
 	};
-	qglUniform4fv( 1, 1, lightColor );
 
 	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
@@ -1338,6 +1336,7 @@ void volumetricLight_t::Draw() {
 	qglUniform3fv( 11, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
 	qglUniform1i( 12, r_testVolumetric.GetInteger() );
 	qglUniform1f( 13, GetEffectiveLightRadius() );
+	qglUniform4fv( 14, 1, lightColor );
 
 	GL_Cull( CT_BACK_SIDED );
 	auto tris = backEnd.vLight->frustumTris;
