@@ -413,31 +413,11 @@ void GL_FloatColor( const float *color ) {
 ====================
 GL_Color
 
-Float color 3 component (clamped)
-====================
-*/
-void GL_FloatColor( float r, float g, float b ) {
-	GLfloat parm[3];
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, r );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, g );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, b );
-	qglColor3f( parm[0], parm[1], parm[2] );
-}
-
-/*
-====================
-GL_Color
-
 Float color 4 component (clamped)
 ====================
 */
 void GL_FloatColor( float r, float g, float b, float a ) {
-	GLfloat parm[4];
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, r );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, g );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, b );
-	parm[3] = idMath::ClampFloat( 0.0f, 1.0f, a );
-	qglColor4f( parm[0], parm[1], parm[2], parm[3] );
+	qglColor4f( r, g, b, a );
 }
 
 /*

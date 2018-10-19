@@ -1453,10 +1453,13 @@ void RB_ShowLights( void ) {
 
 		// non-hidden lines
 		if ( r_showLights.GetInteger() >= 2 ) {
-			GL_State( GLS_POLYMODE_LINE | GLS_DEPTHMASK  );
-			qglDisable( GL_DEPTH_TEST );
+			GL_State( GLS_POLYMODE_LINE | GLS_DEPTHMASK | GLS_SRCBLEND_SRC_ALPHA );
 			int c = light->index % 7 + 1;
+			GL_FloatColor( c & 1, c & 2, c & 4, 0.4f );
+			qglDisable( GL_DEPTH_TEST );
+			RB_DrawElementsImmediate( tri );
 			GL_FloatColor( c & 1, c & 2, c & 4 );
+			qglEnable( GL_DEPTH_TEST );
 			RB_DrawElementsImmediate( tri );
 		}
 		int index = backEnd.viewDef->renderWorld->lightDefs.FindIndex( vLight->lightDef );

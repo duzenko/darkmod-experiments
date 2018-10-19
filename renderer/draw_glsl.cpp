@@ -309,7 +309,6 @@ void RB_GLSL_DrawLight_Stencil() {
 	qglUseProgram( 0 );	// if there weren't any globalInteractions, it would have stayed on
 }
 
-
 static float GetEffectiveLightRadius() {
 	float lightRadius = backEnd.vLight->lightDef->parms.radius;
 	if (r_softShadowsRadius.GetFloat() < 0.0)

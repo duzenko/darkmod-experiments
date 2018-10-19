@@ -1077,8 +1077,7 @@ void	GL_FloatColor( const idVec4 &color );
 
 // float type
 void	GL_FloatColor( const float *color );
-void	GL_FloatColor( float r, float g, float b );
-void	GL_FloatColor( float r, float g, float b, float a );
+void	GL_FloatColor( float r, float g, float b, float a = 1 );
 
 // byte type
 void	GL_ByteColor( const byte *color );
