@@ -1622,6 +1622,7 @@ void idImageManager::Init() {
 	currentDepthImage = ImageFromFunction( "_currentDepth", R_DepthTexture ); // #3877. Allow shaders to access scene depth
 	shadowDepthFbo = ImageFromFunction( "_shadowDepthFbo", R_DepthTexture );
 	shadowAtlas = ImageFromFunction( "_shadowAtlas", R_DepthTexture );
+	shadowAtlasAA = ImageFromFunction( "_shadowAtlasAA", R_RGBA8Image );
 	currentStencilFbo = ImageFromFunction( "_currentStencilFbo", R_RGBA8Image );
 	//shadowStencilFbo = ImageFromFunction( "_shadowStencilFbo", R_RGBA8Image ); unused for now
 

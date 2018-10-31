@@ -317,8 +317,10 @@ void CheckCreateShadow() {
 		} else {
 			globalImages->shadowDepthFbo->GenerateAttachment( curWidth, curHeight, GL_DEPTH_STENCIL );
 		}
-	if ( r_shadows.GetInteger() == 2 )
+	if ( r_shadows.GetInteger() == 2 ) {
 		globalImages->shadowAtlas->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), 6 * r_shadowMapSize.GetInteger(), GL_DEPTH );
+		globalImages->shadowAtlasAA->GenerateAttachment( 6 * r_shadowMapSize.GetInteger(), 6 * r_shadowMapSize.GetInteger(), GL_FLOAT_VEC4 );
+	}
 
 	auto check = []( GLuint &fbo ) {
 		int status = qglCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -338,6 +340,7 @@ void CheckCreateShadow() {
 			qglBindFramebuffer( GL_FRAMEBUFFER, fboShadowAtlas );
 			GLuint depthTex = globalImages->shadowAtlas->texnum;
 			qglFramebufferTexture( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTex, 0 );
+			qglFramebufferTexture( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, globalImages->shadowAtlasAA->texnum, 0 );
 			qglFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 			check( fboShadowAtlas );
 		}
@@ -575,6 +578,9 @@ void LeavePrimary() {
 		switch ( r_fboDebug.GetInteger() ) {
 		case 1:
 			globalImages->shadowAtlas->Bind();
+			break;
+		case 4:
+			globalImages->shadowAtlasAA->Bind();
 			break;
 		case 2:
 			globalImages->currentDepthImage->Bind();

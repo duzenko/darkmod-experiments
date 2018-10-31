@@ -639,6 +639,10 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 			qglTexImage2D( GL_TEXTURE_2D, 0, r_fboColorBits.GetInteger() == 15 ? GL_RGB5_A1 : GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr );
 			common->Printf( "Generated framebuffer COLOR attachment: %dx%d\n", width, height );
 			break;
+		case GL_FLOAT_VEC4:
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_FLOAT, nullptr );
+			common->Printf( "Generated framebuffer FLOAT4 attachment: %dx%d\n", width, height );
+			break;
 		// these two are for Intel separate stencil optimization
 		case GL_DEPTH:
 			switch ( r_fboDepthBits.GetInteger() ) {

@@ -317,6 +317,7 @@ PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC qglRenderbufferStorageMultisample;
 PFNGLFRAMEBUFFERTEXTURELAYERPROC		qglFramebufferTextureLayer;
 PFNGLDRAWBUFFERSPROC					qglDrawBuffers;
 PFNGLCOPYIMAGESUBDATANVPROC				qglCopyImageSubData;
+PFNGLCLAMPCOLORPROC						qglClampColor;
 
 // GLSL
 PFNGLATTACHSHADERPROC						qglAttachShader;
@@ -584,7 +585,8 @@ static void R_CheckPortableExtensions( void ) {
 		qglRenderbufferStorageMultisample = ( PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC )GLimp_ExtensionPointer( "glRenderbufferStorageMultisample" );
 		qglFramebufferTextureLayer = ( PFNGLFRAMEBUFFERTEXTURELAYERPROC )GLimp_ExtensionPointer( "glFramebufferTextureLayer" );
 		qglDrawBuffers = ( PFNGLDRAWBUFFERSPROC )GLimp_ExtensionPointer( "glDrawBuffers" );
-		qglCopyImageSubData = ( PFNGLCOPYIMAGESUBDATANVPROC )GLimp_ExtensionPointer( "glCopyImageSubData" );
+		qglCopyImageSubData = (PFNGLCOPYIMAGESUBDATANVPROC)GLimp_ExtensionPointer( "glCopyImageSubData" );
+		qglClampColor = ( PFNGLCLAMPCOLORPROC )GLimp_ExtensionPointer( "glClampColor" );
 	} else {
 		glConfig.framebufferObjectAvailable = R_CheckExtension( "GL_EXT_framebuffer_object" );
 		glConfig.framebufferBlitAvailable = R_CheckExtension( "GL_EXT_framebuffer_blit" );

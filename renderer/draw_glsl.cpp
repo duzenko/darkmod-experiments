@@ -41,6 +41,7 @@ If you have questions concerning this license or the applicable additional terms
 struct shadowMapProgram_t : basicDepthProgram_t {
 	GLint lightOrigin, lightRadius, modelMatrix;
 	virtual	void AfterLoad();
+	void Draw( const drawSurf_t *surf );
 };
 
 struct basicInteractionProgram_t : lightProgram_t {
@@ -96,7 +97,7 @@ shaderProgram_t cubeMapShader;
 oldStageProgram_t oldStageShader;
 depthProgram_t depthShader;
 lightProgram_t stencilShadowShader;
-shadowMapProgram_t shadowMapShader;
+shadowMapProgram_t shadowMapShader, shadowMapAAShader;
 fogProgram_t fogShader;
 blendProgram_t blendShader;
 pointInteractionProgram_t pointInteractionShader;
@@ -322,12 +323,7 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 
 	FB_ToggleShadow( true );
 
-	shadowMapShader.Use();
 	GL_SelectTexture( 0 );
-
-	qglUniform4fv( shadowMapShader.lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
-	qglUniform1f( shadowMapShader.lightRadius, GetEffectiveLightRadius() );
-	backEnd.currentSpace = NULL;
 
 	GL_Cull( CT_TWO_SIDED );
 	qglPolygonOffset( 0, 0 );
@@ -337,40 +333,26 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	qglViewport( page.x, page.y, 6*page.width, page.width );
 	if ( r_useScissor.GetBool() )
 		GL_Scissor( page.x, page.y, 6*page.width, page.width );
-	if ( clear )
-		qglClear( GL_DEPTH_BUFFER_BIT );
+	if ( clear ) {
+		qglClearColor( 0, 0, 0, 0 );
+		qglClear( GL_DEPTH_BUFFER_BIT + GL_COLOR_BUFFER_BIT );
+	}
 	for ( int i = 0; i < 4; i++ )
 		qglEnable( GL_CLIP_PLANE0 + i );
-	for ( ; surf; surf = surf->nextOnLight ) {
-		if ( !surf->material->SurfaceCastsShadow() ) 
-			continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
 
-		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE ) 
-			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+	qglColorMask( true, true, true, true );
+	qglClampColor( GL_CLAMP_FRAGMENT_COLOR, GL_FALSE );
+	qglClampColor( GL_CLAMP_VERTEX_COLOR, GL_FALSE );
+	shadowMapAAShader.Draw( surf );
+	qglColorMask( false, false, false, false );
+	shadowMapShader.Draw( surf );
+	qglColorMask( true, true, true, true );
 
-		float customOffset = surf->space->entityDef->parms.shadowMapOffset + surf->material->GetShadowMapOffset();
-		if ( customOffset != 0 )
-			qglPolygonOffset( customOffset, 0 );
-
-		if ( backEnd.currentSpace != surf->space ) {
-			qglUniformMatrix4fv( shadowMapShader.modelMatrix, 1, false, surf->space->modelMatrix );
-			backEnd.currentSpace = surf->space;
-			backEnd.pc.c_matrixLoads++;
-		}
-
-		shadowMapShader.FillDepthBuffer( surf );
-
-		if ( customOffset != 0 )
-			qglPolygonOffset( 0, 0 );
-	}
 	for ( int i = 0; i < 4; i++ )
 		qglDisable( GL_CLIP_PLANE0 + i );
 
 	qglDisable( GL_POLYGON_OFFSET_FILL );
 	GL_Cull( CT_FRONT_SIDED );
-
-	backEnd.currentSpace = NULL; // or else conflicts with qglLoadMatrixf
-	qglUseProgram( 0 );
 
 	FB_ToggleShadow( false );
 
@@ -487,6 +469,8 @@ void RB_GLSL_DrawInteractions_MultiLight() {
 
 	GL_SelectTexture( 5 );
 	globalImages->shadowAtlas->Bind();
+	GL_SelectTexture( 6 );
+	globalImages->shadowAtlasAA->Bind();
 
 	multiLightShader.Use();
 
@@ -519,6 +503,9 @@ void RB_GLSL_DrawInteractions_MultiLight() {
 	}
 
 	qglUseProgram( 0 );
+
+	GL_SelectTexture( 6 );
+	globalImages->BindNull();
 
 	GL_SelectTexture( 5 );
 	globalImages->BindNull();
@@ -594,6 +581,7 @@ bool R_ReloadGLSLPrograms() {
 	ok &= multiLightShader.Load( "interactionN" );
 	ok &= stencilShadowShader.Load( "stencilShadow" );
 	ok &= shadowMapShader.Load( "shadowMapA" );
+	ok &= shadowMapAAShader.Load( "shadowMapAA" );
 	ok &= oldStageShader.Load( "oldStage" );
 	ok &= depthShader.Load( "depthAlpha" );
 	ok &= fogShader.Load( "fog" );
@@ -1071,9 +1059,11 @@ void multiLightInteractionProgram_t::AfterLoad() {
 	softShadowsRadius = qglGetUniformLocation( program, "u_softShadowsRadius" );
 	auto diffuseTexture = qglGetUniformLocation( program, "u_diffuseTexture" );
 	auto shadowMap = qglGetUniformLocation( program, "u_shadowMap" );
+	auto shadowMapAA = qglGetUniformLocation( program, "u_shadowMapAA" );
 	qglUseProgram( program );
 	qglUniform1i( diffuseTexture, 3 );
 	qglUniform1i( shadowMap, 5 );
+	qglUniform1i( shadowMapAA, 6 );
 	qglUseProgram( 0 );
 }
 
@@ -1280,4 +1270,35 @@ void shadowMapProgram_t::AfterLoad() {
 	lightRadius = qglGetUniformLocation( program, "u_lightRadius" );
 	modelMatrix = qglGetUniformLocation( program, "u_modelMatrix" );
 	acceptsTranslucent = true;
+}
+
+void shadowMapProgram_t::Draw( const drawSurf_t *surf ) {
+	Use();
+	qglUniform4fv( lightOrigin, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
+	qglUniform1f( lightRadius, GetEffectiveLightRadius() );
+	backEnd.currentSpace = NULL;
+	for ( ; surf; surf = surf->nextOnLight ) {
+		if ( !surf->material->SurfaceCastsShadow() )
+			continue;    // some dynamic models use a no-shadow material and for shadows have a separate geometry with an invisible (in main render) material
+
+		if ( surf->dsFlags & DSF_SHADOW_MAP_IGNORE )
+			continue;    // this flag is set by entities with parms.noShadow in R_LinkLightSurf (candles, torches, etc)
+
+		float customOffset = surf->space->entityDef->parms.shadowMapOffset + surf->material->GetShadowMapOffset();
+		if ( customOffset != 0 )
+			qglPolygonOffset( customOffset, 0 );
+
+		if ( backEnd.currentSpace != surf->space ) {
+			qglUniformMatrix4fv( modelMatrix, 1, false, surf->space->modelMatrix );
+			backEnd.currentSpace = surf->space;
+			backEnd.pc.c_matrixLoads++;
+		}
+
+		FillDepthBuffer( surf );
+
+		if ( customOffset != 0 )
+			qglPolygonOffset( 0, 0 );
+	}
+	backEnd.currentSpace = NULL; // or else conflicts with qglLoadMatrixf
+	qglUseProgram( 0 );
 }
