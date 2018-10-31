@@ -325,7 +325,7 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 
 	GL_SelectTexture( 0 );
 
-	GL_Cull( CT_TWO_SIDED );
+	//GL_Cull( CT_TWO_SIDED );
 	qglPolygonOffset( 0, 0 );
 	qglEnable( GL_POLYGON_OFFSET_FILL );
 
@@ -340,12 +340,12 @@ void RB_GLSL_DrawInteractions_ShadowMap( const drawSurf_t *surf, bool clear = fa
 	for ( int i = 0; i < 4; i++ )
 		qglEnable( GL_CLIP_PLANE0 + i );
 
+	qglColorMask( false, false, false, false );
+	shadowMapShader.Draw( surf );
 	qglColorMask( true, true, true, true );
 	qglClampColor( GL_CLAMP_FRAGMENT_COLOR, GL_FALSE );
 	qglClampColor( GL_CLAMP_VERTEX_COLOR, GL_FALSE );
 	shadowMapAAShader.Draw( surf );
-	qglColorMask( false, false, false, false );
-	shadowMapShader.Draw( surf );
 	qglColorMask( true, true, true, true );
 
 	for ( int i = 0; i < 4; i++ )

@@ -617,7 +617,7 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 		qglGenTextures( 1, &texnum );
 	}
 	switch ( format ) {
-		case GL_COLOR:
+	case GL_COLOR: case GL_FLOAT_VEC4:
 			filter = TF_LINEAR;
 			break;
 		default:
@@ -640,7 +640,7 @@ void idImage::GenerateAttachment( int width, int height, GLint format ) {
 			common->Printf( "Generated framebuffer COLOR attachment: %dx%d\n", width, height );
 			break;
 		case GL_FLOAT_VEC4:
-			qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_FLOAT, nullptr );
+			qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_BGRA, GL_FLOAT, nullptr );
 			common->Printf( "Generated framebuffer FLOAT4 attachment: %dx%d\n", width, height );
 			break;
 		// these two are for Intel separate stencil optimization
