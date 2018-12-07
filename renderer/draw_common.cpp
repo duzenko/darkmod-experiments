@@ -228,10 +228,6 @@ to force the alpha test to fail when behind that clip plane
 =====================
 */
 void RB_STD_FillDepthBuffer( drawSurf_t **drawSurfs, int numDrawSurfs ) {
-	// if we are just doing 2D rendering, no need to fill the depth buffer
-	if ( !backEnd.viewDef->viewEntitys ) {
-		return;
-	}
 	GL_CheckErrors();
 	
 	GL_PROFILE( "STD_FillDepthBuffer" );
@@ -850,7 +846,7 @@ int RB_STD_DrawShaderPasses( drawSurf_t **drawSurfs, int numDrawSurfs ) {
 	int	 i;
 
 	// only obey skipAmbient if we are rendering a view
-	if ( backEnd.viewDef->viewEntitys && r_skipAmbient.GetInteger() == 1 ) {
+	if ( backEnd.viewDef->viewEntitys && r_skipAmbient.GetInteger() & 1 || !numDrawSurfs ) {
 		return numDrawSurfs;
 	}
 	GL_PROFILE( "STD_DrawShaderPasses" );
@@ -1204,14 +1200,17 @@ void RB_STD_DrawView( void ) {
 	backEnd.lightScale = r_lightScale.GetFloat();
 	backEnd.overBright = 1.0f;
 
-	// fill the depth buffer and clear color buffer to black except on subviews
-	RB_STD_FillDepthBuffer( drawSurfs, numDrawSurfs );
+	// if we are just doing 2D rendering, no need to fill the depth buffer
+	if ( backEnd.viewDef->viewEntitys ) {
+		// fill the depth buffer and clear color buffer to black except on subviews
+		RB_STD_FillDepthBuffer( drawSurfs, numDrawSurfs );
 
-	if ( r_useGLSL.GetBool() ) {
-		RB_GLSL_DrawInteractions();
-	} else {
-		RB_ARB2_DrawInteractions();
-	}	
+		if ( r_useGLSL.GetBool() ) {
+			RB_GLSL_DrawInteractions();
+		} else {
+			RB_ARB2_DrawInteractions();
+		}
+	}
 		
 	// now draw any non-light dependent shading passes
 	processed = RB_STD_DrawShaderPasses( drawSurfs, numDrawSurfs );

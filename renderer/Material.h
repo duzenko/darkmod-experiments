@@ -547,6 +547,12 @@ public:
 	
 		                // nbohr1more: #4379 lightgem culling
 	bool				IsLightgemSurf( void ) const { return isLightgemSurf; }
+	void				GetAmbientRimColor( idVec4 &color ) const { 
+		if ( ambientRimColor.registers[0] )
+			color.Set( expressionRegisters[ambientRimColor.registers[0]], expressionRegisters[ambientRimColor.registers[1]], expressionRegisters[ambientRimColor.registers[2]], 1 );
+		else
+			color.Zero();
+	}
 
 	float				GetPolygonOffset( void ) const { return polygonOffset; }
 	float				GetShadowMapOffset( void ) const { return shadowmapOffset; }
@@ -650,7 +656,7 @@ private:
 	mutable int			materialFlags;		// material flags
 	
 	decalInfo_t			decalInfo;
-
+	colorStage_t		ambientRimColor;
 
 	mutable	float		sort;				// lower numbered shaders draw before higher numbered
 	deform_t			deform;
