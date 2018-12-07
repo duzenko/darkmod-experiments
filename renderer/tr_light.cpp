@@ -341,7 +341,20 @@ viewLight_t *R_SetLightDefViewLight( idRenderLightLocal *light ) {
 	vLight->lightShader = light->lightShader;
 	vLight->shaderRegisters = NULL;		// allocated and evaluated in R_AddLightSurfaces
 	vLight->noFogBoundary = light->parms.noFogBoundary; // #3664
+
 	vLight->tooBigForShadowMaps = light->parms.lightRadius.Length() > r_maxShadowMapLight.GetFloat();
+	// multi-light shader stuff
+	auto shader = vLight->lightShader;
+	if ( shader->LightCastsShadows() && vLight->tooBigForShadowMaps ) // use stencil shadows
+		vLight->singleLightOnly = true;
+	if ( shader->IsAmbientLight() ) { // custom ambient projection
+		vLight->singleLightOnly = !strstr( shader->GetName(), "ambientlightnfo" )
+			&& !strstr( shader->GetName(), "ambient_biground" );
+	}
+	if ( !shader->IsAmbientLight() && !strstr( shader->GetName(), "biground" ) ) // custom point light projection
+		vLight->singleLightOnly = true;
+	if(vLight->lightShader->IsFogLight() || vLight->lightShader->IsBlendLight())
+		vLight->singleLightOnly = true;
 
 	// link the view light
 	vLight->next = tr.viewDef->viewLights;
@@ -416,6 +429,10 @@ void idRenderWorldLocal::CreateLightDefInteractions( idRenderLightLocal *ldef ) 
 			// some big outdoor meshes are flagged to not create any dynamic interactions
 			// when the level designer knows that nearby moving lights shouldn't actually hit them
 			if ( edef->parms.noDynamicInteractions && edef->world->generateAllInteractionsCalled ) {
+				continue;
+			}
+
+			if ( r_singleEntity.GetInteger() >= 0 && r_singleEntity.GetInteger() != edef->index ) {
 				continue;
 			}
 			
@@ -973,16 +990,20 @@ void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const 
 	drawSurf->material = shader;
 	drawSurf->scissorRect = scissor;
 	drawSurf->sort = shader->GetSort() + tr.sortOffset;
-	
-	if ( soft_particle_radius != -1.0f )	// #3878
-	{
-		drawSurf->dsFlags = DSF_SOFT_PARTICLE;
+	drawSurf->dsFlags = 0;
+#ifdef MULTI_LIGHT_IN_FRONT
+	if( scissor.IsEmpty() )
+		drawSurf->dsFlags |= DSF_SHADOW_MAP_ONLY;
+#endif
+	if ( soft_particle_radius != -1.0f ) {	// #3878
+		drawSurf->dsFlags |= DSF_SOFT_PARTICLE;
 		drawSurf->particle_radius = soft_particle_radius;
-	} 
-	else
-	{
-		drawSurf->dsFlags = 0;
+	} else {
 		drawSurf->particle_radius = 0.0f;
+	}
+	if ( space->entityDef && space->entityDef->parms.noShadow ) {
+		drawSurf->dsFlags |= DSF_SHADOW_MAP_IGNORE;		// multi-light shader optimization
+		tr.pc.c_noshadowSurfs++;
 	}
 
 	// bumping this offset each time causes surfaces with equal sort orders to still
@@ -1106,6 +1127,30 @@ void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const 
 	// adds for this view
 }
 
+#ifdef MULTI_LIGHT_IN_FRONT
+/*
+===============
+R_HasVisibleShadows
+
+Do we need to add offscreen geometry? Is it casting shadows into the view frustum?
+===============
+*/
+static bool R_HasVisibleShadows( viewEntity_t *vEntity ) {
+	if ( !r_shadowMapSinglePass.GetBool() )
+		return false;
+	auto &def = *vEntity->entityDef;
+	for ( auto inter = def.firstInteraction; inter != NULL && !inter->IsEmpty(); inter = inter->entityNext ) {
+		if ( inter->lightDef->viewCount != tr.viewCount ) {
+			continue;
+		}
+		idScreenRect shadowRect;
+		if ( inter->HasActive( shadowRect ) )
+			return true;
+	}
+	return false;
+}
+#endif
+
 /*
 ===============
 R_AddAmbientDrawsurfs
@@ -1187,7 +1232,12 @@ static void R_AddAmbientDrawsurfs( viewEntity_t *vEntity ) {
 			}
 		}
 
-		if ( !R_CullLocalBox( tri->bounds, vEntity->modelMatrix, 5, tr.viewDef->frustum ) ) {
+		if ( 
+			!R_CullLocalBox( tri->bounds, vEntity->modelMatrix, 5, tr.viewDef->frustum ) 
+#ifdef MULTI_LIGHT_IN_FRONT
+			|| R_HasVisibleShadows( vEntity )
+#endif
+		) {
 
 			def.visibleCount = tr.viewCount;
 
@@ -1323,7 +1373,11 @@ void R_AddModelSurfaces( void ) {
 		}
 
 		// add the ambient surface if it has a visible rectangle
-		if ( !vEntity->scissorRect.IsEmpty() ) {
+		if ( !vEntity->scissorRect.IsEmpty() 
+#ifdef MULTI_LIGHT_IN_FRONT
+			|| R_HasVisibleShadows( vEntity )
+#endif
+		) {
 			model = R_EntityDefDynamicModel( &def );
 			if ( model == NULL || model->NumSurfaces() <= 0 ) {
 				if ( def.parms.timeGroup ) {
@@ -1389,6 +1443,7 @@ void R_RemoveUnecessaryViewLights( void ) {
 		// if the light didn't have any lit surfaces visible, there is no need to
 		// draw any of the shadows.  We still keep the vLight for debugging
 		// draws
+		if ( r_singleLight.GetInteger() < 0 ) // duzenko 2018: I need a way to override this for debugging 
 		if ( !vLight->localInteractions && !vLight->globalInteractions && !vLight->translucentInteractions ) {
 			vLight->localShadows = NULL;
 			vLight->globalShadows = NULL;

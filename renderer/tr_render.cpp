@@ -613,9 +613,8 @@ void RB_CreateSingleDrawInteractions( const drawSurf_t *surf ) {
 	}
 
 	if ( vLight->lightShader->IsAmbientLight() ) {
-		if ( r_skipAmbient.GetInteger() == 2 ) {
+		if ( r_skipAmbient.GetInteger() & 2 )
 			return;
-		}
 	} else if ( r_skipInteractions.GetBool() ) {
 		return;
 	}
@@ -940,7 +939,7 @@ void RB_DrawView( void ) {
 
 	// if there aren't any drawsurfs, do nothing
 	if ( !backEnd.viewDef->numDrawSurfs ) {
-		return;
+		//return;
 	}
 
 	// skip render bypasses everything that has models, assuming

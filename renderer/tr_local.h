@@ -22,11 +22,6 @@
 
 class idRenderWorldLocal;
 
-// everything that is needed by the backend needs
-// to be double buffered to allow it to run in
-// parallel on a dual cpu machine
-const int SMP_FRAMES = 1;
-
 const int FALLOFF_TEXTURE_SIZE =	64;
 
 const float	DEFAULT_FOG_DISTANCE = 500.0f;
@@ -111,6 +106,8 @@ static const int DSF_SOFT_PARTICLE = 2; // #3878
 static const int DSF_SHADOW_MAP_IGNORE = 4; // #4641
 static const int DSF_SHADOW_MAP_ONLY = 8; // #4641
 
+#define MULTI_LIGHT_IN_FRONT 1 // keep track of the multi light front renderer changes
+
 typedef struct drawSurf_s {
 	const srfTriangles_t	*frontendGeo;			// do not use in the backend; may be modified by the frontend
 	int						numIndexes;				// these four are frame-safe copies for backend use
@@ -119,11 +116,16 @@ typedef struct drawSurf_s {
 	vertCacheHandle_t		shadowCache;			// shadowCache_t
 
 	const struct viewEntity_s *space;
-	const idMaterial		*material;	// may be NULL for shadow volumes
-	float					sort;		// material->sort, modified by gui / entity sort offsets
+	const idMaterial		*material;			// may be NULL for shadow volumes
+	float					sort;				// material->sort, modified by gui / entity sort offsets
 	const float				*shaderRegisters;	// evaluated and adjusted for referenceShaders
 	/*const*/ struct drawSurf_s	*nextOnLight;	// viewLight chains
-	idScreenRect			scissorRect;	// for scissor clipping, local inside renderView viewport
+
+#ifdef MULTI_LIGHT_IN_FRONT
+	int						*onLights;			// light/entity bounds intersections, array of light-def index, terminated by -1
+#endif // MULTI_LIGHT_IN_FRONT
+
+	idScreenRect			scissorRect;		// for scissor clipping, local inside renderView viewport
 	int						dsFlags;			// DSF_VIEW_INSIDE_SHADOW, etc
 	vertCacheHandle_t		dynamicTexCoords;	// float * in vertex cache memory
 	// specular directions for non vertex program cards, skybox texcoords, etc
@@ -446,6 +448,9 @@ typedef struct viewDef_s {
 	drawSurf_t 			**drawSurfs;			// we don't use an idList for this, because
 	int					numDrawSurfs;			// it is allocated in frame temporary memory
 	int					maxDrawSurfs;			// may be resized
+#ifdef MULTI_LIGHT_IN_FRONT
+	int					numOffscreenSurfs;			// light occluders
+#endif
 
 	struct viewLight_s	*viewLights;			// chain of all viewLights effecting view
 	struct viewEntity_s	*viewEntitys;			// chain of all viewEntities effecting view, including off screen ones casting shadows
@@ -627,7 +632,7 @@ typedef struct {
 	int		c_deformedIndexes;		// idMD5Mesh::GenerateSurface
 	int		c_tangentIndexes;		// R_DeriveTangents()
 	int		c_entityUpdates, c_lightUpdates, c_entityReferences, c_lightReferences;
-	int		c_guiSurfs;
+	int		c_guiSurfs, c_noshadowSurfs;
 	int		frontEndMsec;			// sum of time in all RE_RenderScene's in a frame
 	int		frontEndMsecLast;		// time in last RE_RenderScene
 } performanceCounters_t;
@@ -1031,6 +1036,9 @@ extern idCVar r_softShadowsQuality;
 extern idCVar r_softShadowsRadius;
 
 extern idCVar r_useAnonreclaimer;
+#ifdef MULTI_LIGHT_IN_FRONT
+extern idCVar r_shadowMapSinglePass;
+#endif
 
 // stgatilov ROQ
 extern idCVar r_cinematic_legacyRoq;
@@ -1728,7 +1736,13 @@ void RB_SetDefaultGLState( void );
 void RB_SetGL2D( void );
 
 // write a comment to the r_logFile if it is enabled
-void RB_LogComment( const char *comment, ... ) id_attribute( ( format( printf, 1, 2 ) ) );
+//void RB_LogComment( const char *comment, ... ) id_attribute( (format( printf, 1, 2 )) );
+// duzenko: switch to define so that we have a chance to skip the function calls getting the parameters
+#define RB_LogComment(comment, ...)						\
+	if ( tr.logFile ) {									\
+		fprintf( tr.logFile, "// " );					\
+		fprintf( tr.logFile, comment, ##__VA_ARGS__ );	\
+	}													
 
 void RB_ShowImages( void );
 

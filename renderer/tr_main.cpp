@@ -1022,23 +1022,48 @@ R_SortDrawSurfs
 =================
 */
 static void R_SortDrawSurfs( void ) {
+	if ( !tr.viewDef->numDrawSurfs ) // otherwise an assert fails in debug builds
+		return;
 	// sort the drawsurfs by sort type, then orientation, then shader
 	qsort( tr.viewDef->drawSurfs, tr.viewDef->numDrawSurfs, sizeof( tr.viewDef->drawSurfs[0] ),
 		R_QsortSurfaces );
-	static idCVar r_sortInteractions( "r_sortInteractions", "0", CVAR_ARCHIVE | CVAR_BOOL, "" );
-	if ( r_sortInteractions.GetBool() ) {
-		auto compare = [](const drawSurf_t &a, const drawSurf_t &b) -> bool {
-			if (a.space != b.space)
-				return a.space < b.space;
-			if (a.material != b.material)
-				return a.material < b.material;
-			return false;
-		};
-		for ( auto *light = tr.viewDef->viewLights; light; light = light->next ) {
-			LinkedListBubbleSort(&light->globalInteractions, &drawSurf_s::nextOnLight, compare);
-			LinkedListBubbleSort(&light->localInteractions, &drawSurf_s::nextOnLight, compare);
-		}
+#ifdef MULTI_LIGHT_IN_FRONT // calculate the light/entity bounds intersections here to reduce the CPU load in the backend
+	idList<int> lDefInd;	// FIXME this has been calculated already somewhere - make use of that
+	for ( int i = 0; i < tr.viewDef->numDrawSurfs; i++ ) {
+		auto surf = tr.viewDef->drawSurfs[i];
+		auto entDef = surf->space->entityDef;				// happens to be null - font materials, etc?
+		if ( entDef )	// even if not used, still zero the onLights (else SMP crash when toggling)
+			for ( auto vLight = tr.viewDef->viewLights; vLight; vLight = vLight->next ) {
+				idVec3 localLightOrigin;
+				R_GlobalPointToLocal( surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
+				if ( R_CullLocalBox( surf->frontendGeo->bounds, entDef->modelMatrix, 6, vLight->lightDef->frustum ) )
+					continue;
+				lDefInd.Append( vLight->lightDef->index );
+			}
+
+		if ( lDefInd.Num() ) { // expect to at least include the main ambient light
+			lDefInd.Append( -1 );
+			auto frameMem = (int *)R_FrameAlloc( sizeof( int ) * lDefInd.Num() );
+			memcpy( frameMem, lDefInd.Ptr(), lDefInd.MemoryUsed() );
+			surf->onLights = frameMem;
+			lDefInd.SetNum( 0, false );
+		} else
+			surf->onLights = NULL;
 	}
+	// filter the offscreen shadow-only surfaces into a separate array
+	idList<drawSurf_t*> visible( tr.viewDef->numDrawSurfs ), offscreen( tr.viewDef->numDrawSurfs );
+	for ( int i = 0; i < tr.viewDef->numDrawSurfs; i++ ) {
+		auto surf = tr.viewDef->drawSurfs[i];
+		if ( surf->dsFlags & DSF_SHADOW_MAP_ONLY )
+			offscreen.Append( surf );
+		else
+			visible.Append( surf );
+	}
+	tr.viewDef->numDrawSurfs = visible.Num();
+	tr.viewDef->numOffscreenSurfs = offscreen.Num();
+	memcpy( tr.viewDef->drawSurfs, visible.Ptr(), visible.MemoryUsed() );
+	memcpy( &tr.viewDef->drawSurfs[tr.viewDef->numDrawSurfs], offscreen.Ptr(), offscreen.MemoryUsed() );
+#endif // MULTI_LIGHT_IN_FRONT
 }
 
 
