@@ -91,6 +91,7 @@ void idMaterial::CommonInit() {
 	blendLight = false;
 	ambientLight = false;
 	cubicLight = false;  //nbohr1more #3881: cubemap based lighting
+	volumetricLight = 0;
 	noFog = false;
 	hasSubview = false;
 	allowOverlays = true;
@@ -1977,7 +1978,11 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			continue;
 		}
 		else if ( !token.Icmp( "volumetricLight" ) ) {
-			volumetricLight = true;
+			if ( !src.ReadTokenOnLine( &token ) ) {
+				volumetricLight = 60;
+				continue;
+			}
+			volumetricLight = token.GetIntValue();
 			continue;
 		}
 		// mirror

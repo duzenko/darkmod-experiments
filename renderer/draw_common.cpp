@@ -1024,7 +1024,6 @@ void RB_VolumetricPass() {
 	auto vLight = backEnd.vLight;
 	if ( vLight->lightShader->IsAmbientLight() || !vLight->shadowMapIndex )
 		return;
-	GL_CheckErrors();
 	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_ALWAYS );
 
 	GL_SelectTexture( 0 );
@@ -1046,56 +1045,35 @@ void RB_VolumetricPass() {
 	memcpy( MV_P[0].ToFloatPtr(), backEnd.viewDef->worldSpace.modelViewMatrix, sizeof( idMat4 ) );
 	memcpy( MV_P[1].ToFloatPtr(), backEnd.viewDef->projectionMatrix, sizeof( idMat4 ) );
 	qglUniformMatrix4fv( 0, 2, false, (GLfloat*) MV_P );
-	GL_CheckErrors();
 
 	// light color uniform
 	const float* lightRegs = vLight->shaderRegisters;
 	const idMaterial* lightShader = vLight->lightShader;
 	const shaderStage_t* lightStage = lightShader->GetStage( 0 );
-	float lightColor[4] = {
-		lightColor[0] = 1,// backEnd.lightScale* vLight->lightShader->GetVolumetric()* lightRegs[lightStage->color.registers[0]],
-		lightColor[1] = 1,// backEnd.lightScale* vLight->lightShader->GetVolumetric()* lightRegs[lightStage->color.registers[1]],
-		lightColor[2] = 0,// backEnd.lightScale* vLight->lightShader->GetVolumetric()* lightRegs[lightStage->color.registers[2]],
-		lightColor[3] = lightRegs[lightStage->color.registers[3]]
-	};
+	idVec4 lightColor;
+	lightColor.x = backEnd.lightScale * lightRegs[lightStage->color.registers[0]];
+	lightColor.y = backEnd.lightScale * lightRegs[lightStage->color.registers[1]];
+	lightColor.z = backEnd.lightScale * lightRegs[lightStage->color.registers[2]];
+	lightColor.w = lightRegs[lightStage->color.registers[3]];
 
 	qglUniform3fv( 2, 1, backEnd.viewDef->renderView.vieworg.ToFloatPtr() );
-	GL_CheckErrors();
 	qglUniformMatrix4fv( 3, 1, false, backEnd.vLight->lightProject[0].ToFloatPtr() );
-	GL_CheckErrors();
 	qglUniform4fv( 4, 6, backEnd.vLight->lightDef->frustum[0].ToFloatPtr() );
-	GL_CheckErrors();
 
 	auto& page = ShadowAtlasPages[vLight->shadowMapIndex - 1];
 	idVec4 v( page.x, page.y, 0, page.width );
 	v /= 6 * r_shadowMapSize.GetFloat();
 	qglUniform4fv( 10, 1, v.ToFloatPtr() );
-	GL_CheckErrors();
 
-	static idCVar r_testVolumetric( "r_testVolumetric", "60", CVAR_INTEGER | CVAR_ARCHIVE, "" );
-	
 	qglUniform3fv( 11, 1, backEnd.vLight->globalLightOrigin.ToFloatPtr() );
-	GL_CheckErrors();
-	qglUniform1i( 12, r_testVolumetric.GetInteger() );
-	GL_CheckErrors();
+	qglUniform1i( 12, vLight->lightShader->IsVolumetric() );
 	qglUniform1f( 13, GetEffectiveLightRadius() );
-	GL_CheckErrors();
-	qglUniform4fv( 14, 1, lightColor );
-	GL_CheckErrors();
+	qglUniform4fv( 14, 1, lightColor.ToFloatPtr() );
 
 	GL_Cull( CT_BACK_SIDED );
-	auto tris = backEnd.vLight->frustumTris;
-	RB_DrawElementsImmediate( tris );
-	GL_CheckErrors();
-
-	GL_Cull( CT_FRONT_SIDED );
-	GLSLProgram::Deactivate();
-	GL_CheckErrors();
-
-	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_EQUAL );
-
-/*	drawSurf_t			ds;
-	auto *frustumTris = backEnd.vLight->frustumTris;
+	
+	drawSurf_t			ds;
+	auto* frustumTris = backEnd.vLight->frustumTris;
 
 	// if we ran out of vertex cache memory, skip it
 	if ( !frustumTris->ambientCache.IsValid() ) {
@@ -1103,20 +1081,19 @@ void RB_VolumetricPass() {
 	}
 	memset( &ds, 0, sizeof( ds ) );
 
-	if ( !backEnd.vLight->noFogBoundary ) { // No need to create the drawsurf if we're not fogging the bounding box -- #3664
-		ds.space = &backEnd.viewDef->worldSpace;
-		//ds.backendGeo = frustumTris;
-		ds.frontendGeo = frustumTris; // FIXME JIC
-		ds.numIndexes = frustumTris->numIndexes;
-		ds.indexCache = frustumTris->indexCache;
-		ds.ambientCache = frustumTris->ambientCache;
-		ds.scissorRect = backEnd.viewDef->scissor;
-	}
-	programManager->oldStageShader->Activate();
-	OldStageUniforms* oldStageUniforms = programManager->oldStageShader->GetUniformGroup<OldStageUniforms>();
-	oldStageUniforms->colorMul.Set( 1, 1, 1, 1 );
-	oldStageUniforms->colorAdd.Set( 0, 0, 0, 0 );
-	RB_RenderDrawSurfChainWithFunction( &ds, RB_T_BasicFog );*/
+	ds.space = &backEnd.viewDef->worldSpace;
+	ds.frontendGeo = frustumTris; 
+	ds.numIndexes = frustumTris->numIndexes;
+	ds.indexCache = frustumTris->indexCache;
+	ds.ambientCache = frustumTris->ambientCache;
+	ds.scissorRect = backEnd.viewDef->scissor;
+	RB_T_RenderTriangleSurface( &ds );
+	GL_CheckErrors();
+
+	GL_Cull( CT_FRONT_SIDED );
+	GLSLProgram::Deactivate();
+
+	GL_State( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHMASK | GLS_DEPTHFUNC_EQUAL );
 }
 
 /*
