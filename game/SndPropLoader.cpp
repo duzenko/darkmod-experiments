@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 /******************************************************************************/
 /*                                                                            */
@@ -342,7 +342,7 @@ bool CsndPropLoader::MapEntBounds( idBounds &bounds, idMapEntity *mapEnt )
 		// TRUE, this would force the door model to have a .cm file, otherwise
 		// LoadModel would return 0 in this case. (precache = true, no .cm file)
 		cmHandle = collisionModelManager->LoadModel( modelName, false );
-		if ( cmHandle == 0)
+		if ( cmHandle < 0 )
 		{
 			DM_LOG(LC_SOUND, LT_WARNING)LOGSTRING("Failed to load collision model for entity %s with model %s.  Entity will be ignored.\r", args.GetString("name"), modelName);
 			returnval = false;
@@ -351,20 +351,8 @@ bool CsndPropLoader::MapEntBounds( idBounds &bounds, idMapEntity *mapEnt )
 
 		collisionModelManager->GetModelBounds( cmHandle, bounds );
 		DM_LOG(LC_SOUND, LT_DEBUG)LOGSTRING("Found bounds with volume %f for entity %s with model %s.\r", bounds.GetVolume(), args.GetString("name"), modelName);
-		// Rotation copied from Entity::ParseSpawnArgsToRenderEntity()
-		// get the rotation matrix in either full form, or single angle form
-		if ( !args.GetMatrix( "rotation", "1 0 0 0 1 0 0 0 1", rotation ) ) 
-			{
-				angle = args.GetFloat( "angle" );
-				if ( angle != 0.0f ) 
-				{
-					rotation = idAngles( 0.0f, angle, 0.0f ).ToMat3();
-				}
-				else 
-				{
-						rotation.Identity();
-				}
-			}
+		gameEdit->ParseSpawnArgsToAxis( &args, rotation );
+
 		bounds.RotateSelf(rotation);
 		// Translate and rotate the bounds to be in sync with the model
 		bounds.TranslateSelf(origin);
@@ -565,7 +553,6 @@ void CsndPropLoader::FillAPGfromAP ( int numAreas )
 	int i, j, area(0);
 
 	m_AreaPropsG.Clear();
-
 	m_AreaPropsG.SetNum( numAreas );
 
 	DM_LOG(LC_SOUND, LT_DEBUG)LOGSTRING("Allocated m_AreaPropsG for %d areas\r", numAreas );
@@ -956,10 +943,10 @@ void CsndPropLoader::Shutdown( void )
 	DestroyAreasData();
 
 	// clear the area properties
-	m_AreaProps.Clear();
+	m_AreaProps.ClearFree();
 
 	m_bDefaultSpherical = false;
 	m_bLoadSuccess = false;
 
-	m_AreaPropsG.Clear();
+	m_AreaPropsG.ClearFree();
 }

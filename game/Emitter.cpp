@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /*
@@ -142,16 +141,6 @@ idFuncEmitter::Present
 */
 void idFuncEmitter::Present( void ) 
 {
-
-   //nbohr1more: #4372: Allow lod_bias args for func_emitter entities
-   float lodbias = cv_lod_bias.GetFloat();
-	
-	if ( (m_MinLODBias > 0 || m_MaxLODBias < 10) && (lodbias < m_MinLODBias || lodbias > m_MaxLODBias) )
-	   {
-		renderEntity.bounds.Zero();
-		BecomeInactive( TH_UPDATEVISUALS );
-	   } 
-	
 	if( m_bFrobable )
 	{
 		UpdateFrobState();
@@ -174,6 +163,10 @@ void idFuncEmitter::Present( void )
 	
 	// give each instance of the particle effect a unique seed -- SteveL #3945
 	renderEntity.shaderParms[ SHADERPARM_DIVERSITY ] = gameLocal.random.CRandomFloat();
+
+	if ( !renderEntity.hModel || IsHidden() ) { // copy the default behaviour in idEntity::Present - don't re-create render entities when hidden by LOD triggers
+		return;
+	}
 
 	if ( renderEntity.hModel ) {
 		renderEntity.bounds = renderEntity.hModel->Bounds( &renderEntity );

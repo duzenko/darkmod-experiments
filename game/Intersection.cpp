@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -32,6 +32,10 @@ EIntersection IntersectLinesegmentLightEllipsoid(const idVec3 Segment[LSG_COUNT]
 	float fInvA;
     float afT[2] = { 0.0, 0.0 }; // OrbWeaver: "may be used uninitialised" warning
 	float riQuantity;
+
+	//stgatilov: don't intersect with singular ellipsoid (creates Inf/Nan)
+	if (Ellipsoid[ELA_AXIS].x == 0 || Ellipsoid[ELA_AXIS].y == 0 || Ellipsoid[ELA_AXIS].z == 0)
+		return INTERSECT_OUTSIDE;
 
     // set up quadratic Q(t) = a*t^2 + 2*b*t + c
 	idMat3 A(1/(Ellipsoid[ELA_AXIS].x*Ellipsoid[ELA_AXIS].x), 0, 0,

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -23,7 +23,7 @@
 #include "dmap.h"
 #ifdef WIN32
 #include <windows.h>
-#include <GL/gl.h>
+//#include <GL/gl.h>
 #endif
 
 /*
@@ -170,12 +170,6 @@ static	void LinkEdge( optEdge_t *e ) {
 	e->v2->edges = e;
 }
 
-#ifdef __linux__
-
-optVertex_t *FindOptVertex( idDrawVert *v, optimizeGroup_t *opt );
-
-#else
-
 /*
 ================
 FindOptVertex
@@ -187,8 +181,8 @@ static optVertex_t *FindOptVertex( idDrawVert *v, optimizeGroup_t *opt ) {
 	optVertex_t	*vert;
 
 	// deal with everything strictly as 2D
-	x = v->xyz * opt->axis[0];
-	y = v->xyz * opt->axis[1];
+	x = (float)idVec3d(v->xyz).Dot(idVec3d(opt->axis[0]));
+	y = (float)idVec3d(v->xyz).Dot(idVec3d(opt->axis[1]));
 
 	// should we match based on the t-junction fixing hash verts?
 	for ( i = 0 ; i < numOptVerts ; i++ ) {
@@ -215,8 +209,6 @@ static optVertex_t *FindOptVertex( idDrawVert *v, optimizeGroup_t *opt ) {
 
 	return vert;
 }
-
-#endif
 
 /*
 ================
@@ -299,6 +291,7 @@ static	void DrawEdges( optIsland_t *island ) {
 	}
 	qglEnd();
 	qglFlush();
+	qglFinish();
 
 //	GLimp_SwapBuffers();
 }
@@ -311,18 +304,25 @@ VertexBetween
 =================
 */
 static bool VertexBetween( const optVertex_t *p1, const optVertex_t *v1, const optVertex_t *v2 ) {
-	idVec3	d1, d2;
+	idVec3d	d1, d2;
 	float	d;
 
-	d1 = p1->pv - v1->pv;
-	d2 = p1->pv - v2->pv;
-	d = d1 * d2;
+	d1 = idVec3d(p1->pv) - idVec3d(v1->pv);
+	d2 = idVec3d(p1->pv) - idVec3d(v2->pv);
+	d = (float) d1.Dot(d2);
 	if ( d < 0 ) {
 		return true;
 	}
 	return false;
 }
 
+
+idCVar dmap_optimizeExactTjuncIntersection(
+	"dmap_optimizeExactTjuncIntersection", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"Ensure that exact T-junctions are computed exactly in "
+	"EdgeIntersection function of optimize triangulation algorithm "
+	"(small improvement in TDM 2.10 and later)"
+);
 
 /*
 ====================
@@ -336,19 +336,37 @@ Will return NULL if the lines are colinear
 */
 static	optVertex_t *EdgeIntersection( const optVertex_t *p1, const optVertex_t *p2, 
 									  const optVertex_t *l1, const optVertex_t *l2, optimizeGroup_t *opt ) {
-	float	f;
+	double	f;
 	idDrawVert	*v;
-	idVec3	dir1, dir2, cross1, cross2;
+	idVec3d	dir1, dir2, cross1, cross2;
 
-	dir1 = p1->pv - l1->pv;
-	dir2 = p1->pv - l2->pv;
+	dir1 = idVec3d(p1->pv) - idVec3d(l1->pv);
+	dir2 = idVec3d(p1->pv) - idVec3d(l2->pv);
 	cross1 = dir1.Cross( dir2 );
 
-	dir1 = p2->pv - l1->pv;
-	dir2 = p2->pv - l2->pv;
+	dir1 = idVec3d(p2->pv) - idVec3d(l1->pv);
+	dir2 = idVec3d(p2->pv) - idVec3d(l2->pv);
 	cross2 = dir1.Cross( dir2 );
 
-	if ( cross1[2] - cross2[2] == 0 ) {
+	if (dmap_optimizeExactTjuncIntersection.GetBool() && cross1.z != 0.0 && cross2.z != 0.0) {
+		//stgatilov: check if l1 or l2 is T-junction
+		dir1 = idVec3d(l1->pv) - idVec3d(p1->pv);
+		dir2 = idVec3d(l1->pv) - idVec3d(p2->pv);
+		idVec3d cross1x = dir1.Cross( dir2 );
+		dir1 = idVec3d(l2->pv) - idVec3d(p1->pv);
+		dir2 = idVec3d(l2->pv) - idVec3d(p2->pv);
+		idVec3d cross2x = dir1.Cross( dir2 );
+		if (cross1x.z == 0.0 || cross2x.z == 0.0) {
+			//intersect lines in opposite direction
+			//so that T-junction is found exactly
+			idSwap(l1, p1);
+			idSwap(l2, p2);
+			cross1 = cross1x;
+			cross2 = cross2x;
+		}
+	}
+
+	if ( float(cross1[2] - cross2[2]) == 0 ) {
 		return NULL;
 	}
 
@@ -358,8 +376,8 @@ static	optVertex_t *EdgeIntersection( const optVertex_t *p1, const optVertex_t *
 	v = (idDrawVert *)Mem_Alloc( sizeof( *v ) );
 	memset( v, 0, sizeof( *v ) );
 
-	v->xyz = p1->v.xyz * ( 1.0 - f ) + p2->v.xyz * f;
-	v->normal = p1->v.normal * ( 1.0 - f ) + p2->v.normal * f;
+	v->xyz = idVec3( idVec3d(p1->v.xyz) * ( 1.0 - f ) + idVec3d(p2->v.xyz) * f );
+	v->normal = idVec3( idVec3d(p1->v.normal) * ( 1.0 - f ) + idVec3d(p2->v.normal) * f );
 	v->normal.Normalize();
 	v->st[0] = p1->v.st[0] * ( 1.0 - f ) + p2->v.st[0] * f;
 	v->st[1] = p1->v.st[1] * ( 1.0 - f ) + p2->v.st[1] * f;
@@ -515,6 +533,16 @@ static	int LengthSort( const void *a, const void *b ) {
 	return 0;
 }
 
+idCVar dmap_optimizeTriangulation(
+	"dmap_optimizeTriangulation", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"Controls which algorithm is used to optimize triangulations (see #5488):\n"
+	"  0 - slow greedy algorithm: insert edges by length increasing\n"
+	"      (default in TDM 2.09 and before)\n"
+	"  1 - fast algorithm based on planar graph and ear cutting triangulation\n"
+	"      (default in TDM 2.10 and after)\n"
+);
+
+static void AddTriangulationEdges( optIsland_t *island );
 /*
 ==================
 AddInteriorEdges
@@ -523,6 +551,11 @@ Add all possible edges between the verts
 ==================
 */
 static	void AddInteriorEdges( optIsland_t *island ) {
+	if (dmap_optimizeTriangulation.GetBool()) {
+		AddTriangulationEdges( island );
+		return;
+	}
+
 	int		c_addedEdges;
 	optVertex_t	*vert, *vert2;
 	int		c_verts;
@@ -794,26 +827,26 @@ consider it invalid if any one of the possibilities is invalid.
 =================
 */
 static bool IsTriangleValid( const optVertex_t *v1, const optVertex_t *v2, const optVertex_t *v3 ) {
-	idVec3	d1, d2, normal;
+	idVec3d	d1, d2, normal;
 
-	d1 = v2->pv - v1->pv;
-	d2 = v3->pv - v1->pv;
+	d1 = idVec3d(v2->pv) - idVec3d(v1->pv);
+	d2 = idVec3d(v3->pv) - idVec3d(v1->pv);
 	normal = d1.Cross( d2 );
-	if ( normal[2] <= 0 ) {
+	if ( float(normal[2]) <= 0 ) {
 		return false;
 	}
 
-	d1 = v3->pv - v2->pv;
-	d2 = v1->pv - v2->pv;
+	d1 = idVec3d(v3->pv) - idVec3d(v2->pv);
+	d2 = idVec3d(v1->pv) - idVec3d(v2->pv);
 	normal = d1.Cross( d2 );
-	if ( normal[2] <= 0 ) {
+	if ( float(normal[2]) <= 0 ) {
 		return false;
 	}
 
-	d1 = v1->pv - v3->pv;
-	d2 = v2->pv - v3->pv;
+	d1 = idVec3d(v1->pv) - idVec3d(v3->pv);
+	d2 = idVec3d(v2->pv) - idVec3d(v3->pv);
 	normal = d1.Cross( d2 );
-	if ( normal[2] <= 0 ) {
+	if ( float(normal[2]) <= 0 ) {
 		return false;
 	}
 
@@ -830,12 +863,10 @@ Returns false if it is either front or back facing
 */
 static bool IsTriangleDegenerate( const optVertex_t *v1, const optVertex_t *v2, const optVertex_t *v3 ) {
 #if 1
-	idVec3	d1, d2, normal;
-
-	d1 = v2->pv - v1->pv;
-	d2 = v3->pv - v1->pv;
-	normal = d1.Cross( d2 );
-	if ( normal[2] == 0 ) {
+	auto d1 = idVec3d(v2->pv) - idVec3d(v1->pv);
+	auto d2 = idVec3d(v3->pv) - idVec3d(v1->pv);
+	idVec3d normal = d1.Cross( d2 );
+	if ( float(normal[2]) == 0 ) {
 		return true;
 	}
 	return false;
@@ -853,29 +884,29 @@ Tests if a 2D point is inside an original triangle
 ==================
 */
 static bool PointInTri( const idVec3 &p, const mapTri_t *tri, optIsland_t *island ) {
-	idVec3	d1, d2, normal;
+	idVec3d	d1, d2, normal;
 
 	// the normal[2] == 0 case is not uncommon when a square is triangulated in
 	// the opposite manner to the original
 
-	d1 = tri->optVert[0]->pv - p;
-	d2 = tri->optVert[1]->pv - p;
+	d1 = idVec3d(tri->optVert[0]->pv) - idVec3d(p);
+	d2 = idVec3d(tri->optVert[1]->pv) - idVec3d(p);
 	normal = d1.Cross( d2 );
-	if ( normal[2] < 0 ) {
+	if ( (float)normal[2] < 0 ) {
 		return false;
 	}
 
-	d1 = tri->optVert[1]->pv - p;
-	d2 = tri->optVert[2]->pv - p;
+	d1 = idVec3d(tri->optVert[1]->pv) - idVec3d(p);
+	d2 = idVec3d(tri->optVert[2]->pv) - idVec3d(p);
 	normal = d1.Cross( d2 );
-	if ( normal[2] < 0 ) {
+	if ( (float)normal[2] < 0 ) {
 		return false;
 	}
 
-	d1 = tri->optVert[2]->pv - p;
-	d2 = tri->optVert[0]->pv - p;
+	d1 = idVec3d(tri->optVert[2]->pv) - idVec3d(p);
+	d2 = idVec3d(tri->optVert[0]->pv) - idVec3d(p);
 	normal = d1.Cross( d2 );
-	if ( normal[2] < 0 ) {
+	if ( (float)normal[2] < 0 ) {
 		return false;
 	}
 
@@ -1591,11 +1622,11 @@ common->Printf( "lines %i (%i to %i) and %i (%i to %i) intersect at old point %i
 		// by another point
 		for ( j = 0 ; j < numCross ; j++ ) {
 			for ( k = j+1 ; k < numCross ; k++ ) {
+				if ( sorted[j] == sorted[k] ) {
+					continue;
+				}
 				for ( l = 0 ; l < numCross ; l++ ) {
 					if ( sorted[l] == sorted[j] || sorted[l] == sorted[k] ) {
-						continue;
-					}
-					if ( sorted[j] == sorted[k] ) {
 						continue;
 					}
 					if ( VertexBetween( sorted[l], sorted[j], sorted[k] ) ) {
@@ -1681,6 +1712,54 @@ static void CullUnusedVerts( optIsland_t *island ) {
 }
 
 
+
+
+#include "planargraph.h"
+/*
+==================
+AddTriangulationEdges
+
+Add all edges inside every outermost loop
+(faster version of AddInteriorEdges)
+==================
+*/
+static void AddTriangulationEdges( optIsland_t *island ) {
+	//actual storage
+	static PlanarGraph planarGraph;
+	static idList<PlanarGraph::Triangle> pgAddedTris;
+	static idList<PlanarGraph::AddedEdge> pgAddedEdges;
+	static idList<optVertex_t*> pgActiveVerts;
+
+	planarGraph.Reset();
+
+	//add vertices
+	pgActiveVerts.SetNum(0, false);
+	for (optVertex_t *v = island->verts; v; v = v->islandLink) {
+		if (!v->edges) {
+			//omit isolated vertices: they are not considered in T-junctions removal
+			//as the result, they can easily lie on other edges
+			continue;
+		}
+		pgActiveVerts.AddGrow(v);
+		v->idx = planarGraph.AddVertex(v->pv.ToVec2());
+	}
+	//add edges
+	for (optEdge_t *e = island->edges; e; e = e->islandLink)
+		planarGraph.AddEdge(e->v1->idx, e->v2->idx);
+	//finalize graph
+	planarGraph.Finish();
+
+	planarGraph.BuildFaces();
+
+	pgAddedTris.SetNum(0, false);
+	pgAddedEdges.SetNum(0, false);
+	planarGraph.TriangulateFaces(pgAddedTris, pgAddedEdges);
+
+	for (int i = 0; i < pgAddedEdges.Num(); i++) {
+		const int *ids = pgAddedEdges[i].ids;
+		TryAddNewEdge(pgActiveVerts[ids[0]], pgActiveVerts[ids[1]], island);
+	}
+}
 
 /*
 ====================
@@ -1946,8 +2025,10 @@ void	OptimizeGroupList( optimizeGroup_t *groupList ) {
 
 	// optimize and remove colinear edges, which will
 	// re-introduce some t junctions
+	int idx = 0;
 	for ( group = groupList ; group ; group = group->nextGroup ) {
 		OptimizeOptList( group );
+		idx++;
 	}
 	c_edge = CountGroupListTris( groupList );
 
@@ -1973,8 +2054,10 @@ OptimizeEntity
 void	OptimizeEntity( uEntity_t *e ) {
 	int		i;
 
+	TRACE_CPU_SCOPE_TEXT("OptimizeEntity", e->nameEntity)
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- OptimizeEntity -----\n" );
 	for ( i = 0 ; i < e->numAreas ; i++ ) {
+		TRACE_CPU_SCOPE_FORMAT("OptimizeArea", "area%d", i);
 		OptimizeGroupList( e->areas[i].groups );
 	}
 }

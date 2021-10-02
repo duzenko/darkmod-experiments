@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __CMDSYSTEM_H__
@@ -73,6 +73,7 @@ public:
 						// Command and argument completion using callback for each valid string.
 	virtual void		CommandCompletion( void(*callback)( const char *s ) ) = 0;
 	virtual void		ArgCompletion( const char *cmdString, void(*callback)( const char *s ) ) = 0;
+	virtual void		AppendCommandText( const char* text ) = 0;
 
 						// Adds command text to the command buffer, does not add a final \n
 	virtual void		BufferCommandText( cmdExecution_t exec, const char *text ) = 0;
@@ -153,11 +154,11 @@ ID_INLINE void idCmdSystem::ArgCompletion_SoundName( const idCmdArgs &args, void
 }
 
 ID_INLINE void idCmdSystem::ArgCompletion_ImageName( const idCmdArgs &args, void(*callback)( const char *s ) ) {
-	cmdSystem->ArgCompletion_FolderExtension( args, callback, "/", false, ".tga", ".dds", ".jpg", ".pcx", NULL );
+	cmdSystem->ArgCompletion_FolderExtension( args, callback, "/", false, ".tga", ".dds", ".jpg", ".pcx", ".bmp", ".png", NULL );
 }
 
 ID_INLINE void idCmdSystem::ArgCompletion_VideoName( const idCmdArgs &args, void(*callback)( const char *s ) ) {
-	cmdSystem->ArgCompletion_FolderExtension( args, callback, "video/", false, ".roq", NULL );
+	cmdSystem->ArgCompletion_FolderExtension( args, callback, "video/", false, ".roq", ".mp4", ".avi", ".m4v", NULL );
 }
 
 ID_INLINE void idCmdSystem::ArgCompletion_ConfigName( const idCmdArgs &args, void(*callback)( const char *s ) ) {

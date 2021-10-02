@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -551,7 +551,7 @@ void idTypeDef::AddFunction( const function_t *func ) {
 idVarDef::idVarDef()
 ================
 */
-idVarDef::idVarDef( idTypeDef *typeptr ) {
+idVarDef::idVarDef( idTypeDef *typeptr, const char *fileName ) {
 	typeDef		= typeptr;
 	num			= 0;
 	scope		= NULL;
@@ -560,6 +560,7 @@ idVarDef::idVarDef( idTypeDef *typeptr ) {
 	memset( &value, 0, sizeof( value ) );
 	name		= NULL;
 	next		= NULL;
+	this->fileName = fileName;
 }
 
 /*
@@ -724,6 +725,8 @@ void idVarDef::SetString( const char *string, bool constant ) {
 	
 	assert( typeDef && ( typeDef->Type() == ev_string ) );
 	idStr::Copynz( value.stringPtr, string, MAX_STRING_LEN );
+	if ( strlen( string ) > MAX_STRING_LEN )
+		common->Warning( "Script string length exceeded: '%s...'\n", value.stringPtr );
 }
 
 /*
@@ -1253,7 +1256,7 @@ idProgram::AllocVarDef
 idVarDef *idProgram::AllocVarDef(idTypeDef *type, const char *name, idVarDef *scope) {
     idVarDef	*def;
 
-    def = new idVarDef(type);
+    def = new idVarDef(type, filename);
     def->scope = scope;
     def->numUsers = 1;
     def->num = varDefs.Append(def);
@@ -1436,7 +1439,7 @@ idVarDef *idProgram::GetDef( const idTypeDef *type, const char *name, const idVa
 
 	// see if the name is already in use for another type
 	if ( bestDef && type && ( bestDef->TypeDef() != type ) ) {
-		throw idCompileError( va( "Type mismatch on redeclaration of %s", name ) );
+		throw idCompileError( va( "Type mismatch on redeclaration of %s '%s'", name, bestDef->FileName() ) );
 	}
 
 	return bestDef;
@@ -1935,7 +1938,7 @@ void idProgram::FreeData( void ) {
 	// free the defs
 	varDefs.DeleteContents( true );
 	varDefNames.DeleteContents( true );
-	varDefNameHash.Free();
+	varDefNameHash.ClearFree();
 
 	returnDef		= NULL;
 	returnStringDef = NULL;
@@ -1954,8 +1957,8 @@ void idProgram::FreeData( void ) {
 		functions[ i ].Clear();
 	}
 
-	filename.Clear();
-	fileList.Clear();
+	filename.ClearFree();
+	fileList.ClearFree();
 	statements.Clear();
 	functions.Clear();
 

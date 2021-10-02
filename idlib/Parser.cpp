@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -191,6 +191,32 @@ define_t *idParser::FindDefine( define_t *defines, const char *name ) {
 		}
 	}
 	return NULL;
+}
+
+
+idStrList idParser::GetAllDefineNames(bool sorted) {
+	idStrList ret;
+	for (int i = 0; i < DEFINEHASHSIZE; i++) {
+		for (define_t *def = definehash[i]; def; def = def->hashnext ) {
+			ret.Append(def->name);
+		}
+	}
+	if (sorted) {
+		auto comparator = [](const idStr *a, const idStr *b) -> int {
+			return (*a == *b ? 0 : (*a < *b ? -1 : 1));
+		};
+		ret.Sort(comparator);
+	}
+	return ret;
+}
+
+idStr idParser::GetDefineValueString(const char *name) {
+	define_t *def = FindHashedDefine(definehash, name);
+	idStr ret;
+	for (idToken *token = def->tokens; token; token = token->next) {
+		ret += *token;
+	}
+	return ret;
 }
 
 /*
@@ -946,17 +972,17 @@ int idParser::Directive_include( void ) {
 	}
 	if ( token.type == TT_STRING ) {
 		script = new idLexer;
-		// try relative to the current file
-		path = scriptstack->GetFileName();
-		path.StripFilename();
-		path += "/";
-		path += token;
+		// try absolute path
+		path = token;
 		if ( !script->LoadFile( path, OSPath ) ) {
-			// try absolute path
-			path = token;
+			// try from the include path
+			path = includepath + token;
 			if ( !script->LoadFile( path, OSPath ) ) {
-				// try from the include path
-				path = includepath + token;
+				// try relative to the current file
+				path = scriptstack->GetFileName();
+				path.StripFilename();
+				path += "/";
+				path += token;
 				if ( !script->LoadFile( path, OSPath ) ) {
 					delete script;
 					script = NULL;
@@ -2658,7 +2684,7 @@ const char *idParser::ParseBracedSection( idStr &out, int tabs ) {
 		doTabs = true;
 	}
 
-	out.Empty();
+	out.Clear();
 	if ( !idParser::ExpectTokenString( "{" ) ) {
 		return out.c_str();
 	}
@@ -2721,7 +2747,7 @@ idParser::ParseRestOfLine
 const char *idParser::ParseRestOfLine( idStr &out ) {
 	idToken token;
 
-	out.Empty();
+	out.Clear();
 	while(idParser::ReadToken( &token )) {
 		if ( token.linesCrossed ) {
 			idParser::UnreadSourceToken( &token );

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -39,7 +39,6 @@ public:
 	const char **			CopyValueStrings( const char **strings );
 	void					Update( const idCVar *cvar );
 	void					UpdateValue( void );
-	void					UpdateCheat( void );
 	void					Set( const char *newValue, bool force, bool fromServer );
 	void					Reset( void );
 
@@ -49,19 +48,11 @@ private:
 	idStr					valueString;			// value
 	idStr					descriptionString;		// description
 
-	idList<OnModifiedFunc>	modifiedCallbacks;		// functions to call when this CVAR is modified
-
 	virtual void			InternalSetString( const char *newValue );
 	virtual void			InternalServerSetString( const char *newValue );
 	virtual void			InternalSetBool( const bool newValue );
 	virtual void			InternalSetInteger( const int newValue );
 	virtual void			InternalSetFloat( const float newValue );
-
-	virtual int				InternalAddOnModifiedCallback(const OnModifiedFunc& callback);
-	virtual void			InternalRemoveOnModifiedCallback(int handle);
-
-	// Invokes all the callbacks
-	void					NotifyModifiedCallbacks();
 };
 
 /*
@@ -91,7 +82,6 @@ idInternalCVar::idInternalCVar( const char *newName, const char *newValue, int n
 	valueStrings = NULL;
 	valueCompletion = 0;
 	UpdateValue();
-	UpdateCheat();
 	internalVar = this;
 }
 
@@ -114,7 +104,6 @@ idInternalCVar::idInternalCVar( const idCVar *cvar ) {
 	valueStrings = CopyValueStrings( cvar->GetValueStrings() );
 	valueCompletion = cvar->GetValueCompletion();
 	UpdateValue();
-	UpdateCheat();
 	internalVar = this;
 }
 
@@ -201,8 +190,6 @@ void idInternalCVar::Update( const idCVar *cvar ) {
 
 	flags |= cvar->GetFlags();
 
-	UpdateCheat();
-
 	// only allow one non-empty reset string without a warning
 	if ( resetString.Length() == 0 ) {
 		resetString = cvar->GetString();
@@ -282,47 +269,10 @@ void idInternalCVar::UpdateValue( void ) {
 
 /*
 ============
-idInternalCVar::UpdateCheat
-============
-*/
-void idInternalCVar::UpdateCheat( void ) {
-	// all variables are considered cheats except for a few types
-	if ( flags & ( CVAR_NOCHEAT | CVAR_INIT | CVAR_ROM | CVAR_ARCHIVE | CVAR_USERINFO | CVAR_SERVERINFO | CVAR_NETWORKSYNC ) ) {
-		flags &= ~CVAR_CHEAT;
-	} else {
-		flags |= CVAR_CHEAT;
-	}
-}
-
-/*
-============
 idInternalCVar::Set
 ============
 */
 void idInternalCVar::Set( const char *newValue, bool force, bool fromServer ) {
-#ifdef MULTIPLAYER
-	if ( session && session->IsMultiplayer() && !fromServer ) {
-#ifndef ID_TYPEINFO
-		if ((flags & CVAR_NETWORKSYNC) && idAsyncNetwork::client.IsActive()) {
-			common->Printf( "%s is a synced over the network and cannot be changed on a multiplayer client.\n", nameString.c_str() );
-#if ID_ALLOW_CHEATS
-			common->Printf( "ID_ALLOW_CHEATS override!\n" );
-#else				
-			return;
-#endif
-		}
-#endif
-		if ( ( flags & CVAR_CHEAT ) && !cvarSystem->GetCVarBool( "net_allowCheats" ) ) {
-			common->Printf( "%s cannot be changed in multiplayer.\n", nameString.c_str() );
-#if ID_ALLOW_CHEATS
-			common->Printf( "ID_ALLOW_CHEATS override!\n" );
-#else				
-			return;
-#endif
-		}	
-	}
-#endif
-
 	if ( !newValue ) {
 		newValue = resetString.c_str();
 	}
@@ -349,8 +299,6 @@ void idInternalCVar::Set( const char *newValue, bool force, bool fromServer ) {
 
 	SetModified();
 	cvarSystem->SetModifiedFlags( flags );
-
-	NotifyModifiedCallbacks();
 }
 
 /*
@@ -407,27 +355,6 @@ idInternalCVar::InternalSetFloat
 */
 void idInternalCVar::InternalSetFloat( const float newValue ) {
 	Set( idStr( newValue ), true, false );
-}
-
-int idInternalCVar::InternalAddOnModifiedCallback(const idCVar::OnModifiedFunc& callback)
-{
-	return modifiedCallbacks.Append(callback);
-}
-
-void idInternalCVar::InternalRemoveOnModifiedCallback(int handle)
-{
-	modifiedCallbacks[handle] = OnModifiedFunc();
-}
-
-void idInternalCVar::NotifyModifiedCallbacks()
-{
-	for (int i = 0; i < modifiedCallbacks.Num(); ++i)
-	{
-		if (modifiedCallbacks[i])
-		{
-			modifiedCallbacks[i]();
-		}
-	}
 }
 
 /*
@@ -570,7 +497,6 @@ void idCVarSystemLocal::SetInternal( const char *name, const char *value, int fl
         if ( !( cvro && cvinit) ) {
 		    internal->InternalSetString( value );
 		    internal->flags |= flags & ~CVAR_STATIC;
-		    internal->UpdateCheat();
         } else {
             common->Warning("Attempt to modify read-only %s CVAR failed.", name);
         }
@@ -620,8 +546,8 @@ idCVarSystemLocal::Shutdown
 */
 void idCVarSystemLocal::Shutdown( void ) {
 	cvars.DeleteContents( true );
-	cvarHash.Free();
-	moveCVarsToDict.Clear();
+	cvarHash.ClearFree();
+	moveCVarsToDict.ClearFree();
 	initialized = false;
 }
 
@@ -1226,7 +1152,6 @@ void idCVarSystemLocal::ListByFlags( const idCmdArgs &args, cvarFlags_t flags ) 
 				string += ( cvar->GetFlags() & CVAR_USERINFO ) ?	"UI "	: "   ";
 				string += ( cvar->GetFlags() & CVAR_SERVERINFO ) ?	"SI "	: "   ";
 				string += ( cvar->GetFlags() & CVAR_STATIC ) ?		"ST "	: "   ";
-				string += ( cvar->GetFlags() & CVAR_CHEAT ) ?		"CH "	: "   ";
 				string += ( cvar->GetFlags() & CVAR_INIT ) ?		"IN "	: "   ";
 				string += ( cvar->GetFlags() & CVAR_ROM ) ?			"RO "	: "   ";
 				string += ( cvar->GetFlags() & CVAR_ARCHIVE ) ?		"AR "	: "   ";

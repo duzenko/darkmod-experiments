@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -80,7 +80,7 @@ idSoundShader::SetDefaultText
 bool idSoundShader::SetDefaultText( void ) {
 	idStr wavname = GetName();
 
-	if (wavname.CmpPrefix("__testvideo")) {
+	if (wavname.IcmpPrefix("__testvideo") == 0) {
 		//stgatilov #4847: this case is only used for testVideo command
 		//see R_TestVideo_f in RenderSystem_init.cpp
 		char generated[2048];
@@ -153,9 +153,6 @@ idSoundShader::ParseShader
 ===============
 */
 bool idSoundShader::ParseShader( idLexer &src ) {
-	int			i;
-	idToken		token;
-
 	parms.minDistance = 1;
 	parms.maxDistance = 10;
 	parms.volume = 1;
@@ -166,7 +163,7 @@ bool idSoundShader::ParseShader( idLexer &src ) {
 	speakerMask = 0;
 	altSound = NULL;
 
-	for( i = 0; i < SOUND_MAX_LIST_WAVS; i++ ) {
+	for( int i = 0; i < SOUND_MAX_LIST_WAVS; i++ ) {
 		leadins[i] = NULL;
 		entries[i] = NULL;
 	}
@@ -178,6 +175,7 @@ bool idSoundShader::ParseShader( idLexer &src ) {
 		maxSamples = SOUND_MAX_LIST_WAVS;
 	}
 
+	idToken token;
 	while ( 1 ) {
 		if ( !src.ExpectAnyToken( &token ) ) {
 			return false;
@@ -355,7 +353,8 @@ bool idSoundShader::ParseShader( idLexer &src ) {
 			}
 			token.BackSlashesToSlashes();
 			if ( soundSystemLocal.soundCache ) {
-				entries[ numEntries ] = soundSystemLocal.soundCache->FindSound( token.c_str(), onDemand );
+				idStr soundName = "fromVideo " + token;
+				entries[ numEntries ] = soundSystemLocal.soundCache->FindSound( soundName.c_str(), onDemand );
 				numEntries++;
 			}
 		} else if ( token.Find( ".wav", false ) != -1 || token.Find( ".ogg", false ) != -1 ) {

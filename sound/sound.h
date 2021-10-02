@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SOUND__
@@ -30,6 +30,7 @@ const float DOOM_TO_METERS = 0.0254f;					// doom to meters
 const float METERS_TO_DOOM = (1.0f/DOOM_TO_METERS);	// meters to doom
 
 class idSoundSample;
+struct SubtitleMatch;
 
 // sound shader flags
 static const int	SSF_PRIVATE_SOUND =		BIT(0);	// only plays for the current listenerId
@@ -43,6 +44,15 @@ static const int	SSF_UNCLAMPED =			BIT(7);	// don't clamp calculated volumes at 
 static const int	SSF_NO_FLICKER =		BIT(8);	// always return 1.0 for volume queries
 static const int	SSF_NO_DUPS =			BIT(9);	// try not to play the same sound twice in a row
 static const int	SSF_NO_EFX =			BIT(10);// do not apply EFX effect to the sound
+
+//stgatilov #2454: verbosity level of subtitles
+enum SubtitleLevel {
+	SUBL_IGNORE		= 0,		// auxilliary value for tdm_subtitles: don't show any subtitles regardless of level
+	SUBL_STORY		= 1,		// story text, usually FM-specific (briefings, important conversations)
+	SUBL_SPEECH		= 2,		// generic speech not relevant for story (e.g. guard barks, repetitive lines)
+	SUBL_EFFECT		= 3,		// sound effect without speech (e.g. boom!, heyya!, squeek)
+	SUBL_MISSING	= 100,		// no subtitles for this sound
+};
 
 // these options can be overriden from sound shader defaults on a per-emitter and per-channel basis
 typedef struct {
@@ -243,6 +253,9 @@ public:
 	virtual void			SetSlowmo( bool active ) = 0;
 	virtual void			SetSlowmoSpeed( float speed ) = 0;
 	virtual void			SetEnviroSuit( bool active ) = 0;
+
+	// stgatilov #2454: returns set of currently active subtitles
+	virtual	void			GetSubtitles( idList<SubtitleMatch> &dest ) = 0;
 };
 
 
@@ -329,5 +342,8 @@ public:
 };
 
 extern idSoundSystem	*soundSystem;
+
+
+extern idCVar			s_drawSounds;
 
 #endif /* !__SOUND__ */

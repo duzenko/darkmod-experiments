@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -70,6 +70,12 @@ int FindFloatPlane( const idPlane &plane, bool *fixedDegeneracies ) {
 	return dmapGlobals.mapPlanes.FindPlane( p, NORMAL_EPSILON, DIST_EPSILON );
 }
 
+idCVar dmap_fixBrushOpacityFirstSide(
+	"dmap_fixBrushOpacityFirstSide", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"If set to 0, then dmap ignores first side of a brush when deciding whether it is solid or not. "
+	"This is a bug fixed in TDM 2.08. "
+);
+
 /*
 ===========
 SetBrushContents
@@ -91,8 +97,10 @@ static void SetBrushContents( uBrush_t *b ) {
 	// a brush is only opaque if all sides are opaque
 	b->opaque = true;
 
-	for ( i=1 ; i<b->numsides ; i++, s++ ) {
+	for ( i=0 ; i<b->numsides ; i++, s++ ) {
 		s = &b->sides[i];
+		if ( i == 0 && !dmap_fixBrushOpacityFirstSide.GetBool() )
+			continue;	//stgatilov #5129
 
 		if ( !s->material ) {
 			continue;
@@ -115,6 +123,21 @@ static void SetBrushContents( uBrush_t *b ) {
 	b->contents = contents;
 }
 
+static void CheckBrushMirrorSides( uBrush_t *b ) {
+	idList<const idMaterial *> mirrorMaterials;
+
+	for (int i = 0 ; i < buildBrush->numsides ; i++) {
+		const idMaterial *mat = buildBrush->sides[i].material;
+		if (!mat->HasMirrorLikeStage())
+			continue;
+
+		if (mirrorMaterials.Find(mat)) {
+			common->Warning("Brush %d (entity %d) has several sides with same mirror-like material %s", buildBrush->brushnum, buildBrush->entitynum, mat->GetName());
+			return;
+		}
+		mirrorMaterials.Append(mat);
+	}
+}
 
 //============================================================================
 
@@ -310,6 +333,10 @@ static void ParseBrush( const idMapBrush *mapBrush, int primitiveNum ) {
 		return;
 	}
 
+	//stgatilov #4707: warn when brush has several sides with same "mirror" texture
+	//since the engine only chooses one of them to determine mirror plane
+	CheckBrushMirrorSides(buildBrush);
+
 	// get the content for the entire brush
 	SetBrushContents( buildBrush );
 
@@ -397,7 +424,11 @@ static bool	ProcessMapEntity( idMapEntity *mapEnt ) {
 	uEntity = &dmapGlobals.uEntities[dmapGlobals.num_entities];
 	memset( uEntity, 0, sizeof(*uEntity) );
 	uEntity->mapEntity = mapEnt;
+	uEntity->nameEntity = mapEnt->epairs.GetString("name");
+	if (idStr::Length(uEntity->nameEntity) == 0 && dmapGlobals.num_entities == 0)
+		uEntity->nameEntity = "worldspawn";
 	dmapGlobals.num_entities++;
+	TRACE_CPU_SCOPE_TEXT("ProcessMapEntity", uEntity->nameEntity)
 
 	for ( entityPrimitive = 0; entityPrimitive < mapEnt->GetNumPrimitives(); entityPrimitive++ ) {
 		prim = mapEnt->GetPrimitive(entityPrimitive);
@@ -427,19 +458,21 @@ CreateMapLight
 ==============
 */
 static void CreateMapLight( const idMapEntity *mapEnt ) {
-	mapLight_t	*light;
-	bool	dynamic;
+
+	// get the name for naming the shadow surfaces
+	const char *name = mapEnt->epairs.GetString( "name", "" );
+	TRACE_CPU_SCOPE_TEXT( "CreateMapLight", name )
 
 	// designers can add the "noPrelight" flag to signal that
 	// the lights will move around, so we don't want
 	// to bother chopping up the surfaces under it or creating
 	// shadow volumes
-	mapEnt->epairs.GetBool( "noPrelight", "0", dynamic );
+	bool dynamic = mapEnt->epairs.GetBool( "noPrelight", "0" );
 	if ( dynamic ) {
 		return;
 	}
 
-	light = new mapLight_t;
+	mapLight_t *light = new mapLight_t;
 	light->name[0] = '\0';
 	light->shadowTris = NULL;
 
@@ -449,11 +482,6 @@ static void CreateMapLight( const idMapEntity *mapEnt ) {
 	gameEdit->ParseSpawnArgsToRenderLight( &mapEnt->epairs, &light->def.parms );
 
 	R_DeriveLightData( &light->def );
-
-	// get the name for naming the shadow surfaces
-	const char	*name;
-
-	mapEnt->epairs.GetString( "name", "", &name );
 
 	idStr::Copynz( light->name, name, sizeof( light->name ) );
 	if ( !light->name[0] ) {
@@ -481,6 +509,7 @@ static void CreateMapLights( const idMapFile *dmapFile ) {
 	int		i;
 	const idMapEntity *mapEnt;
 	const char	*value;
+	TRACE_CPU_SCOPE("CreateMapLights")
 
 	for ( i = 0 ; i < dmapFile->GetNumEntities() ; i++ ) {
 		mapEnt = dmapFile->GetEntity(i);
@@ -505,6 +534,7 @@ bool LoadDMapFile( const char *filename ) {
 	int			i;
 	int			size;
 
+	TRACE_CPU_SCOPE_TEXT("LoadDMapFile", filename)
 	PrintIfVerbosityAtLeast( VL_CONCISE, "--- LoadDMapFile ---\n" );
 	PrintIfVerbosityAtLeast( VL_CONCISE, "loading %s\n", filename ); 
 
@@ -517,7 +547,9 @@ bool LoadDMapFile( const char *filename ) {
 		return false;
 	}
 
-	dmapGlobals.mapPlanes.Clear();
+	int primitivesNum = dmapGlobals.dmapFile->GetTotalPrimitivesNum();
+	int capacity = idMath::Imax(1024, idMath::CeilPowerOfTwo(primitivesNum));
+	dmapGlobals.mapPlanes.Init( capacity, capacity );
 	dmapGlobals.mapPlanes.SetGranularity( 1024 );
 
 	// process the canonical form into utility form

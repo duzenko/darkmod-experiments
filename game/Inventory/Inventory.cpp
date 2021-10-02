@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -56,8 +56,8 @@ CInventory::~CInventory()
 void CInventory::Clear()
 {
 	m_Owner = NULL;
-	m_Category.Clear();
-	m_Cursor.Clear();
+	m_Category.ClearFree();
+	m_Cursor.ClearFree();
 }
 
 int	CInventory::GetNumCategories() const
@@ -431,8 +431,11 @@ CInventoryCategoryPtr CInventory::GetCategory(const idStr& categoryName, int* in
 
 CInventoryCategoryPtr CInventory::GetCategory(int index) const
 {
+	if (index >= 0 && index < m_Category.Num()) {
+		return m_Category[index];
+	}
 	// return NULL for invalid indices
-	return (index >= 0 && index < m_Category.Num()) ? m_Category[index] : CInventoryCategoryPtr();
+	return CInventoryCategoryPtr();
 }
 
 int CInventory::GetCategoryIndex(const idStr& categoryName)
@@ -746,6 +749,11 @@ void CInventory::PutItem(const CInventoryItemPtr& item, const idStr& categoryNam
 		}
 	}
 
+	if (!category) {
+		gameLocal.Warning("CInventory::PutItem failed: called with empty name but no categories exist");
+		return;
+	}
+
 	// Pack the item into the category
 	category->PutItemFront(item);
 
@@ -798,20 +806,27 @@ bool CInventory::ReplaceItem(idEntity* oldItemEnt, idEntity* newItemEnt)
 
 void CInventory::RemoveItem(const CInventoryItemPtr& item)
 {
-	if (item == NULL) return;
+	if (item == nullptr || item->Category() == nullptr) return;
 
-	// Update the cursors first
+	idStr sCategoryName = item->Category()->GetName();
+
+	item->Category()->RemoveItem(item);
+
+	// Validate all cursors of the same category
+	int iCursorIdx = -1;
 	for (int i = 0; i < m_Cursor.Num(); i++)
 	{
-		if (m_Cursor[i]->GetCurrentItem() == item)
-		{
-			// Advance the cursor, this should be enough
-			m_Cursor[i]->GetNextItem();
-		}
-	}
+		CInventoryCursorPtr& pCursor(m_Cursor[i]);
+		if (pCursor == nullptr)
+			continue;
 
-	// Now remove the item, the cursors are updated.
-	item->Category()->RemoveItem(item);
+		CInventoryCategoryPtr pCategory(pCursor->GetCurrentCategory());
+		if (pCategory == nullptr)
+			continue;
+
+		if (pCategory->GetName() == sCategoryName)
+			pCursor->Validate();
+	}
 }
 
 CInventoryItemPtr CInventory::GetItem(const idStr& name, const idStr& categoryName, bool createCategory)

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SYS_CVAR_H__
@@ -54,7 +54,7 @@ extern idCVar cv_ai_show_conversationstate;
 extern idCVar cv_ai_acuity_L3;
 extern idCVar cv_ai_acuity_L4;
 extern idCVar cv_ai_acuity_L5;
-extern idCVar cv_ai_acuity_susp;
+//extern idCVar cv_ai_acuity_susp;
 extern idCVar cv_ai_visdist_show;
 extern idCVar cv_ai_opt_disable;
 extern idCVar cv_ai_opt_noanims;
@@ -79,10 +79,14 @@ extern idCVar cv_show_health;
 
 extern idCVar cv_ai_show_aasfuncobstacle_state;
 
+extern idCVar r_customWidth;
+extern idCVar r_customHeight;
+extern idCVar r_aspectRatio;
 extern idCVar cv_tdm_widescreenmode;
 extern idCVar cv_tdm_menu_music;
 
 extern idCVar cv_tdm_show_trainer_messages;
+extern idCVar cv_tdm_show_menu_tooltips; // Obsttorte #2626
 
 extern idCVar cv_tdm_default_relations_def;
 extern idCVar cv_tdm_fm_path;
@@ -128,7 +132,10 @@ extern idCVar cv_pm_runmod;
 extern idCVar cv_pm_run_backmod;
 extern idCVar cv_pm_crouchmod;
 extern idCVar cv_pm_max_swimspeed_mod;
+extern idCVar cv_pm_swimspeed_variation;
+extern idCVar cv_pm_swimspeed_frequency;
 extern idCVar cv_pm_creepmod;
+extern idCVar cv_pm_running_creepmod;
 extern idCVar cv_pm_pushmod;
 extern idCVar cv_pm_push_maximpulse;
 extern idCVar cv_pm_push_start_delay;
@@ -136,6 +143,11 @@ extern idCVar cv_pm_push_accel_time;
 extern idCVar cv_pm_push_heavy_threshold;
 extern idCVar cv_pm_push_max_mass;
 
+// STiFU #1932: Soft-hinderances: Effectiveness of hinderances on certain walk speed modifiers
+extern idCVar cv_pm_softhinderance_active;
+extern idCVar cv_pm_softhinderance_creep;
+extern idCVar cv_pm_softhinderance_walk;
+extern idCVar cv_pm_softhinderance_run;
 
 /**
 * TDM CVARs for controlling jumping
@@ -162,10 +174,21 @@ extern idCVar cv_pm_mantle_hang_msecs;
 extern idCVar cv_pm_mantle_pull_msecs;
 extern idCVar cv_pm_mantle_shift_hands_msecs;
 extern idCVar cv_pm_mantle_push_msecs;
+extern idCVar cv_pm_mantle_pushNonCrouched_msecs;
+extern idCVar cv_pm_mantle_fastLowObstaces;
+extern idCVar cv_pm_mantle_maxLowObstacleHeight;
+extern idCVar cv_pm_mantle_fastMediumObstaclesCrouched;
+extern idCVar cv_pm_mantle_pullFast_msecs;
+extern idCVar cv_pm_mantle_pushNonCrouched_playgrunt_speedthreshold;
+extern idCVar cv_pm_mantle_fallingFast_speedthreshold;
+extern idCVar cv_pm_mantle_cancel_speed;
+
+extern idCVar cv_pm_ladderSlide_speedLimit;
 
 extern idCVar cv_pm_rope_snd_rep_dist;
 extern idCVar cv_pm_rope_velocity_letgo;
 extern idCVar cv_pm_rope_swing_impulse;
+extern idCVar cv_pm_rope_swing_duration;
 extern idCVar cv_pm_rope_swing_reptime;
 extern idCVar cv_pm_rope_swing_kickdist;
 extern idCVar cv_pm_water_downwards_velocity;
@@ -194,6 +217,17 @@ extern idCVar cv_tdm_reattach_delay;
 // nbohr1more: #558 TDM toggle creep
 extern idCVar cv_tdm_creep_toggle;
 
+// stifu #3607: Shouldering animation
+extern idCVar cv_pm_shoulderAnim_msecs;
+extern idCVar cv_pm_shoulderAnim_dip_duration;
+extern idCVar cv_pm_shoulderAnim_rockDist;
+extern idCVar cv_pm_shoulderAnim_dip_dist;
+extern idCVar cv_pm_shoulderAnim_delay_msecs;
+
+// stifu #4107: Try multiple drop positions for shouldered bodies
+extern idCVar cv_pm_shoulderDrop_maxAngle;
+extern idCVar cv_pm_shoulderDrop_angleIncrement;
+
 /**
 * TDM Leaning vars:
 **/
@@ -218,25 +252,40 @@ extern idCVar cv_frob_fadetime;
 extern idCVar cv_frob_weapon_selects_weapon;
 extern idCVar cv_frob_debug_hud;
 
+extern idCVar cv_frobhelper_active;
+extern idCVar cv_frobhelper_alwaysVisible;
+extern idCVar cv_frobhelper_alpha;
+extern idCVar cv_frobhelper_fadein_delay;
+extern idCVar cv_frobhelper_fadein_duration;
+extern idCVar cv_frobhelper_fadeout_duration;
+extern idCVar cv_frobhelper_ignore_size;
+
 extern idCVar cv_weapon_next_on_empty;
 
 // physics
 extern idCVar cv_collision_damage_scale_vert;
 extern idCVar cv_collision_damage_scale_horiz;
-extern idCVar cv_drag_limit_force;
-extern idCVar cv_drag_force_max;
+extern idCVar cv_dragged_item_highlight;
+extern idCVar cv_drag_jump_masslimit;
+extern idCVar cv_drag_encumber_minmass;
+extern idCVar cv_drag_encumber_maxmass;
+extern idCVar cv_drag_encumber_max;
 extern idCVar cv_drag_stuck_dist;
+extern idCVar cv_drag_force_max;
+extern idCVar cv_drag_new;
+extern idCVar cv_drag_limit_force;
 extern idCVar cv_drag_damping;
 extern idCVar cv_drag_damping_AF;
 extern idCVar cv_drag_AF_ground_timer;
 extern idCVar cv_drag_AF_free;
-extern idCVar cv_drag_jump_masslimit;
-extern idCVar cv_drag_encumber_minmass;
-extern idCVar cv_drag_encumber_minmass;
-extern idCVar cv_drag_encumber_maxmass;
-extern idCVar cv_drag_encumber_max;
-extern idCVar cv_dragged_item_highlight;
 extern idCVar cv_drag_debug;
+extern idCVar cv_drag_targetpos_averaging_time;
+extern idCVar cv_drag_rigid_silentmode;
+extern idCVar cv_drag_rigid_distance_halfing_time;
+extern idCVar cv_drag_rigid_acceleration_radius;
+extern idCVar cv_drag_af_weight_ratio;
+extern idCVar cv_drag_af_reduceforce_radius;
+
 extern idCVar cv_melee_debug;
 extern idCVar cv_melee_state_debug;
 extern idCVar cv_melee_mouse_thresh;
@@ -250,10 +299,11 @@ extern idCVar cv_melee_forbid_auto_parry;
 extern idCVar cv_melee_max_particles;
 extern idCVar cv_phys_show_momentum;
 
-extern idCVar cv_throw_min;
-extern idCVar cv_throw_max;
+extern idCVar cv_throw_impulse_min;
+extern idCVar cv_throw_impulse_max;
+extern idCVar cv_throw_vellimit_min;
+extern idCVar cv_throw_vellimit_max;
 extern idCVar cv_throw_time;
-extern idCVar cv_throw_max_vel;
 
 extern idCVar cv_bounce_sound_max_vel;
 extern idCVar cv_bounce_sound_min_vel;
@@ -265,6 +315,7 @@ extern idCVar cv_tdm_rope_pull_force_factor;
 extern idCVar cv_tdm_obj_gui_file;
 extern idCVar cv_tdm_waituntilready_gui_file;
 extern idCVar cv_tdm_invgrid_gui_file;	// #4286
+extern idCVar cv_tdm_subtitles_gui_file;
 
 extern idCVar cv_tdm_hud_opacity;
 extern idCVar cv_tdm_hud_hide_lightgem;
@@ -284,6 +335,7 @@ extern idCVar cv_tdm_inv_hud_pickupmessages;
 extern idCVar cv_tdm_inv_loot_sound;
 extern idCVar cv_tdm_inv_use_on_frob;
 extern idCVar cv_tdm_inv_use_visual_feedback;
+extern idCVar cv_tdm_subtitles;
 
 extern idCVar cv_tdm_door_control;
 extern idCVar cv_tdm_door_control_sensitivity;
@@ -353,11 +405,9 @@ extern idCVar cv_ai_hearing_challenging;
 extern idCVar cv_ai_hearing_hardcore;
 
 extern idCVar cv_door_auto_open_on_unlock;
+extern idCVar cv_door_ignore_locks;
 
 extern idCVar cv_dm_distance;
-
-// Ambient light method CVar
-extern idCVar cv_ambient_method;
 
 // Volume of music speakers
 extern idCVar cv_music_volume;
@@ -383,11 +433,6 @@ extern idCVar cv_ai_debug_greetings;
 extern idCVar cv_ai_fov_show;
 extern idCVar cv_ai_ko_show;
 
-/**
-* If != 0, use this ratio between FOV X and Y and ignore r_aspectRatio.
-*/
-extern idCVar	cv_r_fovRatio;
-
 /** Screen width * gui_Width = GUI width */
 extern idCVar	cv_gui_Width;
 /** Screen height * gui_Height = GUI height */
@@ -405,8 +450,6 @@ extern idCVar	developer;
 
 extern idCVar	g_cinematic;
 extern idCVar	g_cinematicMaxSkipTime;
-
-extern idCVar	r_aspectRatio;
 
 extern idCVar	g_monsters;
 extern idCVar	g_decals;
@@ -569,6 +612,7 @@ extern idCVar	pm_thirdPerson;
 extern idCVar	pm_thirdPersonDeath;
 extern idCVar	pm_modelView;
 extern idCVar	pm_airTics;
+extern idCVar	pm_airTicsRegainingSpeed;
 
 extern idCVar	g_showPlayerShadow;
 extern idCVar	g_showHud;
@@ -621,10 +665,6 @@ extern idCVar	si_gameType;
 extern idCVar	si_map;
 extern idCVar	si_spectators;
 
-#ifdef MULTIPLAYER
-extern idCVar	net_clientSelfSmoothing;
-#endif
-
 extern idCVar	net_clientLagOMeter;
 
 extern const char *si_gameTypeArgs[];
@@ -642,18 +682,4 @@ extern idCVar rb_showBuoyancy;								// MOD_WATERPHYSICS
 
 #endif
 
-/*// HDR related - J.C.Denton
-extern idCVar r_postprocess;				
-extern idCVar r_postprocess_brightPassThreshold;
-extern idCVar r_postprocess_brightPassOffset;	
-extern idCVar r_postprocess_colorCurveBias;
-extern idCVar r_postprocess_colorCorrection;
-extern idCVar r_postprocess_colorCorrectBias;
-extern idCVar r_postprocess_sceneExposure;
-extern idCVar r_postprocess_sceneGamma;
-extern idCVar r_postprocess_debugMode;
-extern idCVar r_postprocess_bloomKernelSize;
-extern idCVar r_postprocess_bloomIntensity;
-extern idCVar r_postprocess_desaturation;
-*/
 #endif /* !__SYS_CVAR_H__ */

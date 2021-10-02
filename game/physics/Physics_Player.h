@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 
@@ -76,11 +76,16 @@ enum EMantlePhase
 	notMantling_DarkModMantlePhase	= 0,
 	hang_DarkModMantlePhase,	
 	pull_DarkModMantlePhase,
+	pullFast_DarkModMantlePhase, // STiFU #4945: Quicker pull-push medium obstacles
 	shiftHands_DarkModMantlePhase,
 	push_DarkModMantlePhase,
-	fixClipping_DarkModMantlePhase,	
+	pushNonCrouched_DarkModMantlePhase, // STiFU #4930: Quicker low obstacles
+	fixClipping_DarkModMantlePhase,		
+	canceling_DarkModMantlePhase, // STiFU #4509: Cancel mantle when target is clipping
 	NumMantlePhases,
 };
+
+extern const float MANTLE_TEST_INCREMENT;
 
 class CForcePush;
 typedef std::shared_ptr<CForcePush> CForcePushPtr;
@@ -175,6 +180,11 @@ public:
 	float					GetDeltaViewYaw();
 	float					GetDeltaViewPitch();
 
+	/**
+	* True if the player is mid-air
+	**/
+	bool					IsMidAir() const;
+
 public:
 
 	/**
@@ -182,7 +192,8 @@ public:
 	* from a climbable and is still holding down the button
 	* This is not saved/restored but cleared on restore, just to be safe
 	**/
-	bool					m_bClimbDetachCrouchHeld;
+	bool					m_bSlideOrDetachClimb;
+	bool					m_bSlideInitialized;
 
 public:	// common physics interface
 
@@ -257,6 +268,14 @@ private:
 	float					playerSpeed;
 	idVec3					viewForward;
 	idVec3					viewRight;
+
+	// swimming animation
+	float					m_fSwimTimeStart_s;
+	bool					m_bSwimSoundStarted;
+	float					m_fSwimLeadInDuration_s;
+	float					m_fSwimLeadOutStart_s;
+	float					m_fSwimLeadOutDuration_s;
+	float					m_fSwimSpeedModCompensation;
 
 	// walk movement
 	bool					walking;
@@ -404,7 +423,7 @@ private:
 private:
 	float					CmdScale( const usercmd_t &cmd ) const;
 	void					Accelerate( const idVec3 &wishdir, const float wishspeed, const float accel );
-	bool					SlideMove( bool gravity, bool stepUp, bool stepDown, bool push );
+	bool					SlideMove( bool gravity, bool stepUp, bool stepDown, bool push, const float velocityLimit = -1.0);
 	void					Friction( const idVec3 &wishdir = idVec3(), const float forceFriction = -1 );
 	void					WaterMove( void );
 	void					FlyMove( void );
@@ -437,6 +456,8 @@ private:
 #endif
 	void					DropTimers( void );
 	void					MovePlayer( int msec );
+
+	void					PlaySwimBurstSound();
 
 public:
 	void					ClimbDetach( bool bStepUp = false );
@@ -494,6 +515,15 @@ protected:
 	idVec3 m_mantlePullStartPos;
 	idVec3 m_mantlePullEndPos;
 	idVec3 m_mantlePushEndPos;
+	
+	/*!
+	* STiFU #4509: Mantle canceling animation
+	*/
+	float m_mantleCancelStartRoll;
+	float m_fmantleCancelDist;
+	idVec3 m_mantleCancelStartPos;
+	idVec3 m_mantleCancelEndPos;
+	idVec3 m_mantleStartPosWorld;
 
 	/*!
 	* Pointer to the entity being mantled.
@@ -580,6 +610,13 @@ protected:
 		trace_t& out_trace
 	);
 
+	enum EMantleable
+	{
+		EMantleable_No = 0,
+		EMantleable_YesCrouched = 1,
+		EMantleable_YesUpstraight = 2,
+	};
+
 	/*!
 	* 
 	* This function checks the collision target of the mantle 
@@ -592,11 +629,12 @@ protected:
 	* @param[out] out_mantleEndPoint If the return code is true, this out paramter specifies the position of the player's origin at the end of the mantle move.
 	*
 	* @return the result of the test
-	* @retval true if the mantle target has a mantleable surface
-	* @retval false if the mantel target does not have a mantleable surface
+	* @retval EMantleable_No if the mantel target does not have a mantleable surface
+	* @retval EMantleable_YesCrouched if the mantle target has a mantleable surface that can be reached in crouched state
+	* @retval EMantleable_YesUpstraight if the mantle target has a mantleable surface
 	*
 	*/
-	bool DetermineIfMantleTargetHasMantleableSurface
+	EMantleable DetermineIfMantleTargetHasMantleableSurface
 	(
 		float maxVerticalReachDistance,
 		float maxHorizontalReachDistance,
@@ -610,6 +648,7 @@ protected:
 	*
 	* @param[in] maxVerticalReachDistance The maximum distance that the player can reach vertically from their current origin
 	* @param[in] maxHorizontalReachDistance The maximum distance that the player can reach horizontally from their current origin
+	* @param[in] testCrouched Perform this test with a crouched clipmodel (true) or standing up straight (false)
 	* @param[in] eyePos The position of the player's eyes in the world
 	* @param[in] mantleStartPoint The player's origin at the start of the mantle movement
 	* @param[in] mantleEndPoint The player's origin at the end of the mantle movement
@@ -622,6 +661,7 @@ protected:
 	(
 		float maxVerticalReachDistance,
 		float maxHorizontalReachDistance,
+		bool  testCrouched,
 		const idVec3& eyePos,
 		const idVec3& mantleStartPoint,
 		const idVec3& mantleEndPoint
@@ -647,11 +687,12 @@ protected:
 	* @param[out] out_mantleEndPoint If the return value is true, this passes back out what the player's origin will be at the end of the mantle
 	*
 	* @returns the result of the test
-	* @retval true if the mantle target can be mantled
-	* @retval false if the mantle target cannot be mantled
+	* @retval EMantleable_No if the mantel target does not have a mantleable surface
+	* @retval EMantleable_YesCrouched if the mantle target has a mantleable surface that can be reached in crouched state
+	* @retval EMantleable_YesUpstraight if the mantle target has a mantleable surface
 	*
 	*/	
-	bool ComputeMantlePathForTarget
+	EMantleable ComputeMantlePathForTarget
 	(	
 		float maxVerticalReachDistance,
 		float maxHorizontalReachDistance,
@@ -677,6 +718,14 @@ protected:
 	*/
 	void MantleMove();
 
+	
+	/** @brief	  	Test if the mantle end position intersects with world geomtry
+	  * @param 		pPhysicsMantledEntity Pointer to the mantled entity
+	  * @return   	True, if the player is clipping into world geometry at the 
+	  *				mantle endposition
+	  * @author		STiFU #4509: Test entposition for clipping, cancel in that case */
+	const bool IsMantleEndPosClipping(idPhysics* pPhysicsMantledEntity);
+
 	// Tests if player is holding down jump while already jumping
 	// (can be used to trigger mantle)
 	bool CheckJumpHeldDown();
@@ -692,11 +741,6 @@ protected:
 	//#####################################################
 
 protected:
-
-	/**
-	* Set to true if the player is leaning at all from the vertical
-	**/
-	bool m_bIsLeaning;
 
 	/*!
 	* An axis which is perpendicular to the gravity normal and
@@ -890,6 +934,50 @@ public:
 	* Does nothing if the player is not leaned
 	**/
 	void UpdateLeanedInputYaw( idAngles &InputAngles );
+
+	//#####################################################
+	// Shouldering viewport animation (#3607)
+	// by STiFU
+	//#####################################################
+public: 
+		
+	/** @brief	  	Initialize and schedule shouldering animation (#3607)
+	  * @param 		pBody Pointer to the body to be shouldered
+	  * @author		STiFU */
+	void StartShouldering(idEntity const * const pBody);
+	
+	/** @brief	  	Check if shouldering animation plays out (#3607)
+	  * @return   	True, if animation is active
+	  * @author		STiFU */
+	bool IsShouldering() const;
+
+private:
+		
+	/** @brief	  	Try to start the shouldering animation (#3607)
+	  * @author		STiFU */
+	void StartShoulderingAnim();
+
+	
+	/** @brief	  	Perform the shouldering animation (#3607)
+	  * @author		STiFU */
+	void ShoulderingMove();
+
+	enum eShoulderingAnimation
+	{
+		eShoulderingAnimation_NotStarted = 0,
+		eShoulderingAnimation_Initialized = 1,
+		eShoulderingAnimation_Scheduled = 2,
+		eShoulderingAnimation_Active = 3,
+	};
+
+	eShoulderingAnimation	m_eShoulderAnimState;
+	float					m_fShoulderingTime;
+	float					m_fPrevShoulderingPitchOffset;
+	idVec3					m_PrevShoulderingPosOffset;
+	idVec3					m_ShoulderingStartPos;
+	bool					m_bShouldering_SkipDucking;
+	float					m_fShouldering_TimeToNextSound;
+	bool					m_bMidAir;
 };
 
 #endif /* !__PHYSICS_PLAYER_H__ */

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -120,4 +120,18 @@ float idMath::BitsToFloat( int i, int exponentBits, int mantissaBits ) {
 	mantissa = ( i & ( ( 1 << mantissaBits ) - 1 ) ) << ( IEEE_FLT_MANTISSA_BITS - mantissaBits );
 	value = sign << IEEE_FLT_SIGN_BIT | ( exponent + IEEE_FLT_EXPONENT_BIAS ) << IEEE_FLT_MANTISSA_BITS | mantissa;
 	return *reinterpret_cast<float *>(&value);
+}
+
+
+extern idCVar com_fpexceptions;
+static thread_local int IgnoreFpExceptionsCount = 0;
+idIgnoreFpExceptions::idIgnoreFpExceptions() {
+	if (IgnoreFpExceptionsCount == 0 && com_fpexceptions.GetBool())
+		sys->FPU_SetExceptions(false);
+	IgnoreFpExceptionsCount++;
+}
+idIgnoreFpExceptions::~idIgnoreFpExceptions() {
+	IgnoreFpExceptionsCount--;
+	if (IgnoreFpExceptionsCount == 0 && com_fpexceptions.GetBool())
+		sys->FPU_SetExceptions(true);
 }

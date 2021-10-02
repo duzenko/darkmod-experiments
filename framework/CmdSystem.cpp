@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -47,6 +47,8 @@ public:
 
 	virtual void			CommandCompletion( void(*callback)( const char *s ) );
 	virtual void			ArgCompletion( const char *cmdString, void(*callback)( const char *s ) );
+	virtual void			ExecuteCommandText( const char* text );
+	virtual void			AppendCommandText( const char* text );
 
 	virtual void			BufferCommandText( cmdExecution_t exec, const char *text );
 	virtual void			ExecuteCommandBuffer( void );
@@ -82,9 +84,7 @@ private:
 
 private:	
 	void					ExecuteTokenizedString( const idCmdArgs &args );
-	void					ExecuteCommandText( const char *text );
 	void					InsertCommandText( const char *text );
-	void					AppendCommandText( const char *text );
 
 	static void				ListByFlags( const idCmdArgs &args, cmdFlags_t flags );
 	static void				List_f( const idCmdArgs &args );
@@ -339,9 +339,9 @@ void idCmdSystemLocal::Shutdown( void ) {
 		delete cmd;
 	}
 
-	completionString.Clear();
-	completionParms.Clear();
-	tokenizedCmds.Clear();
+	completionString.ClearFree();
+	completionParms.ClearFree();
+	tokenizedCmds.ClearFree();
 	postReload.Clear();
 }
 
@@ -471,12 +471,6 @@ void idCmdSystemLocal::ExecuteTokenizedString( const idCmdArgs &args ) {
 			cmd->next = commands;
 			commands = cmd;
 
-#ifdef MULTIPLAYER
-			if ( ( cmd->flags & (CMD_FL_CHEAT|CMD_FL_TOOL) ) && session && session->IsMultiplayer() && !cvarSystem->GetCVarBool( "net_allowCheats" ) ) {
-				common->Printf( "Command '%s' not valid in multiplayer mode.\n", cmd->name );
-				return;
-			}
-#endif
 			// perform the action
 			if ( !cmd->function ) {
 				break;

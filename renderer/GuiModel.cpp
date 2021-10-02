@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -171,9 +171,10 @@ void idGuiModel::EmitSurface( guiModelSurface_t *surf, float modelMatrix[16], fl
 
 	// move the verts to the vertex cache
 	tri->ambientCache = vertexCache.AllocVertex( tri->verts, ALIGN( tri->numVerts * sizeof( tri->verts[0] ), VERTEX_CACHE_ALIGN ) );
+	tri->indexCache = vertexCache.AllocIndex( tri->indexes, ALIGN( tri->numIndexes * sizeof( tri->indexes[0] ), INDEX_CACHE_ALIGN ) );
 
 	// if we are out of vertex cache, don't create the surface
-	if ( !tri->ambientCache.IsValid() ) {
+	if ( !tri->ambientCache.IsValid() || !tri->indexCache.IsValid() ) {
 		return;
 	}
 
@@ -229,10 +230,8 @@ void idGuiModel::EmitFullScreen( void ) {
 		viewDef->renderView.height = SCREEN_HEIGHT;
 		tr.RenderViewToViewport( viewDef->renderView, viewDef->viewport );
 		// duzenko #4425 FIXME CRUTCH? always use window size for 2d if fbo is on
-		if (r_useFbo.GetBool()) {
-			viewDef->viewport.x2 = glConfig.vidWidth - 1;
-			viewDef->viewport.y2 = glConfig.vidHeight - 1;
-		}
+		viewDef->viewport.x2 = glConfig.vidWidth - 1;
+		viewDef->viewport.y2 = glConfig.vidHeight - 1;
 		viewDef->scissor.x1 = 0;
 		viewDef->scissor.y1 = 0;
 		viewDef->scissor.x2 = viewDef->viewport.x2 - viewDef->viewport.x1;

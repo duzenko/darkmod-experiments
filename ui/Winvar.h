@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __WINVAR_H__
@@ -105,7 +105,10 @@ public:
 	operator bool() const { return data; }
 
 	virtual void Set(const char *val) { 
-		data = ( atoi( val ) != 0 );
+		int parsedVal = 0;
+		if (!(idStr::IsNumeric(val) && sscanf(val, "%d", &parsedVal) == 1))
+			common->Warning("Wrong idWinBool: \"%s\"", val);
+		data = ( parsedVal != 0 );
 		if (guiDict) {
 			guiDict->SetBool(GetName(), data);
 		}
@@ -133,7 +136,7 @@ public:
 	virtual float x( void ) const { return data ? 1.0f : 0.0f; };
 
 protected:
-	bool data;
+	bool data = false;
 };
 
 class idWinStr : public idWinVar {
@@ -265,7 +268,10 @@ public:
 		return data;
 	}
 	virtual void Set(const char *val) {
-		data = atoi(val);;
+		int parsedVal = 0;
+		if (!(idStr::IsNumeric(val) && sscanf(val, "%d", &parsedVal) == 1))
+			common->Warning("Wrong idWinInt: \"%s\"", val);
+		data = parsedVal;
 		if (guiDict) {
 			guiDict->SetInt(GetName(), data);
 		}
@@ -295,7 +301,7 @@ public:
 	virtual float x( void ) const { assert( false ); return 0.0f; };
 
 protected:
-	int data;
+	int data = 0;
 };
 
 class idWinFloat : public idWinVar {
@@ -324,7 +330,10 @@ public:
 		return data;
 	}
 	virtual void Set(const char *val) {
-		data = atof(val);
+		float parsedVal = 0;
+		if (!(idStr::IsNumeric(val) && sscanf(val, "%f", &parsedVal) == 1))
+			common->Warning("Wrong idWinFloat: \"%s\"", val);
+		data = parsedVal;
 		if (guiDict) {
 			guiDict->SetFloat(GetName(), data);
 		}
@@ -350,7 +359,7 @@ public:
 
 	virtual float x( void ) const { return data; };
 protected:
-	float data;
+	float data = 0.0f;
 };
 
 class idWinRectangle : public idWinVar {
@@ -422,11 +431,16 @@ public:
 		return ret;
 	}
 	virtual void Set(const char *val) {
+		int ret;
+		idRectangle v;
 		if ( strchr ( val, ',' ) ) {
-			sscanf( val, "%f,%f,%f,%f", &data.x, &data.y, &data.w, &data.h );
+			ret = sscanf( val, "%f,%f,%f,%f", &v.x, &v.y, &v.w, &v.h );
 		} else {
-			sscanf( val, "%f %f %f %f", &data.x, &data.y, &data.w, &data.h );
+			ret = sscanf( val, "%f %f %f %f", &v.x, &v.y, &v.w, &v.h );
 		}
+		if (ret != 4)
+			common->Warning("Wrong idWinRectangle: \"%s\"", val);
+		data = v;
 		if (guiDict) {
 			idVec4 v = data.ToVec4();
 			guiDict->SetVec4(GetName(), v);
@@ -493,11 +507,16 @@ public:
 		return data.y;
 	}
 	virtual void Set(const char *val) {
+		int ret;
+		idVec2 v(0.0f, 0.0f);
 		if ( strchr ( val, ',' ) ) {
-			sscanf( val, "%f,%f", &data.x, &data.y );
+			ret = sscanf( val, "%f,%f", &v.x, &v.y );
 		} else {
-		sscanf( val, "%f %f", &data.x, &data.y);
+			ret = sscanf( val, "%f %f", &v.x, &v.y);
 		}
+		if (ret != 2)
+			common->Warning("Wrong idWinVec2: \"%s\"", val);
+		data = v;
 		if (guiDict) {
 			guiDict->SetVec2(GetName(), data);
 		}
@@ -528,7 +547,7 @@ public:
 	}
 
 protected:
-	idVec2 data;
+	idVec2 data = idVec2(0.0f, 0.0f);
 };
 
 class idWinVec4 : public idWinVar {
@@ -576,11 +595,17 @@ public:
 		return data.w;
 	}
 	virtual void Set(const char *val) {
+		int ret;
+		idVec4 v(0.0f, 0.0f, 0.0f, 0.0f);
 		if ( strchr ( val, ',' ) ) {
-			sscanf( val, "%f,%f,%f,%f", &data.x, &data.y, &data.z, &data.w );
+			ret = sscanf( val, "%f,%f,%f,%f", &v.x, &v.y, &v.z, &v.w );
 		} else {
-			sscanf( val, "%f %f %f %f", &data.x, &data.y, &data.z, &data.w);
+			ret = sscanf( val, "%f %f %f %f", &v.x, &v.y, &v.z, &v.w);
 		}
+		//stgatilov: "transition" expects vec4, but it often receives scalar for e.g. "rotation" property
+		if (ret != 4 && ret != 1)
+			common->Warning("Wrong idWinVec4: \"%s\"", val);
+		data = v;
 		if ( guiDict ) {
 			guiDict->SetVec4( GetName(), data );
 		}
@@ -616,7 +641,7 @@ public:
 	}
 
 protected:
-	idVec4 data;
+	idVec4 data = idVec4(0.0f, 0.0f, 0.0f, 0.0f);
 };
 
 class idWinVec3 : public idWinVar {
@@ -661,7 +686,16 @@ public:
 	}
 
 	virtual void Set(const char *val) {
-		sscanf( val, "%f %f %f", &data.x, &data.y, &data.z);
+		int ret;
+		idVec3 v(0.0f, 0.0f, 0.0f);
+		if ( strchr ( val, ',' ) ) {
+			ret = sscanf( val, "%f,%f,%f", &v.x, &v.y, &v.z );
+		} else {
+			ret = sscanf( val, "%f %f %f", &v.x, &v.y, &v.z );
+		}
+		if (ret != 3)
+			common->Warning("Wrong idWinVec3: \"%s\"", val);
+		data = v;
 		if (guiDict) {
 			guiDict->SetVector(GetName(), data);
 		}
@@ -693,7 +727,7 @@ public:
 	}
 
 protected:
-	idVec3 data;
+	idVec3 data = idVec3(0.0f, 0.0f, 0.0f);
 };
 
 class idWinBackground : public idWinStr {
@@ -864,7 +898,10 @@ public:
 		return data;
 	}
 	virtual void Set(const char *val) {
-		data = atoi(val);
+		size_t parsedVal = 0;
+		if (!(idStr::IsNumeric(val) && sscanf(val, "%zu", &parsedVal) == 1))
+			common->Warning("Wrong idWinUIntPtr: \"%s\"", val);
+		data = parsedVal;
 		assert(!guiDict);
 	}
 
@@ -888,7 +925,7 @@ public:
 	virtual float x(void) const { assert(false); return 0.0f; };
 
 protected:
-	size_t data;
+	size_t data = 0;
 };
 
 

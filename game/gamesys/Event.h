@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Id Software, Inc.
@@ -46,7 +46,7 @@ static_assert(sizeof(idVec3) == 12, "Scripting system assumes idVec3 has 12-byte
 #define	D_EVENT_ENTITY_NULL			'E'			// event can handle NULL entity pointers
 #define D_EVENT_TRACE				't'
 
-#define MAX_EVENTS					8192		// we can have so many different events (functions) overall
+#define MAX_EVENTS					(10<<10)		// we can have so many different events (functions) overall
 
 #define EV_RETURNS_VOID				D_EVENT_VOID
 
@@ -121,7 +121,7 @@ private:
 
 	static idDynamicBlockAlloc<byte, 16 * 1024, 256> eventDataAllocator;
 
-
+	friend idStr GetTraceLabel(const idEvent &evt);
 public:
 	static bool					initialized;
 
@@ -133,6 +133,7 @@ public:
 	void						Free( void );
 	void						Schedule( idClass *object, const idTypeInfo *cls, int time );
 	byte						*GetData( void );
+	void						Print();
 
 	static void					CancelEvents( const idClass *obj, const idEventDef *evdef = NULL );
 	static void					ClearEventList( void );
@@ -148,6 +149,8 @@ public:
 	static void					RestoreTrace( idRestoreGame *savefile, trace_t &trace );
 	
 };
+
+void Cmd_EventList_f(const idCmdArgs &args);
 
 /*
 ================

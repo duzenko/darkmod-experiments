@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -22,7 +22,7 @@
 
 #include "TypeInfo.h"
 
-#include "../ExtLibs/zlib.h"
+#include "zlib.h"
 
 /*
 Save game related helper classes.
@@ -356,14 +356,19 @@ void idSaveGame::WriteRenderEntity( const renderEntity_t &renderEntity ) {
 	WriteBool( renderEntity.noSelfShadow );
 	WriteBool( renderEntity.noShadow );
 	WriteFloat( renderEntity.shadowMapOffset );
+	WriteInt( renderEntity.areaLock );
 	WriteBool( renderEntity.noDynamicInteractions );
 	WriteBool( renderEntity.weaponDepthHack );
 
 	WriteInt( renderEntity.forceUpdate );
+	WriteInt( renderEntity.sortOffset );
+	WriteInt( renderEntity.xrayIndex );
 }
 
 void idSaveGame::WriteRenderLight( const renderLight_t &renderLight ) {
 	int i;
+
+	WriteInt( renderLight.entityNum );
 
 	WriteMat3( renderLight.axis );
 	WriteVec3( renderLight.origin );
@@ -374,6 +379,7 @@ void idSaveGame::WriteRenderLight( const renderLight_t &renderLight ) {
 	WriteBool( renderLight.noSpecular );
 	WriteBool( renderLight.pointLight );
 	WriteBool( renderLight.parallel );
+	WriteBool( renderLight.parallelSky );
 
 	WriteVec3( renderLight.lightRadius );
 	WriteVec3( renderLight.lightCenter );
@@ -403,6 +409,7 @@ void idSaveGame::WriteRenderLight( const renderLight_t &renderLight ) {
 	}
 
 	WriteBool( renderLight.noFogBoundary ); // #3664
+	WriteInt( renderLight.areaLock );
 }
 
 void idSaveGame::WriteRefSound( const refSound_t &refSound ) {
@@ -549,7 +556,8 @@ void idSaveGame::WriteSoundCommands( void ) {
 
 void idSaveGame::WriteHeader()
 {
-	file->WriteInt(RevisionTracker::Instance().GetHighestRevision());
+	int revision = RevisionTracker::Instance().GetSavegameRevision();
+	file->WriteInt(revision);
 	isCompressed = cv_savegame_compress.GetBool();
 	file->WriteBool(isCompressed);
 }
@@ -947,15 +955,20 @@ void idRestoreGame::ReadRenderEntity( renderEntity_t &renderEntity ) {
 	ReadBool( renderEntity.noSelfShadow );
 	ReadBool( renderEntity.noShadow );
 	ReadFloat( renderEntity.shadowMapOffset );
+	ReadInt( (int&)renderEntity.areaLock );
 	ReadBool( renderEntity.noDynamicInteractions );
 	ReadBool( renderEntity.weaponDepthHack );
 
 	ReadInt( renderEntity.forceUpdate );
+	ReadInt( renderEntity.sortOffset );
+	ReadInt( renderEntity.xrayIndex );
 }
 
 void idRestoreGame::ReadRenderLight( renderLight_t &renderLight ) {
 	int index;
 	int i;
+
+	ReadInt( renderLight.entityNum );
 
 	ReadMat3( renderLight.axis );
 	ReadVec3( renderLight.origin );
@@ -966,6 +979,7 @@ void idRestoreGame::ReadRenderLight( renderLight_t &renderLight ) {
 	ReadBool( renderLight.noSpecular );
 	ReadBool( renderLight.pointLight );
 	ReadBool( renderLight.parallel );
+	ReadBool( renderLight.parallelSky );
 
 	ReadVec3( renderLight.lightRadius );
 	ReadVec3( renderLight.lightCenter );
@@ -993,6 +1007,7 @@ void idRestoreGame::ReadRenderLight( renderLight_t &renderLight ) {
 	renderLight.referenceSound = gameSoundWorld->EmitterForIndex( index );
 
 	ReadBool( renderLight.noFogBoundary ); // #3664
+	ReadInt( (int&)renderLight.areaLock );;
 }
 
 void idRestoreGame::ReadRefSound( refSound_t &refSound ) {

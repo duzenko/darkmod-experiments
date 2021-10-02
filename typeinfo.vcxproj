@@ -29,30 +29,28 @@
     <SccProvider>
     </SccProvider>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>7.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
-    <UseOfMfc>Static</UseOfMfc>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
-    <UseOfMfc>Static</UseOfMfc>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -122,9 +120,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="framework\minizip\ioapi.c" />
-    <ClCompile Include="framework\minizip\unzip.cpp" />
-    <ClCompile Include="framework\minizip\zip.cpp" />
+    <ClCompile Include="framework\minizip\minizip_extra.c" />
     <ClCompile Include="TypeInfo\main.cpp" />
     <ClCompile Include="TypeInfo\TypeInfoGen.cpp" />
     <ClCompile Include="framework\CmdSystem.cpp" />
@@ -133,9 +129,7 @@
     <ClCompile Include="framework\FileSystem.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework\minizip\ioapi.h" />
-    <ClInclude Include="framework\minizip\unzip.h" />
-    <ClInclude Include="framework\minizip\zip.h" />
+    <ClInclude Include="framework\minizip\minizip_extra.h" />
     <ClInclude Include="TypeInfo\TypeInfoGen.h" />
     <ClInclude Include="framework\CmdSystem.h" />
     <ClInclude Include="framework\CVarSystem.h" />

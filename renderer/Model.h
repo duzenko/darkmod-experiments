@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MODEL_H__
@@ -30,13 +30,36 @@
 #define MD5_ANIM_EXT			"md5anim"
 #define MD5_CAMERA_EXT			"md5camera"
 #define MD5_VERSION				10
-#include "VertexCache.h"
+
+//#include "VertexCache.h"
+#define VERTCACHE_FRAMENUM_BITS 15
+/**
+ * Describes a single entry in the static or dynamic vertex or index cache in 80 bits.
+ */
+struct vertCacheHandle_t {
+	uint32_t	size;
+	uint32_t	offset;
+	uint16_t	frameNumber : VERTCACHE_FRAMENUM_BITS;
+	bool		isStatic : 1;
+
+	bool IsValid() const {
+		return size != 0;
+	}
+	static vertCacheHandle_t Create(uint32_t size, uint32_t offset, uint16_t frameNumber, bool isStatic) {
+		vertCacheHandle_t res;
+		res.size = size;
+		res.offset = offset;
+		res.frameNumber = frameNumber;
+		res.isStatic = isStatic;
+		return res;
+	}
+};
 
 // using shorts for triangle indexes can save a significant amount of traffic, but
 // to support the large models that renderBump loads, they need to be 32 bits
 #if 1
 
-#define GL_INDEX_TYPE		GL_UNSIGNED_INT
+//#define GL_INDEX_TYPE		GL_UNSIGNED_INT
 typedef int glIndex_t;
 
 #else
@@ -47,7 +70,7 @@ typedef short glIndex_t;
 #endif
 
 
-typedef struct {
+typedef struct silEdge_s {
 	// NOTE: making this a glIndex is dubious, as there can be 2x the faces as verts
 	glIndex_t					p1, p2;					// planes defining the edge
 	glIndex_t					v1, v2;					// verts defining the edge
@@ -125,7 +148,7 @@ typedef idList<srfTriangles_t *> idTriList;
 
 typedef struct modelSurface_s {
 	int							id;
-	const idMaterial *			shader;
+	const idMaterial *			material;
 	srfTriangles_t *			geometry;
 } modelSurface_t;
 

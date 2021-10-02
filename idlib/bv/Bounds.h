@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __BV_BOUNDS_H__
@@ -101,9 +101,7 @@ public:
 
 	void			ToPoints( idVec3 points[8] ) const;
 	idSphere		ToSphere( void ) const;
-
-	// duzenko: don't delete, used for random debugging by grayman
-	const char *	ToString( const int precision = 2 ) const; // grayman - used to be const char *, can't now make it idStr
+	idStr			ToString( const int precision = 2 ) const;
 
 	void			AxisProjection( const idVec3 &dir, float &min, float &max ) const;
 	void			AxisProjection( const idVec3 &origin, const idMat3 &axis, const idVec3 &dir, float &min, float &max ) const;
@@ -129,11 +127,11 @@ ID_INLINE idBounds::idBounds( const idVec3 &point ) {
 	b[1] = point;
 }
 
-ID_INLINE const idVec3 &idBounds::operator[]( const int index ) const {
+ID_FORCE_INLINE const idVec3 &idBounds::operator[]( const int index ) const {
 	return b[index];
 }
 
-ID_INLINE idVec3 &idBounds::operator[]( const int index ) {
+ID_FORCE_INLINE idVec3 &idBounds::operator[]( const int index ) {
 	return b[index];
 }
 
@@ -299,64 +297,22 @@ ID_INLINE bool idBounds::AddBounds( const idBounds &a ) {
 
 ID_INLINE idBounds idBounds::Intersect( const idBounds &a ) const {
 	idBounds n;
-
-	// grayman #2734 - Check for intersecting first. Note that if there's
-	// no intersection, a bounds with zero min/max points is returned, so
-	// if that matters, you should check for that at the spot where this
-	// is called.
-
-	n.Zero();
-	if (IntersectsBounds(a))
-	{
-		n.b[0][0] = ( a.b[0][0] > b[0][0] ) ? a.b[0][0] : b[0][0];
-		n.b[0][1] = ( a.b[0][1] > b[0][1] ) ? a.b[0][1] : b[0][1];
-		n.b[0][2] = ( a.b[0][2] > b[0][2] ) ? a.b[0][2] : b[0][2];
-		n.b[1][0] = ( a.b[1][0] < b[1][0] ) ? a.b[1][0] : b[1][0];
-		n.b[1][1] = ( a.b[1][1] < b[1][1] ) ? a.b[1][1] : b[1][1];
-		n.b[1][2] = ( a.b[1][2] < b[1][2] ) ? a.b[1][2] : b[1][2];
-	}
+	n.b[0][0] = ( a.b[0][0] > b[0][0] ) ? a.b[0][0] : b[0][0];
+	n.b[0][1] = ( a.b[0][1] > b[0][1] ) ? a.b[0][1] : b[0][1];
+	n.b[0][2] = ( a.b[0][2] > b[0][2] ) ? a.b[0][2] : b[0][2];
+	n.b[1][0] = ( a.b[1][0] < b[1][0] ) ? a.b[1][0] : b[1][0];
+	n.b[1][1] = ( a.b[1][1] < b[1][1] ) ? a.b[1][1] : b[1][1];
+	n.b[1][2] = ( a.b[1][2] < b[1][2] ) ? a.b[1][2] : b[1][2];
 	return n;
 }
 
 ID_INLINE idBounds &idBounds::IntersectSelf( const idBounds &a ) {
-
-	// grayman #2734 - Check for intersecting first. Note that if there's
-	// no intersection, "this" bounds' max point is set to the min point, so
-	// if that matters, you should check for that at the spot where this
-	// is called. As of this writing, IntersectSelf() isn't used anywhere.
-
-	if (IntersectsBounds(a))
-	{
-		if ( a.b[0][0] > b[0][0] )
-		{
-			b[0][0] = a.b[0][0];
-		}
-		if ( a.b[0][1] > b[0][1] )
-		{
-			b[0][1] = a.b[0][1];
-		}
-		if ( a.b[0][2] > b[0][2] )
-		{
-			b[0][2] = a.b[0][2];
-		}
-		if ( a.b[1][0] < b[1][0] )
-		{
-			b[1][0] = a.b[1][0];
-		}
-		if ( a.b[1][1] < b[1][1] )
-		{
-			b[1][1] = a.b[1][1];
-		}
-		if ( a.b[1][2] < b[1][2] )
-		{
-			b[1][2] = a.b[1][2];
-		}
-	}
-	else
-	{
-		b[1] = b[0]; // no intersection, so collapse the bounds
-	}
-
+	b[0][0] = ( a.b[0][0] > b[0][0] ) ? a.b[0][0] : b[0][0];
+	b[0][1] = ( a.b[0][1] > b[0][1] ) ? a.b[0][1] : b[0][1];
+	b[0][2] = ( a.b[0][2] > b[0][2] ) ? a.b[0][2] : b[0][2];
+	b[1][0] = ( a.b[1][0] < b[1][0] ) ? a.b[1][0] : b[1][0];
+	b[1][1] = ( a.b[1][1] < b[1][1] ) ? a.b[1][1] : b[1][1];
+	b[1][2] = ( a.b[1][2] < b[1][2] ) ? a.b[1][2] : b[1][2];
 	return *this;
 }
 

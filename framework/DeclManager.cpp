@@ -1,21 +1,23 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
 #pragma hdrstop
+#include "LoadStack.h"
 
+#include "DeclSubtitles.h"
 
 
 /*
@@ -158,6 +160,7 @@ public:
 	int							checksum;
 	int							fileSize;
 	int							numLines;
+	bool						hasReloadedSubtitles;
 
 	idDeclLocal *				decls;
 };
@@ -171,6 +174,13 @@ public:
 	virtual void				Reload( bool force );
 	virtual void				BeginLevelLoad();
 	virtual void				EndLevelLoad();
+	virtual void				BeginEntityLoad(idMapEntity *entity) override;
+	virtual void				EndEntityLoad(idMapEntity *entity) override;
+	virtual void				BeginModelLoad(idRenderModel *model) override;
+	virtual void				EndModelLoad(idRenderModel *model) override;
+	virtual void				BeginWindowLoad(idWindow *model) override;
+	virtual void				EndWindowLoad(idWindow *model) override;
+	virtual const LoadStack &	GetLoadStack() const override;
 	virtual void				RegisterDeclType( const char *typeName, declType_t type, idDecl *(*allocator)( void ) );
 	virtual void				RegisterDeclFolder( const char *folder, const char *extension, declType_t defaultType );
 	virtual int					GetChecksum( void ) const;
@@ -209,6 +219,7 @@ public:
 
 	idDeclType *				GetDeclType( int type ) const { return declTypes[type]; }
 	const idDeclFile *			GetImplicitDeclFile( void ) const { return &implicitDecls; }
+	idList<idDeclFile*> &		GetLoadedFiles() { return loadedFiles; }
 
 private:
 	idList<idDeclType *>		declTypes;
@@ -223,6 +234,7 @@ private:
 	int							checksum;		// checksum of all loaded decl text
 	int							indent;			// for MediaPrint
 	bool						insideLevelLoad;
+	LoadStack					loadStack;
 
 	static idCVar				decl_show;
 
@@ -236,6 +248,11 @@ idCVar idDeclManagerLocal::decl_show( "decl_show", "0", CVAR_SYSTEM, "set to 1 t
 
 idDeclManagerLocal	declManagerLocal;
 idDeclManager *		declManager = &declManagerLocal;
+
+void GetDeclLoadedFiles(idStrList &list) {
+	for ( auto& file : declManagerLocal.GetLoadedFiles() )
+		list.Append( file->fileName );
+}
 
 /*
 ====================================================================================
@@ -565,8 +582,10 @@ ForceReload will cause it to reload even if the timestamp hasn't changed
 ================
 */
 void idDeclFile::Reload( bool force ) {
+	hasReloadedSubtitles = false;
+
 	// check for an unchanged timestamp
-	if ( !force && timestamp != 0 ) {
+	if ( !force ) {
 		ID_TIME_T	testTimeStamp;
 		fileSystem->ReadFile( fileName, NULL, &testTimeStamp );
 
@@ -765,6 +784,8 @@ int idDeclFile::LoadAndParse() {
 			decl->sourceTextLength = 0;
 			decl->sourceLine = decl->sourceFile->numLines;
 		}
+		if ( decl->GetType() == DECL_SUBTITLES )
+			hasReloadedSubtitles = true;
 	}
 
 	return checksum;
@@ -804,6 +825,7 @@ void idDeclManagerLocal::Init( void ) {
 	RegisterDeclType( "material",			DECL_MATERIAL,		idDeclAllocator<idMaterial> );
 	RegisterDeclType( "skin",				DECL_SKIN,			idDeclAllocator<idDeclSkin> );
 	RegisterDeclType( "sound",				DECL_SOUND,			idDeclAllocator<idSoundShader> );
+	RegisterDeclType( "subtitles",			DECL_SUBTITLES,		idDeclAllocator<idDeclSubtitles> );
 
 	RegisterDeclType( "entityDef",			DECL_ENTITYDEF,		idDeclAllocator<idDeclEntityDef> );
 	RegisterDeclType( "mapDef",				DECL_MAPDEF,		idDeclAllocator<idDeclEntityDef> );
@@ -811,6 +833,7 @@ void idDeclManagerLocal::Init( void ) {
 	RegisterDeclType( "particle",			DECL_PARTICLE,		idDeclAllocator<idDeclParticle> );
 	RegisterDeclType( "articulatedFigure",	DECL_AF,			idDeclAllocator<idDeclAF> );
 
+	RegisterDeclFolder( "subtitles",		".subs",			DECL_SUBTITLES );
 	RegisterDeclFolder( "materials",		".mtr",				DECL_MATERIAL );
 	RegisterDeclFolder( "skins",			".skin",			DECL_SKIN );
 	RegisterDeclFolder( "sound",			".sndshd",			DECL_SOUND );
@@ -855,6 +878,8 @@ void idDeclManagerLocal::Shutdown( void ) {
 	int			i, j;
 	idDeclLocal *decl;
 
+	loadStack.Clear();
+
 	// free decls
 	for ( i = 0; i < DECL_MAX_TYPES; i++ ) {
 		for ( j = 0; j < linearLists[i].Num(); j++ ) {
@@ -869,8 +894,8 @@ void idDeclManagerLocal::Shutdown( void ) {
 			}
 			delete decl;
 		}
-		linearLists[i].Clear();
-		hashTables[i].Free();
+		linearLists[i].ClearFree();
+		hashTables[i].ClearFree();
 	}
 
 	// free decl files
@@ -891,8 +916,22 @@ idDeclManagerLocal::Reload
 ===================
 */
 void idDeclManagerLocal::Reload( bool force ) {
+
+	bool subtitlesChanged = false;
+
 	for ( int i = 0; i < loadedFiles.Num(); i++ ) {
 		loadedFiles[i]->Reload( force );
+
+		if ( loadedFiles[i]->hasReloadedSubtitles )
+			subtitlesChanged = true;
+	}
+
+	if ( subtitlesChanged ) {
+		// stgatilov: some "subtitles" decl was reparsed
+		// they won't take effect until we reload subtitles in sound samples
+		// it is hard to know which samples were affected, so let's just reload all
+		extern void SoundReloadSubtitles();
+		SoundReloadSubtitles();
 	}
 }
 
@@ -927,6 +966,27 @@ void idDeclManagerLocal::EndLevelLoad() {
 	// and sound sample manager will need to free media that was not referenced
 }
 
+void idDeclManagerLocal::BeginEntityLoad(idMapEntity *entity) {
+	loadStack.Append(LoadStack::LevelOf(entity));
+}
+void idDeclManagerLocal::BeginModelLoad(idRenderModel *model) {
+	loadStack.Append(LoadStack::LevelOf(model));
+}
+void idDeclManagerLocal::BeginWindowLoad(idWindow *window) {
+	loadStack.Append(LoadStack::LevelOf(window));
+}
+void idDeclManagerLocal::EndEntityLoad(idMapEntity *entity) {
+	loadStack.Rollback(entity);
+}
+void idDeclManagerLocal::EndModelLoad(idRenderModel *model) {
+	loadStack.Rollback(model);
+}
+void idDeclManagerLocal::EndWindowLoad(idWindow *window) {
+	loadStack.Rollback(window);
+}
+const LoadStack &idDeclManagerLocal::GetLoadStack() const {
+	return loadStack;
+}
 /*
 ===================
 idDeclManagerLocal::RegisterDeclType
@@ -2135,6 +2195,24 @@ void idDeclLocal::AllocateSelf( void ) {
 	}
 }
 
+//stgatilov: for tracing decl loads
+static constexpr const char *GetParseLabelOfDeclType(declType_t type) {
+	if (type == DECL_TABLE) return "Parse:Table";
+	if (type == DECL_MATERIAL) return "Parse:Material";
+	if (type == DECL_SKIN) return "Parse:Skin";
+	if (type == DECL_SOUND) return "Parse:Sound";
+	if (type == DECL_SUBTITLES) return "Parse:Subtitles";
+	if (type == DECL_ENTITYDEF) return "Parse:EntityDef";
+	if (type == DECL_MODELDEF) return "Parse:ModelDef";
+	if (type == DECL_FX) return "Parse:FX";
+	if (type == DECL_PARTICLE) return "Parse:Particle";
+	if (type == DECL_AF) return "Parse:AF";
+	if (type == DECL_XDATA) return "Parse:XData";
+	if (type == DECL_TDM_MATINFO) return "Parse:MatInfo";
+	if (type == DECL_TDM_MISSIONINFO) return "Parse:MissionInfo";
+	return "Parse:Decl";
+}
+
 /*
 =================
 idDeclLocal::ParseLocal
@@ -2149,6 +2227,8 @@ void idDeclLocal::ParseLocal( void ) {
 	self->FreeData();
 
 	declManagerLocal.MediaPrint( "parsing %s %s\n", declManagerLocal.declTypes[type]->typeName.c_str(), name.c_str() );
+	TRACE_CPU_DSCOPE_TEXT(GetParseLabelOfDeclType(type), self->GetName())
+	declManagerLocal.loadStack.Append(LoadStack::LevelOf(self));
 
 	// if no text source try to generate default text
 	if ( textSource == NULL ) {
@@ -2162,6 +2242,7 @@ void idDeclLocal::ParseLocal( void ) {
 	if ( textSource == NULL ) {
 		MakeDefault();
 		declManagerLocal.indent--;
+		declManagerLocal.loadStack.Rollback(self);
 		return;
 	}
 
@@ -2180,6 +2261,7 @@ void idDeclLocal::ParseLocal( void ) {
 	}
 
 	declManagerLocal.indent--;
+	declManagerLocal.loadStack.Rollback(self);
 }
 
 /*

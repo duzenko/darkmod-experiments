@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __COMMON_H__
@@ -25,6 +25,7 @@
 */
 
 #define	MAX_PRINT_MSG_SIZE	16 * 1024
+#include <atomic>
 
 typedef enum {
 	EDITOR_NONE					= 0,
@@ -39,7 +40,9 @@ typedef enum {
 	EDITOR_PARTICLE				= BIT(9),
 	//EDITOR_PDA					= BIT(10),
 	EDITOR_AAS					= BIT(11),
-	EDITOR_MATERIAL				= BIT(12)
+	EDITOR_MATERIAL				= BIT(12),
+
+	EDITOR_RUNPARTICLE			= BIT(13),
 } toolFlag_t;
 
 #define STRTABLE_ID				"#str_"
@@ -61,7 +64,7 @@ extern idCVar		com_showAsyncStats;
 extern idCVar		com_showSoundDecoders;
 extern idCVar		com_makingBuild;
 extern idCVar		com_updateLoadSize;
-// extern idCVar       com_maxFPS;
+extern idCVar		com_timescale;
 //extern idCVar		com_videoRam;
 
 extern int			time_gameFrame;			// game logic time
@@ -71,9 +74,9 @@ extern int			time_frontendLast;		// renderer frontend time
 extern int			time_backend;			// renderer backend time
 extern int			time_backendLast;		// renderer backend time
 
-extern int			com_frameTime;			// time for the current frame in milliseconds
-extern int			com_frameMsec;
-extern volatile int	com_ticNumber;			// 60 hz tics, incremented by async function
+extern int			com_frameTime;			// time moment of the current frame in milliseconds
+extern int			com_frameDelta;			// time elapsed since previous frame in milliseconds
+extern std::atomic<int>	com_ticNumber;		// 60 hz tics, incremented by async function
 extern int			com_editors;			// current active editor(s)
 extern bool			com_editorActive;		// true if an editor has focus
 
@@ -163,9 +166,18 @@ public:
 								// Activates or deactivates a tool.
 	virtual void				ActivateTool( bool active ) = 0;
 
+	enum eConfigExport
+	{
+		eConfigExport_cvars,
+		eConfigExport_keybinds,
+		eConfigExport_padbinds,
+		eConfigExport_all,
+	};
+
 								// Writes the user's configuration to a file
 								// greebo: Added the basePath option to allow for more control
-    virtual void				WriteConfigToFile( const char *filename, const char* basePath = "fs_savepath" ) = 0;
+								// STiFU #4797: Added the enum to allow exporting cvars and keybinds separately
+    virtual void				WriteConfigToFile( const char *filename, const char* basePath = "fs_savepath", const eConfigExport configexport = eConfigExport_all) = 0;
 
 								// Writes cvars with the given flags to a file.
 	virtual void				WriteFlaggedCVarsToFile( const char *filename, int flags, const char *setCmd ) = 0;
@@ -184,6 +196,9 @@ public:
 
 								// Same as Printf, with a more usable API - Printf pipes to this.
 	virtual void				VPrintf( const char *fmt, va_list arg ) = 0;
+
+								//Prints current C++ call stack to console
+	virtual void				PrintCallStack( void ) = 0;
 
 								// Prints message that only shows up if the "developer" cvar is set,
 								// and NEVER forces a screen update, which could cause reentrancy problems.

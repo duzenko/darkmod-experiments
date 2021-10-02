@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -19,7 +19,7 @@
 
 
 #include "snd_local.h"
-#include "../ExtLibs/vorbis.h"
+#include "vorbis/vorbisfile.h"
 
 
 /*
@@ -144,15 +144,12 @@ int idWaveFile::OpenOGG( const char* strFileName, waveformatex_t *pwfx ) {
 	OggVorbis_File *ov;
 
 	memset( pwfx, 0, sizeof( waveformatex_t ) );
-
-	mhmmio = fileSystem->OpenFileRead( strFileName );
-	if ( !mhmmio ) {
-		return -1;
-	}
+	assert(mhmmio && idStr::Icmp(mhmmio->GetName(), strFileName) == 0);
 
 	Sys_EnterCriticalSection( CRITICAL_SECTION_ONE );
 
 	ov = new OggVorbis_File;
+	oggStream = 0;
 
 	if( ov_openFile( mhmmio, ov ) < 0 ) {
 		delete ov;
@@ -175,12 +172,10 @@ int idWaveFile::OpenOGG( const char* strFileName, waveformatex_t *pwfx ) {
 	if ( idSoundSystemLocal::s_realTimeDecoding.GetBool() ) {
 
 		ExtLibs::ov_clear( ov );
-		fileSystem->CloseFile( mhmmio );
-		mhmmio = NULL;
 		delete ov;
 
 		mpwfx.Format.wFormatTag = WAVE_FORMAT_TAG_OGG;
-		mhmmio = fileSystem->OpenFileRead( strFileName );
+		mhmmio->Rewind();
 		mMemSize = mhmmio->Length();
 
 	} else {
@@ -211,7 +206,7 @@ int idWaveFile::ReadOGG( byte* pBuffer, int dwSizeToRead, int *pdwSizeRead ) {
 	OggVorbis_File *ov = (OggVorbis_File *) ogg;
 
 	do {
-		int ret = ExtLibs::ov_read( ov, bufferPtr, total >= 4096 ? 4096 : total, Swap_IsBigEndian(), 2, 1, &ov->stream );
+		int ret = ExtLibs::ov_read( ov, bufferPtr, total >= 4096 ? 4096 : total, Swap_IsBigEndian(), 2, 1, &oggStream );
 		if ( ret == 0 ) {
 			break;
 		}
@@ -246,6 +241,7 @@ int idWaveFile::CloseOGG( void ) {
 		fileSystem->CloseFile( mhmmio );
 		mhmmio = NULL;
 		ogg = NULL;
+		oggStream = -1;
 		return 0;
 	}
 	return -1;
@@ -281,6 +277,7 @@ private:
 	idFile_Memory			file;				// encoded file in memory
 
 	OggVorbis_File			ogg;				// OggVorbis file
+	int						oggStream;			// stgatilov: ogg->stream in original D3 with hacked libogg
 };
 
 idBlockAlloc<idSampleDecoderLocal, 64>		sampleDecoderAllocator;
@@ -291,8 +288,9 @@ idSampleDecoder::Init
 ====================
 */
 void idSampleDecoder::Init( void ) {
-	ov_alloc_callbacks alloc_callbacks = {custom_decoder_malloc, custom_decoder_calloc, custom_decoder_realloc, custom_decoder_free};
-	ExtLibs::ov_use_custom_alloc(alloc_callbacks);
+	//TODO: restore custom memory allocator for vorbis?...
+	//ov_alloc_callbacks alloc_callbacks = {custom_decoder_malloc, custom_decoder_calloc, custom_decoder_realloc, custom_decoder_free};
+	//ExtLibs::ov_use_custom_alloc(alloc_callbacks);
 
 	decoderMemoryAllocator.Init();
 	decoderMemoryAllocator.SetLockMemory( true );
@@ -377,6 +375,7 @@ void idSampleDecoderLocal::ClearDecoder( void ) {
 		case WAVE_FORMAT_TAG_OGG: {
 			ExtLibs::ov_clear( &ogg );
 			memset( &ogg, 0, sizeof( ogg ) );
+			oggStream = 0;
 			break;
 		}
 	}
@@ -494,7 +493,7 @@ int idSampleDecoderLocal::DecodePCM( idSoundSample *sample, int sampleOffset44k,
 		return 0;
 	}
 
-	if ( size - pos < sampleCount * sizeof( short ) ) {
+	if ( size - pos < sampleCount * (int)sizeof( short ) ) {
 		readSamples = ( size - pos ) / sizeof( short );
 	} else {
 		readSamples = sampleCount;
@@ -529,7 +528,7 @@ int idSampleDecoderLocal::DecodeOGG( idSoundSample *sample, int sampleOffset44k,
 			failed = true;
 			return 0;
 		}
-		file.SetData( (const char *)sample->nonCacheData, sample->objectMemSize );
+		file = idFile_Memory( "ogg_sample", (const char *)sample->nonCacheData, sample->objectMemSize );
 		if ( ov_openFile( &file, &ogg ) < 0 ) {
 			failed = true;
 			return 0;
@@ -553,7 +552,7 @@ int idSampleDecoderLocal::DecodeOGG( idSoundSample *sample, int sampleOffset44k,
 	readSamples = 0;
 	do {
 		float **samples;
-		int ret = ExtLibs::ov_read_float( &ogg, &samples, totalSamples / sample->objectInfo.nChannels, &ogg.stream );
+		int ret = ExtLibs::ov_read_float( &ogg, &samples, totalSamples / sample->objectInfo.nChannels, &oggStream );
 		if ( ret == 0 ) {
 			failed = true;
 			break;

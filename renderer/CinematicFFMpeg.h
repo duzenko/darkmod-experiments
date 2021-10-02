@@ -16,7 +16,16 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #pragma once
 
 #include "Cinematic.h"
-#include "../ExtLibs/ffmpeg.h"
+
+extern "C" {
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libswscale/swscale.h"
+#include "libswresample/swresample.h"
+#include "libavformat/avio.h"
+#include "libavutil/avutil.h"
+#include "libavutil/audio_fifo.h"
+}
 
 /**
  * Cinematic driven by the ffmpeg libavcodec library.
@@ -33,8 +42,11 @@ public:
 	virtual bool			InitFromFile(const char *qpath, bool looping, bool withAudio);
 	virtual int				AnimationLength();
 	virtual cinData_t		ImageForTime(int milliseconds);
-	virtual bool SoundForTimeInterval(int sampleOffset, int *sampleSize, int frequency, float *output);
+	virtual bool SoundForTimeInterval(int sampleOffset44k, int *sampleSize, float *output);
+	virtual int GetRealSoundOffset(int sampleOffset44k) const;
 	virtual cinStatus_t GetStatus() const;
+	virtual const char *GetFilePath() const;
+
 
 	virtual void			ResetTime(int time);
 	virtual void			Close();

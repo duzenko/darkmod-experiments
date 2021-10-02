@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 
@@ -17,6 +17,7 @@
 #pragma hdrstop
 
 #include "tr_local.h"
+#include "Interaction.h"
 
 /*
 ===========================================================================
@@ -28,6 +29,15 @@ idInteraction implementation
 
 // FIXME: use private allocator for srfCullInfo_t
 idCVar r_useInteractionTriCulling("r_useInteractionTriCulling", "1", CVAR_RENDERER | CVAR_BOOL, "1 = cull interactions tris");
+idCVarInt r_singleShadowEntity( "r_singleShadowEntity", "-1", CVAR_RENDERER, "suppress all but one shadowing entity" );
+
+void idInteraction::PrepareLightSurf( linkLocation_t link, const srfTriangles_t *tri, const viewEntity_s *space,
+		const idMaterial *material, const idScreenRect &scissor, bool viewInsideShadow ) {
+
+	drawSurf_t *drawSurf = R_PrepareLightSurf( tri, space, material, scissor, viewInsideShadow );
+	drawSurf->nextOnLight = surfsToLink[link];
+	surfsToLink[link] = drawSurf;
+}
 
 /*
 ================
@@ -49,33 +59,10 @@ void R_CalcInteractionFacing( const idRenderEntityLocal *ent, const srfTriangles
 	R_GlobalPointToLocal( ent->modelMatrix, light->globalLightOrigin, localLightOrigin );
 	const int numFaces = tri->numIndexes / 3;
 
-	if ( r_useAnonreclaimer.GetBool() ) {
-		cullInfo.facing = ( byte* )R_StaticAlloc( ( numFaces + 1 ) * sizeof( cullInfo.facing[0] ) );
+	cullInfo.facing = ( byte* )R_StaticAlloc( ( numFaces + 1 ) * sizeof( cullInfo.facing[0] ) );
 
-		// exact geometric cull against face
-		for ( int i = 0, face = 0; i < tri->numIndexes; i += 3, face++ ) {
-			const idDrawVert& v0 = tri->verts[tri->indexes[i + 0]];
-			const idDrawVert& v1 = tri->verts[tri->indexes[i + 1]];
-			const idDrawVert& v2 = tri->verts[tri->indexes[i + 2]];
-
-			const idPlane plane( v0.xyz, v1.xyz, v2.xyz );
-			const float d = plane.Distance( localLightOrigin );
-
-			cullInfo.facing[face] = ( d >= 0.0f );
-		}
-	} else {
-		if ( !tri->facePlanes || !tri->facePlanesCalculated ) {
-			R_DeriveFacePlanes( const_cast<srfTriangles_t *>( tri ) );
-		}
-		cullInfo.facing = ( byte * )R_StaticAlloc( ( numFaces + 1 ) * sizeof( cullInfo.facing[0] ) );
-
-		// duzenko #4424: similar to d3bfg don't use a temp array (no speed difference really)
-		// revelator: removed old codepath, keep source clean.
-		for ( int face = 0; face < numFaces; face++ ) {
-			const float d = tri->facePlanes[face].Distance( localLightOrigin );
-			cullInfo.facing[face] = ( d >= 0.0f );
-		}
-	}	
+	// exact geometric cull against face
+	SIMDProcessor->CalcTriFacing(tri->verts, tri->numVerts, tri->indexes, tri->numIndexes, localLightOrigin, cullInfo.facing);
 	cullInfo.facing[numFaces] = 1;	// for dangling edges to reference
 }
 
@@ -479,7 +466,6 @@ idInteraction::idInteraction( void ) {
 	entityPrev				= NULL;
 	dynamicModelFrameCount	= 0;
 	frustumState			= FRUSTUM_UNINITIALIZED;
-	frustumAreas			= NULL;
 }
 
 /*
@@ -493,6 +479,7 @@ idInteraction *idInteraction::AllocAndLink( idRenderEntityLocal *edef, idRenderL
 	}
 	idRenderWorldLocal *renderWorld = edef->world;
 	idInteraction *interaction = renderWorld->interactionAllocator.Alloc();
+	interaction->flagMakeEmpty = false;
 
 	// link and initialize
 	interaction->dynamicModelFrameCount = 0;
@@ -504,7 +491,6 @@ idInteraction *idInteraction::AllocAndLink( idRenderEntityLocal *edef, idRenderL
 	interaction->surfaces = NULL;
 
 	interaction->frustumState = idInteraction::FRUSTUM_UNINITIALIZED;
-	interaction->frustumAreas = NULL;
 
 	// link at the start of the entity's list
 	interaction->lightNext = ldef->firstInteraction;
@@ -529,15 +515,11 @@ idInteraction *idInteraction::AllocAndLink( idRenderEntityLocal *edef, idRenderL
 	}
 
 	// update the interaction table
-	int key = ( ldef->index << 16 ) + edef->index;
-	auto &cell = renderWorld->interactionTable.Find( key );
-	if ( !renderWorld->interactionTable.IsEmpty( cell ) ) { 
-		common->Error( "idInteraction::AllocAndLink: non NULL table entry" ); 
+	bool added = renderWorld->interactionTable.Add(interaction);
+	if ( !added ) { 
+		common->Error( "idInteraction::AllocAndLink: interaction already in table" ); 
 	}
-	cell.key = key;
-	cell.value = interaction;
-	renderWorld->interactionTable.Added( cell );
-
+	
 	return interaction;
 }
 
@@ -623,23 +605,14 @@ void idInteraction::UnlinkAndFree( void ) {
 
 	// clear the table pointer
 	idRenderWorldLocal *renderWorld = this->lightDef->world;
-	int key = ( this->lightDef->index << 16 ) + this->entityDef->index;
-	auto &cell = renderWorld->interactionTable.Find( key );
-	if ( cell.key != key || cell.value != this ) { 
-		common->Error( "idInteraction::UnlinkAndFree: interactionTable wasn't set" ); 
+	bool removed = renderWorld->interactionTable.Remove(this);
+	if ( !removed ) { 
+		common->Error( "idInteraction::UnlinkAndFree: interaction not in table" ); 
 	}
-	renderWorld->interactionTable.Erase( cell );
 
 	Unlink();
 
 	FreeSurfaces();
-
-	// free the interaction area references
-	areaNumRef_t *area, *nextArea;
-	for ( area = frustumAreas; area; area = nextArea ) {
-		nextArea = area->next;
-		renderWorld->areaNumRefAllocator.Free( area );
-	}
 
 	// put it back on the free list
 	renderWorld->interactionAllocator.Free( this );
@@ -680,6 +653,8 @@ void idInteraction::MakeEmpty( void ) {
 	} else {
 		this->lightDef->firstInteraction = this;
 	}
+
+	flagMakeEmpty = false;
 }
 
 /*
@@ -735,28 +710,35 @@ idScreenRect idInteraction::CalcInteractionScissorRectangle( const idFrustum &vi
 	if ( frustumState == idInteraction::FRUSTUM_UNINITIALIZED || frustumState == idInteraction::FRUSTUM_INVALID ) {
 		return lightDef->viewLight->scissorRect;
 	}
+	//stgatilov: single-point frustum happens from full-zero model bounds
+	//which happens when model has no surfaces at all (e.g. aasobstacle)
+	if ( frustum.GetLeft() == 0.0 && frustum.GetUp() == 0.0 ) {
+		scissorRect.Clear();
+		return scissorRect;
+	}
 
 	// calculate scissors for the portals through which the interaction is visible
 	if ( r_useInteractionScissors.GetInteger() > 1 ) {
-		areaNumRef_t *area;
+		bool fullScissor = false;
+		int viewerArea = tr.viewDef->areaNum;
 
-		if ( frustumState == idInteraction::FRUSTUM_VALID ) {
-			// retrieve all the areas the interaction frustum touches
-			for ( areaReference_t *ref = entityDef->entityRefs; ref; ref = ref->ownerNext ) {
-				area = entityDef->world->areaNumRefAllocator.Alloc();
-				area->areaNum = ref->area->areaNum;
-				area->next = frustumAreas;
-				frustumAreas = area;
+		// retrieve all the areas the entity belongs to
+		static const int MAX_AREAS_NUM = 32;
+		int areas[MAX_AREAS_NUM], areasCnt = 0;
+		for ( areaReference_t *ref = entityDef->entityRefs; ref; ref = ref->ownerNext ) {
+			int area = ref->area->areaNum;
+			if (area == viewerArea || areasCnt == MAX_AREAS_NUM) {
+				fullScissor = true;
+				break;
 			}
-			frustumAreas = tr.viewDef->renderWorld->FloodFrustumAreas( frustum, frustumAreas );
-			frustumState = idInteraction::FRUSTUM_VALIDAREAS;
+			areas[areasCnt++] = area;
 		}
-		portalRect.Clear();
 
-		for ( area = frustumAreas; area; area = area->next ) {
-			portalRect.Union( entityDef->world->GetAreaScreenRect( area->areaNum ) );
+		// flood into areas along frustum, try to reduce interaction scissor
+		portalRect = lightDef->viewLight->scissorRect;
+		if (!fullScissor) {
+			tr.viewDef->renderWorld->FlowShadowFrustumThroughPortals(portalRect, frustum, areas, areasCnt);
 		}
-		portalRect.Intersect( lightDef->viewLight->scissorRect );
 	} else {
 		portalRect = lightDef->viewLight->scissorRect;
 	}
@@ -863,6 +845,7 @@ The results of this are cached and valid until the light or entity change.
 void idInteraction::CreateInteraction( const idRenderModel *model ) {
 	const idMaterial *	lightShader = lightDef->lightShader;
 	const idMaterial*	shader;
+	bool				spectrumbypass;
 	bool				interactionGenerated;
 	idBounds			bounds;
 
@@ -870,18 +853,11 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 
 	bounds = model->Bounds( &entityDef->parms );
 
-	if ( r_useAnonreclaimer.GetBool() ) {
-		// if it doesn't contact the light frustum, none of the surfaces will
-		if ( R_CullModelBoundsToLight( lightDef, bounds, entityDef->modelRenderMatrix ) ) {
-			MakeEmpty();
-			return;
-		}
-	} else {
-		// if it doesn't contact the light frustum, none of the surfaces will
-		if ( R_CullLocalBox( bounds, entityDef->modelMatrix, 6, lightDef->frustum ) ) {
-			MakeEmpty();
-			return;
-		}
+	// if it doesn't contact the light frustum, none of the surfaces will
+	if ( R_CullModelBoundsToLight( lightDef, bounds, entityDef->modelRenderMatrix ) ) {
+		//MakeEmpty();
+		flagMakeEmpty = true;
+		return;
 	}
 
 	// use the turbo shadow path
@@ -915,23 +891,16 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 		}
 
 		// determine the shader for this surface, possibly by skinning
-		shader = surf->shader;
+		shader = surf->material;
 		shader = R_RemapShaderBySkin( shader, entityDef->parms.customSkin, entityDef->parms.customShader );
 
 		if ( !shader ) {
 			continue;
 		}
 
-		if ( r_useAnonreclaimer.GetBool() ) {
-			// try to cull each surface
-			if ( R_CullModelBoundsToLight( lightDef, tri->bounds, entityDef->modelRenderMatrix ) ) {
-				continue;
-			}
-		} else {
-			// try to cull each surface
-			if ( R_CullLocalBox( tri->bounds, entityDef->modelMatrix, 6, lightDef->frustum ) ) {
-				continue;
-			}
+		// try to cull each surface
+		if ( R_CullModelBoundsToLight( lightDef, tri->bounds, entityDef->modelRenderMatrix ) ) {
+			continue;
 		}
 		surfaceInteraction_t *sint = &surfaces[c];
 
@@ -941,16 +910,40 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 		// when the ambient surface isn't in view, and we can get shared vertex
 		// and shadow data from the source surface
 		sint->ambientTris = tri;
+		
+#if 0	// duzenko: interactions disabled this way remain disabled during the main view render
+		// nbohr1more: #4379 lightgem culling
+		if ( !HasShadows() && !shader->IsLightgemSurf() && tr.viewDef->IsLightGem() ) { 
+			continue; 
+		}
+#endif		
 
 		// "invisible ink" lights and shaders
 		if ( shader->Spectrum() != lightShader->Spectrum() ) {
 			continue;
 		}
-
-		// nbohr1more: #4379 lightgem culling
-		if ( !HasShadows() && !shader->IsLightgemSurf() && tr.viewDef->IsLightGem() ) { 
-			continue; 
+		
+		spectrumbypass = false;
+		
+		if ( (entityDef->parms.nospectrum != lightDef->parms.spectrum) && entityDef->parms.nospectrum > 0 ) {
+            spectrumbypass = true;
 		}
+		
+		if ( (entityDef->parms.lightspectrum != lightDef->parms.spectrum) && lightShader->IsAmbientLight() ) {
+		    spectrumbypass = true;
+		}			
+		
+		//nbohr1more: #4956 spectrum for entities
+		if ( ( entityDef->parms.spectrum != lightDef->parms.spectrum ) && !spectrumbypass ) {
+		     continue;
+		}
+		
+		
+		// nbohr1more: #3662 fix noFog keyword
+		if ( (!shader->ReceivesFog() || entityDef->parms.noFog) && lightShader->IsFogLight() ) {
+           continue;
+        }
+
 
 		// generate a lighted surface and add it
 		if ( shader->ReceivesLighting() || r_shadows.GetInteger() == 2 && shader->SurfaceCastsShadow() ) {
@@ -992,7 +985,8 @@ void idInteraction::CreateInteraction( const idRenderModel *model ) {
 
 	// if none of the surfaces generated anything, don't even bother checking?
 	if ( !interactionGenerated ) {
-		MakeEmpty();
+		//MakeEmpty();
+		flagMakeEmpty = true;
 	}
 }
 
@@ -1070,50 +1064,119 @@ static bool R_PotentiallyInsideInfiniteShadow( const srfTriangles_t *occluder,
 
 /*
 ==================
-idInteraction::HasActive
+idInteraction::IsPotentiallyVisible
 
 ==================
 */
-bool idInteraction::HasActive( idScreenRect &shadowScissor ) {
+bool idInteraction::IsPotentiallyVisible( idScreenRect &shadowScissor ) {
 	viewLight_t *	vLight;
 	viewEntity_t *	vEntity;
 
 	vLight = lightDef->viewLight;
 	vEntity = entityDef->viewEntity;
 
+	shadowScissor = vLight->scissorRect;
 
-	// nbohr1more: #4379 lightgem culling
-	if ( !HasShadows() && !entityDef->parms.isLightgem && tr.viewDef->IsLightGem() ) {
-		return false;
-	} else if ( !HasShadows() ) { // do not waste time culling the interaction frustum if there will be no shadows
-
-								  // use the entity scissor rectangle
-		shadowScissor = vEntity->scissorRect;
-
-		// culling does not seem to be worth it for static world models
-	} else if ( entityDef->parms.hModel->IsStaticWorldModel() ) {
-
-		// use the light scissor rectangle
-		shadowScissor = vLight->scissorRect;
-
-	} else {
-
-		// try to cull the interaction
-		// this will also cull the case where the light origin is inside the
-		// view frustum and the entity bounds are outside the view frustum
-		if ( CullInteractionByViewFrustum( tr.viewDef->viewFrustum ) ) {
+	// do not waste time culling the interaction frustum if there will be no shadows
+	if ( !HasShadows() ) {
+		// nbohr1more: #4379 lightgem culling
+		if ( !entityDef->parms.isLightgem && tr.viewDef->IsLightGem() )
 			return false;
-		}
 
-		// calculate the shadow scissor rectangle
-		shadowScissor = CalcInteractionScissorRectangle( tr.viewDef->viewFrustum );
+		// use the entity scissor rectangle
+		shadowScissor.Intersect(vEntity->scissorRect);
+		if (shadowScissor.IsEmpty())
+			return false;
+		return true;
 	}
 
-	// get out before making the dynamic model if the shadow scissor rectangle is empty
+	// duzenko: cull away interaction if light and entity are in disconnected areas
+	// note: this cannot be done for noshadows lights, since they light objects through closed doors!
+	// stgatilov #5121: parallelSky light originates in all sky areas at once, so skip this check for it
+	assert(HasShadows());
+	if ( lightDef->areaNum != -1 && !lightDef->parms.parallelSky ) {
+		// if no part of the model is in an area that is connected to
+		// the light center (it is behind a solid, closed door), we can ignore it
+		bool areasConnected = false;
+		for ( areaReference_t* ref = entityDef->entityRefs; ref != NULL; ref = ref->ownerNext ) {
+			if ( tr.viewDef->renderWorld->AreasAreConnected( lightDef->areaNum, ref->area->areaNum, PS_BLOCK_VIEW ) ) {
+				areasConnected = true;
+				break;
+			}
+		}
+		if ( areasConnected == false ) {
+			// can't possibly be lit
+			return false;
+		}
+	}
+
+	// sophisticated culling does not seem to be worth it for static world models
+	if ( entityDef->parms.hModel->IsStaticWorldModel() ) {
+		return true;
+	}
+
+	// try to cull by loose shadow bounds
+	idBounds shadowBounds;
+	extern void R_ShadowBounds( const idBounds& modelBounds, const idBounds& lightBounds, const idVec3& lightOrigin, idBounds& shadowBounds );
+	R_ShadowBounds( entityDef->globalReferenceBounds, lightDef->globalLightBounds, lightDef->globalLightOrigin, shadowBounds );
+	// duzenko: cull away if shadow is surely out of viewport
+	// note: a more precise version of such check is done later inside CullInteractionByViewFrustum
+	if ( idRenderMatrix::CullBoundsToMVP( tr.viewDef->worldSpace.mvp, shadowBounds ) )
+		return false;
+
+	// duzenko: intersect light scissor with shadow bounds
+	idBounds shadowProjectionBounds;
+	if ( !tr.viewDef->viewFrustum.ProjectionBounds( shadowBounds, shadowProjectionBounds ) )
+		return false;
+	idScreenRect shadowRect = R_ScreenRectFromViewFrustumBounds( shadowProjectionBounds );
+	shadowScissor.Intersect(shadowRect);
+	if ( shadowScissor.IsEmpty() )
+		return false;
+
+	// try to cull the interaction by view frustum
+	// this will also cull the case where the light origin is inside the
+	// view frustum and the entity bounds are outside the view frustum
+	if ( CullInteractionByViewFrustum( tr.viewDef->viewFrustum ) ) {
+		return false;
+	}
+
+	// try to cull the interaction by portals (culled away if empty scissor is returned)
+	// as a by-product, calculate more precise shadow scissor rectangle
+	shadowRect = CalcInteractionScissorRectangle( tr.viewDef->viewFrustum );
+	shadowScissor.Intersect(shadowRect);
 	if ( shadowScissor.IsEmpty() ) {
 		return false;
 	}
+
 	return true;
+}
+
+void idInteraction::LinkPreparedSurfaces() {
+	for (int i = 0; i < MAX_LOCATIONS; ++i) {
+		if (surfsToLink[i] == nullptr) {
+			continue;
+		}
+
+		drawSurf_t **link = nullptr;
+		switch (i) {
+		case INTERACTION_TRANSLUCENT: link = &lightDef->viewLight->translucentInteractions; break;
+		case INTERACTION_LOCAL: link = &lightDef->viewLight->localInteractions; break;
+		case INTERACTION_GLOBAL: link = &lightDef->viewLight->globalInteractions; break;
+		case SHADOW_LOCAL: link = &lightDef->viewLight->localShadows; break;
+		case SHADOW_GLOBAL: link = &lightDef->viewLight->globalShadows; break;
+		}
+
+		drawSurf_t *surf = surfsToLink[i];
+		drawSurf_t *end = surf;
+		while (end->nextOnLight) {
+			end = end->nextOnLight;
+		}
+
+		end->nextOnLight = *link;
+		*link = surf;
+
+		surfsToLink[i] = nullptr;
+	}
 }
 
 /*
@@ -1130,7 +1193,6 @@ instantiate the dynamic model to find out
 void idInteraction::AddActiveInteraction( void ) {
 	viewLight_t *	vLight;
 	viewEntity_t *	vEntity;
-	idScreenRect	shadowScissor;
 	idScreenRect	lightScissor;
 	idVec3			localLightOrigin;
 	idVec3			localViewOrigin;
@@ -1138,7 +1200,12 @@ void idInteraction::AddActiveInteraction( void ) {
 	vLight = lightDef->viewLight;
 	vEntity = entityDef->viewEntity;
 
-	if ( !HasActive( shadowScissor ) )
+	flagMakeEmpty = false;
+
+	// Try to cull the whole interaction away in a multitide of ways
+	// Also, reduce scissor rect of the interaction if possible
+	idScreenRect shadowScissor = vLight->scissorRect;
+	if ( !IsPotentiallyVisible( shadowScissor ) )
 		return;
 
 	// We will need the dynamic surface created to make interactions, even if the
@@ -1172,10 +1239,12 @@ void idInteraction::AddActiveInteraction( void ) {
 
 	// for each surface of this entity / light interaction
 	for ( int i = 0; i < numSurfaces; i++ ) {
+		if ( r_singleSurface.GetInteger() >= 0 && i != r_singleSurface.GetInteger() ) 
+			continue;
 		surfaceInteraction_t *sint = &surfaces[i];
 
 		// see if the base surface is visible, we may still need to add shadows even if empty
-		if ( r_shadows.GetInteger() == 2 || // duzenko: send off-screen surfaces to backend in case they cast shadows
+		if ( vLight->shadows == LS_MAPS || // duzenko: send off-screen surfaces to backend in case they cast shadows
 			!lightScissorsEmpty && sint->ambientTris && sint->ambientTris->ambientViewCount == tr.viewCount ) {
 
 			// make sure we have created this interaction, which may have been deferred
@@ -1207,7 +1276,7 @@ void idInteraction::AddActiveInteraction( void ) {
 					lightTris->ambientCache = tri->ambientCache;
 
 					if ( !vertexCache.CacheIsCurrent( lightTris->indexCache ) ) {
-						lightTris->indexCache = vertexCache.AllocIndex( lightTris->indexes, ALIGN( lightTris->numIndexes * sizeof( lightTris->indexes[0] ), INDEX_CACHE_ALIGN ) );
+						lightTris->indexCache = vertexCache.AllocIndex( lightTris->indexes, lightTris->numIndexes * sizeof( lightTris->indexes[0] ) );
 					}
 
 					// add the surface to the light list
@@ -1216,13 +1285,13 @@ void idInteraction::AddActiveInteraction( void ) {
 
 					// there will only be localSurfaces if the light casts shadows and there are surfaces with NOSELFSHADOW
 					if ( sint->shader->Coverage() == MC_TRANSLUCENT && sint->shader->ReceivesLighting() ) {
-						R_LinkLightSurf( &vLight->translucentInteractions, lightTris,
+						PrepareLightSurf( INTERACTION_TRANSLUCENT, lightTris,
 						                 vEntity, shader, lightScissor, false );
 					} else if ( !lightDef->parms.noShadows && sint->shader->TestMaterialFlag( MF_NOSELFSHADOW ) ) {
-						R_LinkLightSurf( &vLight->localInteractions, lightTris,
+						PrepareLightSurf( INTERACTION_LOCAL, lightTris,
 						                 vEntity, shader, lightScissor, false );
 					} else {
-						R_LinkLightSurf( &vLight->globalInteractions, lightTris,
+						PrepareLightSurf( INTERACTION_GLOBAL, lightTris,
 						                 vEntity, shader, lightScissor, false );
 					}
 				}
@@ -1255,6 +1324,9 @@ void idInteraction::AddActiveInteraction( void ) {
 				}
 			}
 
+			if ( r_singleShadowEntity >= 0 && r_singleShadowEntity != vEntity->entityDef->index )
+				continue;
+
 			// copy the shadow vertexes to the vertex cache if they have been purged
 			// if we are using shared shadowVertexes and letting a vertex program fix them up,
 			// get the shadowCache from the parent ambient surface
@@ -1286,10 +1358,10 @@ void idInteraction::AddActiveInteraction( void ) {
 			bool inside = R_PotentiallyInsideInfiniteShadow( sint->ambientTris, localViewOrigin, localLightOrigin );
 
 			if ( sint->shader->TestMaterialFlag( MF_NOSELFSHADOW ) ) {
-				R_LinkLightSurf( &vLight->localShadows,
+				PrepareLightSurf( SHADOW_LOCAL,
 				                 shadowTris, vEntity, NULL, shadowScissor, inside );
 			} else {
-				R_LinkLightSurf( &vLight->globalShadows,
+				PrepareLightSurf( SHADOW_GLOBAL,
 				                 shadowTris, vEntity, NULL, shadowScissor, inside );
 			}
 		}

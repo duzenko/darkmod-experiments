@@ -1,20 +1,29 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __WINDING_H__
 #define __WINDING_H__
+
+//for idWinding::CreateTrimmedPlane
+enum IncidentPlaneMode {
+	INCIDENT_PLANE_DELETE = 0x0,
+	INCIDENT_PLANE_RETAIN_CODIRECT = 0x1,
+	INCIDENT_PLANE_RETAIN_OPPOSITE = 0x2,
+	INCIDENT_PLANE_RETAIN = 0x3,
+};
+
 
 /*
 ===============================================================================
@@ -48,11 +57,15 @@ public:
 					// number of points on winding
 	int				GetNumPoints( void ) const;
 	void			SetNumPoints( int n );
-	virtual void	Clear( void );
+	void			Clear( void );
+	virtual void	ClearFree( void );
 
 					// huge winding for plane, the points go counter clockwise when facing the front of the plane
 	void			BaseForPlane( const idVec3 &normal, const float dist );
 	void			BaseForPlane( const idPlane &plane );
+
+					// stgatilov: creates new winding on mainPlane, trimmed with a set of oriented planes curPlanes[0..numCuts)
+	static idWinding *CreateTrimmedPlane( const idPlane &mainPlane, int numCuts, const idPlane *cutPlanes, float epsilon = ON_EPSILON, IncidentPlaneMode incidentPlaneMode = INCIDENT_PLANE_DELETE );
 
 					// splits the winding into a front and back winding, the winding itself stays unchanged
 					// returns a SIDE_?
@@ -100,17 +113,20 @@ public:
 	bool			PlanesConcave( const idWinding &w2, const idVec3 &normal1, const idVec3 &normal2, float dist1, float dist2 ) const;
 
 	bool			PointInside( const idVec3 &normal, const idVec3 &point, const float epsilon ) const;
+	bool			PointInsideDst( const idVec3 &normal, const idVec3 &point, const float epsilon ) const;
+	bool			PointLiesOn( const idVec3 &point, const float epsilon ) const;
 					// returns true if the line or ray intersects the winding
 	bool			LineIntersection( const idPlane &windingPlane, const idVec3 &start, const idVec3 &end, bool backFaceCull = false ) const;
 					// intersection point is start + dir * scale
 	bool			RayIntersection( const idPlane &windingPlane, const idVec3 &start, const idVec3 &dir, float &scale, bool backFaceCull = false ) const;
 
 	static float	TriangleArea( const idVec3 &a, const idVec3 &b, const idVec3 &c );
+	static double	TriangleAreaDbl( const idVec3 &a, const idVec3 &b, const idVec3 &c );
 
 protected:
 	int				numPoints;				// number of points
-	idVec5 *		p;						// pointer to point data
 	int				allocedSize;
+	idVec5 *		p;						// pointer to point data
 
 	bool			EnsureAlloced( int n, bool keep = false );
 	virtual bool	ReAllocate( int n, bool keep = false );
@@ -186,12 +202,12 @@ ID_INLINE idWinding &idWinding::operator=( const idWinding &winding ) {
 	return *this;
 }
 
-ID_INLINE const idVec5 &idWinding::operator[]( const int index ) const {
+ID_FORCE_INLINE const idVec5 &idWinding::operator[]( const int index ) const {
 	//assert( index >= 0 && index < numPoints );
 	return p[ index ];
 }
 
-ID_INLINE idVec5 &idWinding::operator[]( const int index ) {
+ID_FORCE_INLINE idVec5 &idWinding::operator[]( const int index ) {
 	//assert( index >= 0 && index < numPoints );
 	return p[ index ];
 }
@@ -222,7 +238,7 @@ ID_INLINE void idWinding::AddPoint( const idVec5 &v ) {
 	numPoints++;
 }
 
-ID_INLINE int idWinding::GetNumPoints( void ) const {
+ID_FORCE_INLINE int idWinding::GetNumPoints( void ) const {
 	return numPoints;
 }
 
@@ -234,6 +250,10 @@ ID_INLINE void idWinding::SetNumPoints( int n ) {
 }
 
 ID_INLINE void idWinding::Clear( void ) {
+	numPoints = 0;
+}
+
+ID_INLINE void idWinding::ClearFree( void ) {
 	numPoints = 0;
 	delete[] p;
 	p = NULL;
@@ -279,7 +299,7 @@ public:
 
 	idFixedWinding &operator=( const idWinding &winding );
 
-	virtual void	Clear( void );
+	virtual void	ClearFree( void ) override;
 
 					// splits the winding in a back and front part, 'this' becomes the front part
 					// returns a SIDE_?
@@ -382,7 +402,7 @@ ID_INLINE idFixedWinding &idFixedWinding::operator=( const idWinding &winding ) 
 	return *this;
 }
 
-ID_INLINE void idFixedWinding::Clear( void ) {
+ID_INLINE void idFixedWinding::ClearFree( void ) {
 	numPoints = 0;
 }
 #endif	/* !__WINDING_H__ */

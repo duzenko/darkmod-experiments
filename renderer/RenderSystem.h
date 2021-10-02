@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __RENDERER_H__
@@ -35,50 +35,38 @@ enum glVendor_t {
 // Contains variables specific to the OpenGL configuration being run right now.
 // These are constant once the OpenGL subsystem is initialized.
 typedef struct glconfig_s {
+	bool				isInitialized;
+
 	const char			*renderer_string;
 	const char			*vendor_string;
 	const char			*version_string;
-	const char			*extensions_string;
 	const char			*wgl_extensions_string;
 	glVendor_t			vendor;
 
-	float				glVersion;				// atof( version_string )
-
-	int					maxTextureSize;			// queried from GL
-	int					maxTextures;
-	int					maxTextureCoords;
-	int					maxTextureUnits;
-	float				maxTextureAnisotropy;
-	int					maxSamples;
-
-	int					colorBits, depthBits, stencilBits;
-
-	bool				textureCompressionAvailable;
-	bool				textureCompressionRgtcAvailable;
-	bool				anisotropicAvailable;
-	bool				textureLODBiasAvailable;
-	bool				twoSidedStencilAvailable;
-	bool				textureNonPowerOfTwoAvailable;
-	bool				depthBoundsTestAvailable;
-	bool				pixelBufferAvailable;
-	bool				mapBufferRangeAvailable;
-	bool				framebufferObjectAvailable;
-	bool				framebufferBlitAvailable;
-	bool				framebufferMultisampleAvailable;
-	bool				framebufferPackedDepthStencilAvailable;
-	bool				fenceSyncAvailable;
-	bool				timerQueriesAvailable;
-	bool				debugGroupsAvailable;
-
+	// OpenGL initialization settings
 	int					vidWidth, vidHeight;	// passed to R_BeginFrame
 	int					displayFrequency;
 	bool				isFullscreen;
+	bool				srgb;
 
-	bool				isInitialized;
+	//GL extensions which can potentially be used in-game
+	bool				anisotropicAvailable;
+	bool				depthBoundsTestAvailable;
+	bool				geometryShaderAvailable;
+	bool				bufferStorageAvailable; // persistent mapping
+	bool				stencilTexturing;		// stencil SS
+
+	// values of various GL limits
+	int					maxTextureSize;
+	int					maxTextures;
+	int					maxTextureUnits;
+	float				maxTextureAnisotropy;
+	int					maxSamples;
 } glconfig_t;
 
-#define SMALLCHAR_WIDTH		8
-#define SMALLCHAR_HEIGHT	16
+extern idCVar con_fontSize;
+#define SMALLCHAR_WIDTH		(con_fontSize.GetInteger())
+#define SMALLCHAR_HEIGHT	(2 * con_fontSize.GetInteger())
 #define BIGCHAR_WIDTH		16
 #define BIGCHAR_HEIGHT		16
 

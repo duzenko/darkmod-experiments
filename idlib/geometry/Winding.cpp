@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -73,11 +73,85 @@ void idWinding::BaseForPlane( const idVec3 &normal, const float dist ) {
 
 /*
 =============
+idWinding::SetTrimmedPlane
+=============
+*/
+idWinding *idWinding::CreateTrimmedPlane( const idPlane &mainPlane, int numCuts, const idPlane *cutPlanes, float epsilon, IncidentPlaneMode incidentPlaneMode ) {
+	//establish local coordinate system
+	idVec3 origin, normal, axisU, axisV;
+	normal = mainPlane.Normal();
+	origin = mainPlane.Dist() * normal;
+	normal.NormalVectors(axisV, axisU);
+
+	idList<bool> retainOn;
+	retainOn.SetNum(numCuts);
+	for (int i = 0; i < numCuts; i++) {
+		float dot = cutPlanes[i].Normal() * normal;
+		//angle <~ 1e-2  =>  planes are incident
+		if (dot >= 1.0f - 1e-4f)
+			retainOn[i] = !!(incidentPlaneMode & INCIDENT_PLANE_RETAIN_CODIRECT);
+		else if (dot <= -(1.0f - 1e-4f))
+			retainOn[i] = !!(incidentPlaneMode & INCIDENT_PLANE_RETAIN_OPPOSITE);
+		else
+			retainOn[i] = false;
+	}
+
+	auto ComputeBoundingUvBox = [origin, axisU, axisV](const idWinding &w) -> idBounds {
+		idBounds box;
+		box.Clear();
+		for (int j = 0; j < w.numPoints; j++) {
+			const idVec3 &xyz = w[j].ToVec3();
+			box.AddPoint(idVec3((xyz - origin) * axisU, (xyz - origin) * axisV, 0.0f));
+		}
+		return box;
+	};
+
+	//start with huge UV-box winding
+	idWinding *w = new idWinding(mainPlane);
+	w->EnsureAlloced(numCuts + 4, true);
+	//clip the winding with all trimming planes
+	idBounds uvbox = ComputeBoundingUvBox(*w);
+	for (int i = 0; i < numCuts; i++) {
+		w = w->Clip(cutPlanes[i], 0.0f, retainOn[i]);
+		if (!w)
+			break;
+		uvbox = ComputeBoundingUvBox(*w);
+	}
+	//note: if result is empty, then we take last non-empty winding as estimate
+	//this may be important if true winding is very small but has disappeared due to floating point errors
+
+	//this expansion should be larger than possible round-off errors
+	uvbox.ExpandSelf(1.0f);
+
+	//regenerate initial winding from estimated UV-box
+	if (!w)
+		w = new idWinding(numCuts + 4);
+	w->numPoints = 4;
+	w->p[0].ToVec3() = origin + uvbox[0].x * axisU + uvbox[1].y * axisV;
+	w->p[1].ToVec3() = origin + uvbox[1].x * axisU + uvbox[1].y * axisV;
+	w->p[2].ToVec3() = origin + uvbox[1].x * axisU + uvbox[0].y * axisV;
+	w->p[3].ToVec3() = origin + uvbox[0].x * axisU + uvbox[0].y * axisV;
+	for (int v = 0; v < 4; v++)
+		w->p[v].s = w->p[v].t = 0.0f;
+
+	//clip the winding with all trimming planes
+	//since initial UV-box is not huge this time, we expect to get much more precise vertices
+	for (int i = 0; i < numCuts; i++) {
+		w = w->Clip(cutPlanes[i], epsilon, retainOn[i]);
+		if (!w)
+			break;
+	}
+
+	return w;
+}
+
+/*
+=============
 idWinding::Split
 =============
 */
 int idWinding::Split( const idPlane &plane, const float epsilon, idWinding **front, idWinding **back ) const {
-	float *			dists;
+	double *			dists;
 	byte *			sides;
 	int				counts[3];
 	float			dot;
@@ -89,14 +163,14 @@ int idWinding::Split( const idPlane &plane, const float epsilon, idWinding **fro
 
 	assert( this );
 
-	dists = (float *) _alloca( (numPoints+4) * sizeof( float ) );
+	dists = (double *) _alloca( (numPoints+4) * sizeof( double ) );
 	sides = (byte *) _alloca( (numPoints+4) * sizeof( byte ) );
 
 	counts[0] = counts[1] = counts[2] = 0;
 
 	// determine sides for each point
 	for ( i = 0; i < numPoints; i++ ) {
-		dists[i] = dot = plane.Distance( p[i].ToVec3() );
+		dists[i] = dot = idVec3d(plane.Normal()).Dot(idVec3d(p[i].ToVec3())) + plane[3];
 		if ( dot > epsilon ) {
 			sides[i] = SIDE_FRONT;
 		} else if ( dot < -epsilon ) {
@@ -219,7 +293,7 @@ idWinding::Clip
 =============
 */
 idWinding *idWinding::Clip( const idPlane &plane, const float epsilon, const bool keepOn ) {
-	float *		dists;
+	double *		dists;
 	byte *		sides;
 	idVec5 *	newPoints;
 	int			newNumPoints;
@@ -232,14 +306,14 @@ idWinding *idWinding::Clip( const idPlane &plane, const float epsilon, const boo
 
 	assert( this );
 
-	dists = (float *) _alloca( (numPoints+4) * sizeof( float ) );
+	dists = (double *) _alloca( (numPoints+4) * sizeof( double ) );
 	sides = (byte *) _alloca( (numPoints+4) * sizeof( byte ) );
 
 	counts[SIDE_FRONT] = counts[SIDE_BACK] = counts[SIDE_ON] = 0;
 
 	// determine sides for each point
 	for ( i = 0; i < numPoints; i++ ) {
-		dists[i] = dot = plane.Distance( p[i].ToVec3() );
+		dists[i] = dot = idVec3d(plane.Normal()).Dot(idVec3d(p[i].ToVec3())) + plane[3];
 		if ( dot > epsilon ) {
 			sides[i] = SIDE_FRONT;
 		} else if ( dot < -epsilon ) {
@@ -334,7 +408,7 @@ idWinding::ClipInPlace
 =============
 */
 bool idWinding::ClipInPlace( const idPlane &plane, const float epsilon, const bool keepOn ) {
-	float*		dists;
+	double*		dists;
 	byte *		sides;
 	idVec5 *	newPoints;
 	int			newNumPoints;
@@ -347,14 +421,14 @@ bool idWinding::ClipInPlace( const idPlane &plane, const float epsilon, const bo
 
 	assert( this );
 
-	dists = (float *) _alloca( (numPoints+4) * sizeof( float ) );
+	dists = (double *) _alloca( (numPoints+4) * sizeof( double ) );
 	sides = (byte *) _alloca( (numPoints+4) * sizeof( byte ) );
 
 	counts[SIDE_FRONT] = counts[SIDE_BACK] = counts[SIDE_ON] = 0;
 
 	// determine sides for each point
 	for ( i = 0; i < numPoints; i++ ) {
-		dists[i] = dot = plane.Distance( p[i].ToVec3() );
+		dists[i] = dot = idVec3d(plane.Normal()).Dot(idVec3d(p[i].ToVec3())) + plane[3];
 		if ( dot > epsilon ) {
 			sides[i] = SIDE_FRONT;
 		} else if ( dot < -epsilon ) {
@@ -641,20 +715,18 @@ idWinding::GetPlane
 =============
 */
 void idWinding::GetPlane( idVec3 &normal, float &dist ) const {
-	idVec3 v1, v2, center;
-
 	if ( numPoints < 3 ) {
 		normal.Zero();
 		dist = 0.0f;
 		return;
 	}
-
-	center = GetCenter();
-	v1 = p[0].ToVec3() - center;
-	v2 = p[1].ToVec3() - center;
-	normal = v2.Cross( v1 );
-	normal.Normalize();
-	dist = p[0].ToVec3() * normal;
+	auto pnt = [&](int i) { return idVec3d(p[i].ToVec3()); };
+	idVec3d directedArea = idVec3d(0.0);
+	for (int i = 1; i+1 < numPoints; i++)
+		directedArea += (pnt(i+1) - pnt(0)).Cross(pnt(i) - pnt(0));
+	directedArea.Normalize();
+	normal = idVec3(directedArea);
+	dist = (float) pnt(0).Dot(idVec3d(normal));
 }
 
 /*
@@ -663,20 +735,8 @@ idWinding::GetPlane
 =============
 */
 void idWinding::GetPlane( idPlane &plane ) const {
-	idVec3 v1, v2;
-	idVec3 center;
-
-	if ( numPoints < 3 ) {
-		plane.Zero();
-		return;
-	}
-
-	center = GetCenter();
-	v1 = p[0].ToVec3() - center;
-	v2 = p[1].ToVec3() - center;
-	plane.SetNormal( v2.Cross( v1 ) );
-	plane.Normalize();
-	plane.FitThroughPoint( p[0].ToVec3() );
+	GetPlane(plane.Normal(), plane[3]);
+	plane[3] = -plane[3];
 }
 
 /*
@@ -1357,6 +1417,47 @@ bool idWinding::PointInside( const idVec3 &normal, const idVec3 &point, const fl
 	}
 	return true;
 }
+/*
+=============
+idWinding::PointInsideDst
+=============
+*/
+bool idWinding::PointInsideDst( const idVec3 &normal, const idVec3 &point, const float epsilon ) const {
+	int i;
+	idVec3 dir, n, pointvec;
+	assert( fabs( normal.Length() - 1.0f ) <= 1e-3f );
+
+	for ( i = 0; i < numPoints; i++ ) {
+		dir = p[(i+1) % numPoints].ToVec3() - p[i].ToVec3();
+		pointvec = point - p[i].ToVec3();
+
+		n = dir.Cross( normal );
+
+		if ( pointvec * n < -epsilon * dir.Length() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/*
+=============
+idWinding::PointLiesOn
+=============
+*/
+bool idWinding::PointLiesOn( const idVec3 &point, const float epsilon ) const {
+	idPlane plane;
+	GetPlane(plane);
+
+	int side = plane.Side(point, epsilon);
+	if (side != PLANESIDE_ON)
+		return false;
+
+	if (!PointInsideDst(plane.Normal(), point, epsilon))
+		return false;
+
+	return true;
+}
 
 /*
 =============
@@ -1438,6 +1539,12 @@ float idWinding::TriangleArea( const idVec3 &a, const idVec3 &b, const idVec3 &c
 	v2 = c - a;
 	cross = v1.Cross( v2 );
 	return 0.5f * cross.Length();
+}
+double idWinding::TriangleAreaDbl( const idVec3 &a, const idVec3 &b, const idVec3 &c ) {
+	idVec3d v1 = idVec3d(b) - idVec3d(a);
+	idVec3d v2 = idVec3d(c) - idVec3d(a);
+	idVec3d cross = v1.Cross( v2 );
+	return 0.5 * cross.Length();
 }
 
 

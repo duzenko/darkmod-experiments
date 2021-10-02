@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -20,6 +20,7 @@
 
 #include "tr_local.h"
 #include "CinematicFFMpeg.h"
+#include "glsl.h"
 
 /*
 
@@ -101,6 +102,7 @@ void idMaterial::CommonInit() {
 	spectrum = 0;
 	polygonOffset = 0.0f;
 	shadowmapOffset = 0;
+	fogAlpha = 0;
 	ambientRimColor.registers[0] = 0;
 	suppressInSubview = false;
 	refCount = 0;
@@ -351,6 +353,8 @@ void idMaterial::ParseSort( idLexer &src ) {
 		sort = SS_AFTER_FOG;
 	} else if ( !token.Icmp( "postProcess" ) ) {
 		sort = SS_POST_PROCESS;
+	} else if ( !token.Icmp( "last" ) ) {
+		sort = SS_LAST;
 	} else if ( !token.Icmp( "portalSky" ) ) {
 		sort = SS_PORTAL_SKY;
 	} else {
@@ -1159,8 +1163,15 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 
 		else if (  !token.Icmp( "xrayRenderMap" ) ) {
 			ts->dynamic = DI_XRAY_RENDER;
-			ts->width = src.ParseInt();
-			ts->height = src.ParseInt();
+			//ts->width = src.ParseInt();
+			//ts->height = src.ParseInt();
+			ts->width = 0;
+			if ( src.ReadTokenOnLine( &token ) ) {
+				if ( !token.Icmp( "inclusive" ) ) {
+					ts->width = 1;
+				}
+			}
+			src.SkipRestOfLine();
 			ts->texgen = TG_SCREEN;
 			continue;
 		}
@@ -1495,29 +1506,26 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
 				idStr fileExt;
 				token.ExtractFileExtension( fileExt );
-				if ( newStage.GLSL = fileExt.Icmp( "vfp" ) != 0 )
-					newStage.vertexProgram = newStage.fragmentProgram =
-						R_FindGLSLProgram( token );
-				else {
-					newStage.vertexProgram = R_FindARBProgram( GL_VERTEX_PROGRAM_ARB, token.c_str() );
-					newStage.fragmentProgram = R_FindARBProgram( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
-				}
+				token.StripFileExtension();
+				newStage.glslProgram = GLSL_LoadMaterialStageProgram( token );
 			}
 			continue;
 		}
 		else if ( !token.Icmp( "fragmentProgram" ) ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
-				newStage.fragmentProgram = R_FindARBProgram( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
+				token.StripFileExtension();
+				newStage.glslProgram = GLSL_LoadMaterialStageProgram( token );
 			}
 			continue;
 		}
 		else if ( !token.Icmp( "vertexProgram" ) ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
-				newStage.vertexProgram = R_FindARBProgram( GL_VERTEX_PROGRAM_ARB, token.c_str() );
+				token.StripFileExtension();
+				newStage.glslProgram = GLSL_LoadMaterialStageProgram( token );
 			}
 			continue;
 		}
-		else if ( !token.Icmp( "megaTexture" ) ) {
+		/*else if ( !token.Icmp( "megaTexture" ) ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
 				newStage.megaTexture = new idMegaTexture;
 				if ( !newStage.megaTexture->InitFromMegaFile( token.c_str() ) ) {
@@ -1529,7 +1537,7 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 				newStage.fragmentProgram = R_FindARBProgram( GL_FRAGMENT_PROGRAM_ARB, "megaTexture.vfp" );
 				continue;
 			}
-		}
+		}*/
 
 		else if ( !token.Icmp( "vertexParm" ) ) {
 			ParseVertexParm( src, &newStage );
@@ -1547,7 +1555,7 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 	}
 
 	// if we are using newStage, allocate a copy of it
-	if ( newStage.fragmentProgram || newStage.vertexProgram ) {
+	if ( newStage.glslProgram ) {
 		ss->newStage = (newShaderStage_t *)Mem_Alloc( sizeof( newStage ) );
 		*(ss->newStage) = newStage;
 	}
@@ -1663,8 +1671,7 @@ void idMaterial::ParseDeform( idLexer &src ) {
 		}
 		deformDecl = declManager->FindType( DECL_PARTICLE, token.c_str(), true );
 		return;
-	}
-	else {
+	} else {
 		src.Warning( "Bad deform type '%s'", token.c_str() );
 		SetMaterialFlag( MF_DEFAULTED );
 	}
@@ -1825,6 +1832,11 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 		else if ( CheckSurfaceParm( &token ) ) {
 			continue;
 		}
+		else if ( !token.Icmp( "materialImage" ) ) {
+			src.ReadTokenOnLine( &token );
+			materialImage = token.c_str();
+			continue;
+		}
 		// polygonOffset
 		else if ( !token.Icmp( "polygonOffset" ) ) {
 			SetMaterialFlag( MF_POLYGONOFFSET );
@@ -1843,6 +1855,15 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 				continue;
 			}
 			shadowmapOffset = token.GetFloatValue();
+			continue;
+		}
+		// fogAlpha
+		else if ( !token.Icmp( "fogAlpha" ) ) {
+			if ( !src.ReadTokenOnLine( &token ) ) {
+				fogAlpha = 1.0f;
+				continue;
+			}
+			fogAlpha = token.GetFloatValue();
 			continue;
 		}
 		// noshadow
@@ -2488,7 +2509,7 @@ void idMaterial::EvaluateRegisters( float *registers, const float shaderParms[MA
 	registers[EXP_REG_PARM8] = shaderParms[8];
 	registers[EXP_REG_PARM9] = shaderParms[9];
 	registers[EXP_REG_PARM10] = shaderParms[10];
-	registers[EXP_REG_PARM11] = shaderParms[11];
+	registers[EXP_REG_PARM11] = r_newFrob.GetInteger() ? 0 : shaderParms[11]; // duzenko: temporary frob override
 	registers[EXP_REG_GLOBAL0] = view->renderView.shaderParms[0];
 	registers[EXP_REG_GLOBAL1] = view->renderView.shaderParms[1];
 	registers[EXP_REG_GLOBAL2] = view->renderView.shaderParms[2];
@@ -2558,6 +2579,8 @@ void idMaterial::EvaluateRegisters( float *registers, const float shaderParms[MA
 			common->FatalError( "R_EvaluateExpression: bad opcode" );
 		}
 	}
+
+	registers[EXP_REG_PARM11] = shaderParms[11]; // duzenko: temporary frob override
 }
 
 /*
@@ -2805,4 +2828,15 @@ void idMaterial::ReloadImages( bool force ) const {
 			stages[i].texture.image->Reload( false, force );
 		}
 	}
+}
+
+bool idMaterial::HasMirrorLikeStage() const {
+	if (!HasSubview())
+		return false;
+	for (int i = 0; i < numStages; i++) {
+		dynamicidImage_t dyn = stages[i].texture.dynamic;
+		if (dyn == DI_MIRROR_RENDER || dyn == DI_XRAY_RENDER || dyn == DI_REMOTE_RENDER)
+			return true;
+	}
+	return false;
 }

@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #ifndef __GAME_ENTITY_H__
 #define __GAME_ENTITY_H__
@@ -263,6 +262,7 @@ public:
 	int						thinkFlags;				// TH_? flags
 	int						dormantStart;			// time that the entity was first closed off from player
 	bool					cinematic;				// during cinematics, entity will only think if cinematic is set
+	bool					fromMapFile;			// true iff this entity was spawned from description in .map file
 
 	renderView_t *			renderView;				// for camera views from this entity
 	idEntity *				cameraTarget;			// any remoteRenderMap shaders will use this
@@ -284,10 +284,14 @@ public:
 		bool				neverDormant		:1;	// if true the entity never goes dormant
 		bool				isDormant			:1;	// if true the entity is dormant
 		bool				hasAwakened			:1;	// before a monster has been awakened the first time, use full PVS for dormant instead of area-connected
-		bool				networkSync			:1; // if true the entity is synchronized over the network
 		bool				invisible			:1;	// if true this entity cannot be seen
 		bool				inaudible			:1; // if true this entity cannot be heard
 	} fl;
+
+	renderEntity_t			xrayEntity;
+	qhandle_t				xrayEntityHandle;
+	const idDeclSkin* 		xraySkin;
+	idRenderModel*			xrayModelHandle;
 
 	/**
 	* When an entity is hidden, these store the following information just before the hide:
@@ -418,6 +422,8 @@ public:
 
 	bool					m_droppedByAI;	// grayman #1330
 
+	bool					m_isFlinder;	// grayman #4230
+
 	/**
 	* Tels: Contains handle to (sharable, constant) LOD data if != 0.
 	*/
@@ -442,6 +448,9 @@ public:
 	*/
 	int						m_ModelLODCur;
 	int						m_SkinLODCur;
+	// stgatilov: store currently applied offset_lod so that we can reverse it
+	// even if m_LODHandle is removed due to hot-reload map editing.
+	idVec3					m_OffsetLODCur;
 
 	/* Each entity is hidden (and stops thinking) when tdm_lod_bias
 	*  is between m_MinLODBias and m_MaxLODBias. Thus entities can
@@ -487,6 +496,13 @@ public:
 	* Am I listening?
 	**/
 	bool					m_listening; // grayman #4620
+
+	/**
+	* Camera field of view for remote renders
+	**/
+	int						cameraFovX;
+	int						cameraFovY;
+
 
 public:
 	ABSTRACT_PROTOTYPE( idEntity );
@@ -664,7 +680,6 @@ public:
 	virtual void			PostBind( void );
 	virtual void			PreUnbind( void );
 	virtual void			PostUnbind( void );
-	void					JoinTeam( idEntity *teammember );
 	
 	/** 
 	 * greebo: Returns the first team entity matching the given type. If the second
@@ -705,8 +720,10 @@ public:
 							// set a new physics object to be used by this entity
 	void					SetPhysics( idPhysics *phys );
 							// get the physics object used by this entity
-	idPhysics *				GetPhysics( void ) const;
-							// restore physics pointer for save games
+	idPhysics *				GetPhysics( void ) const {
+		return physics;
+	}
+	// restore physics pointer for save games
 	void					RestorePhysics( idPhysics *phys );
 							// run the physics for this entity
 	bool					RunPhysics( void );
@@ -855,7 +872,7 @@ public:
 	/**
 	* Parses spawnarg list of attachments and puts them into the list.
 	**/
-	void ParseAttachmentSpawnargs( idList<idDict> *argsList, idDict *from );
+	static void ParseAttachmentSpawnargs( idList<idDict> *argsList, idDict *from );
 
 	/**
 	 * Frobaction will determine what a particular item should do when an entity is highlighted.
@@ -1167,6 +1184,12 @@ public:
 	virtual float			RangedThreatTo(idEntity* target);
 
 	/**
+	 * Returns true, if the entity can be picked up, i.e., if it is loot, ammo,
+	 * a weapon, or a general inventory item, and if it does not go to the grabber.
+	 */
+	const bool CanBePickedUp();
+
+	/**
 	 * AddToInventory will add an entity to the inventory. The item is only
 	 * added if the appropriate spawnargs are set, otherwise it will be rejected
 	 * and NULL is returned.
@@ -1452,12 +1475,6 @@ protected:
 	bool						m_bFrobHighlightState;
 
 	/**
-	* Timestamp indicating when the frob highlight last changed
-	* Used for continuous fade in and fade out.
-	**/
-	int							m_FrobChangeTime;
-
-	/**
 	 * FrobActionScript will contain the name of the script that is to be
 	 * exected whenever a frobaction occurs. The default should be set by
 	 * the constructor of the respective derived class but can be overriden
@@ -1494,6 +1511,11 @@ protected:
 	* Set to true when entity becomes broken (via damage)
 	**/
 	bool						m_bIsBroken;
+
+	/**
+	* Allow to break without flinderizing, default true
+	**/
+	bool						m_bFlinderize;
 
 	/** Used to implement waitForRender()...
 	 *	This merely contains a bounding box and a callback.
@@ -1591,9 +1613,14 @@ private:
 
 	// entity binding
 	bool					InitBind( idEntity *master );	// initialize an entity binding
-	void					FinishBind( const char *jointnum ); // finish an entity binding - grayman #3074
-	void					RemoveBinds( void );			// deletes any entities bound to this object
-	void					QuitTeam( void );				// leave the current team
+	void					FinishBind( idEntity *master, const char *jointnum ); // finish an entity binding - grayman #3074
+public:
+	void					RemoveBinds( bool immediately );					// deletes any entities bound to this object
+private:
+	// stgatilov #5409: bindMaster/teamMaster/teamChain structure updates
+	void					BreakBindToMaster( void );							//assign bindMaster = NULL and recompute teams
+	void					EstablishBindToMaster( idEntity *newMaster );		//assign new bindMaster and recompute teams
+	bool					ValidateBindTeam( void );							//check validity of the whole team this entity belongs to
 
 	void					UpdatePVSAreas( void );
 

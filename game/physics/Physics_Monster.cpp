@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -214,6 +214,7 @@ monsterMoveResult_t idPhysics_Monster::StepMove( idVec3 &start, idVec3 &velocity
 	}
 
 	// try to move at the stepped up position
+
 	stepPos = tr.endpos;
 	stepVel = velocity;
 	result2 = SlideMove( stepPos, stepVel, delta );
@@ -254,9 +255,22 @@ monsterMoveResult_t idPhysics_Monster::StepMove( idVec3 &start, idVec3 &velocity
 		velocity = noStepVel;
 		return MM_SLIDING;
 	}
-	
 
-	start = stepPos;
+	// grayman #3989 - if this attempted step is being made during a "wake_up"/"fall_asleep" animation,
+	// we can't let the vertical part go down/up. Otherwise, we'll see the animation jump up
+	// for a few frames or the AI will end up floating above the bed.
+
+	// use the current velocity so there's still horizontal movement
+	idStr anim = idStr(static_cast<idAI*>(self)->WaitState());
+	if ( (stepPos.z > noStepPos.z) && self->IsType(idAI::Type) && ((anim == "wake_up") || (anim == "fall_asleep")))
+	{
+		start = noStepPos;
+	}
+	else
+	{
+		start = stepPos;
+	}
+
 	velocity = stepVel;
 
 	return MM_STEPPED;

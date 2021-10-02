@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -33,6 +33,7 @@
 #include "../FrobDoorHandle.h"
 #include "../FrobLockHandle.h"
 #include "../FrobLever.h"
+#include "../Grabber.h"
 
 #include "TypeInfo.h"
 
@@ -75,15 +76,15 @@ void Cmd_PrintAIRelations_f( const idCmdArgs &args )
 }
 
 /**
- * greebo: This is a helper command, used by the restart.gui
+ * greebo: This is a helper command, used in mainmenu_failure.gui
  */
 void Cmd_RestartGuiCmd_UpdateObjectives_f(const idCmdArgs &args) 
 {
-	idUserInterface* gui = uiManager->FindGui("guis/restart.gui", false, true, true);
+	idUserInterface* gui = session->GetGui(idSession::gtMainMenu);
 
 	if (gui == NULL) 
 	{
-		gameLocal.Warning("Could not find restart.gui");
+		gameLocal.Warning("Main menu missing");
 		return;
 	}
 	
@@ -494,7 +495,7 @@ void Cmd_EntityList_f( const idCmdArgs &args ) {
 	count = 0;
 	size = 0;
 
-	gameLocal.Printf( "%-4s  %-20s %-20s %s\n", " Num", "EntityDef", "Class", "Name" );
+	gameLocal.Printf( "%-4s %-4s %-4s   %-20s %-12s %s\n", " Ent", "Mod", "Lgt", "EntityDef", "Class", "Name" );
 	gameLocal.Printf( "--------------------------------------------------------------------\n" );
 	for( e = 0; e < MAX_GENTITIES; e++ ) {
 		check = gameLocal.entities[ e ];
@@ -507,8 +508,15 @@ void Cmd_EntityList_f( const idCmdArgs &args ) {
 			continue;
 		}
 
-		gameLocal.Printf( "%4i: %-20s %-20s %s\n", e,
-			check->GetEntityDefName(), check->GetClassname(), check->name.c_str() );
+		int modelDefHandle = check->GetModelDefHandle();
+		int lightDefHandle = -1;
+		if (check->IsType(idLight::Type))
+			lightDefHandle = ((idLight*)check)->GetLightDefHandle();
+
+		gameLocal.Printf( "%4i %4i %3i: %-20s %-12s %s\n",
+			e, modelDefHandle, lightDefHandle,
+			check->GetEntityDefName(), check->GetClassname(), check->name.c_str()
+		);
 
 		count++;
 		size += check->spawnArgs.Allocated();
@@ -942,25 +950,7 @@ Cmd_Kill_f
 void Cmd_Kill_f( const idCmdArgs &args ) {
 	idPlayer	*player;
 
-	if ( gameLocal.isMultiplayer ) {
-		if ( gameLocal.isClient ) {
-#ifdef MULTIPLAYER
-			idBitMsg	outMsg;
-			byte		msgBuf[ MAX_GAME_MESSAGE_SIZE ];
-			outMsg.Init( msgBuf, sizeof( msgBuf ) );
-			outMsg.WriteByte( GAME_RELIABLE_MESSAGE_KILL );
-			networkSystem->ClientSendReliableMessage( outMsg );
-#endif
-		} else {
-			player = gameLocal.GetClientByCmdArgs( args );
-			if ( !player ) {
-				common->Printf( "kill <client nickname> or kill <client index>\n" );
-				return;
-			}
-			player->Kill( false, false );
-			cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "say killed client %d '%s^0'\n", player->entityNumber, gameLocal.userInfo[ player->entityNumber ].GetString( "ui_name" ) ) );
-		}
-	} else {
+	{
 		player = gameLocal.GetLocalPlayer();
 		if ( !player ) {
 			return;
@@ -996,120 +986,6 @@ void Cmd_PlayerModel_f( const idCmdArgs &args ) {
 	pos = player->GetPhysics()->GetOrigin();
 	ang = player->viewAngles;
 	player->SpawnToPoint( pos, ang );
-}
-
-/*
-==================
-Cmd_Say
-==================
-*/
-static void Cmd_Say( bool team, const idCmdArgs &args ) {
-	const char *name;
-	idStr text;
-	const char *cmd = team ? "sayTeam" : "say" ;
-
-	if ( !gameLocal.isMultiplayer ) {
-		gameLocal.Printf( "%s can only be used in a multiplayer game\n", cmd );
-		return;
-	}
-
-	if ( args.Argc() < 2 ) {
-		gameLocal.Printf( "usage: %s <text>\n", cmd );
-		return;
-	}
-
-	text = args.Args();
-	if ( text.Length() == 0 ) {
-		return;
-	}
-
-	if ( text[ text.Length() - 1 ] == '\n' ) {
-		text[ text.Length() - 1 ] = '\0';
-	}
-	name = "player";
-
-	idPlayer *	player;
-
-	// here we need to special case a listen server to use the real client name instead of "server"
-	// "server" will only appear on a dedicated server
-	if ( gameLocal.isClient || cvarSystem->GetCVarInteger( "net_serverDedicated" ) == 0 ) {
-		player = gameLocal.localClientNum >= 0 ? static_cast<idPlayer *>( gameLocal.entities[ gameLocal.localClientNum ] ) : NULL;
-		if ( player ) {
-			name = player->GetUserInfo()->GetString( "ui_name", "player" );
-		}
-	} else {
-		name = "server";
-	}
-
-#ifdef MULTIPLAYER
-	if ( gameLocal.isClient ) {
-		idBitMsg	outMsg;
-		byte		msgBuf[ 256 ];
-		outMsg.Init( msgBuf, sizeof( msgBuf ) );
-		outMsg.WriteByte( team ? GAME_RELIABLE_MESSAGE_TCHAT : GAME_RELIABLE_MESSAGE_CHAT );
-		outMsg.WriteString( name );
-		outMsg.WriteString( text, -1, false );
-		networkSystem->ClientSendReliableMessage( outMsg );
-	} else {
-		gameLocal.mpGame.ProcessChatMessage( gameLocal.localClientNum, team, name, text, NULL );
-	}
-#endif
-}
-
-/*
-==================
-Cmd_Say_f
-==================
-*/
-static void Cmd_Say_f( const idCmdArgs &args ) {
-	Cmd_Say( false, args );
-}
-
-/*
-==================
-Cmd_SayTeam_f
-==================
-*/
-static void Cmd_SayTeam_f( const idCmdArgs &args ) {
-	Cmd_Say( true, args );
-}
-
-/*
-==================
-Cmd_AddChatLine_f
-==================
-*/
-static void Cmd_AddChatLine_f( const idCmdArgs &args ) {
-#ifdef MULTIPLAYER
-	gameLocal.mpGame.AddChatLine( args.Argv( 1 ) );
-#endif
-}
-
-/*
-==================
-Cmd_Kick_f
-==================
-*/
-static void Cmd_Kick_f( const idCmdArgs &args ) {
-	idPlayer *player;
-
-	if ( !gameLocal.isMultiplayer ) {
-		gameLocal.Printf( "kick can only be used in a multiplayer game\n" );
-		return;
-	}
-
-	if ( gameLocal.isClient ) {
-		gameLocal.Printf( "You have no such power. This is a server command\n" );
-		return;
-	}
-
-	player = gameLocal.GetClientByCmdArgs( args );
-	if ( !player ) {
-		gameLocal.Printf( "usage: kick <client nickname> or kick <client index>\n" );
-		return;
-	}
-	cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "say kicking out client %d '%s^0'\n", player->entityNumber, gameLocal.userInfo[ player->entityNumber ].GetString( "ui_name" ) ) );
-	cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "kick %d\n", player->entityNumber ) );
 }
 
 /*
@@ -1176,7 +1052,13 @@ void Cmd_SetViewpos_f( const idCmdArgs &args ) {
 	for ( i = 0 ; i < 3 ; i++ ) {
 		origin[i] = atof( args.Argv( i + 1 ) );
 	}
-	origin.z -= pm_normalviewheight.GetFloat() - 0.25f;
+
+	// STiFU: Correct z based on current view height
+	idPhysics_Player* pPlayerPhysics = dynamic_cast<idPhysics_Player*>(player->GetPhysics());
+	if (pPlayerPhysics != nullptr && pPlayerPhysics->IsCrouching())
+		origin.z -= pm_crouchviewheight.GetFloat() - 0.25f;
+	else
+		origin.z -= pm_normalviewheight.GetFloat() - 0.25f;
 
 	player->Teleport( origin, angles, NULL );
 }
@@ -1288,6 +1170,30 @@ void Cmd_Spawn_f( const idCmdArgs &args ) {
 	}
 
 	gameLocal.SpawnEntityDef( dict );
+}
+
+void Cmd_ReSpawn_f(const idCmdArgs& args) {
+	if ( args.Argc() != 2 ) {	// must always have an even number of arguments
+		gameLocal.Printf( "usage: respawn entityname\n" );
+		return;
+	}
+
+	const char *name = args.Argv(1);
+	const idDict *spawnargs = gameEdit->MapGetEntityDict(name);
+	if (!spawnargs) {
+		gameLocal.Printf( "entity %s not found\n", name );
+		return;
+	}
+
+	idEntity *ent = gameEdit->FindEntity(name);
+	int flags = idGameEdit::sedRespectInhibit;
+	if (ent)
+		flags |= idGameEdit::sedRespawn;
+	gameEdit->SpawnEntityDef(*spawnargs, &ent, flags);
+	if (!ent) {
+		gameLocal.Printf( "failed to respawn entity %s\n", name );
+		return;
+	}
 }
 
 /*
@@ -2523,7 +2429,7 @@ bool FindEntityGUIs( idEntity *ent, const modelSurface_t ** surfaces,  int maxSu
 		if ( surf == NULL ) {
 			continue;
 		}
-		shader = surf->shader;
+		shader = surf->material;
 		if ( shader == NULL ) {
 			continue;
 		}
@@ -2653,31 +2559,6 @@ void Cmd_NextGUI_f( const idCmdArgs &args ) {
 
 static void ArgCompletion_DefFile( const idCmdArgs &args, void(*callback)( const char *s ) ) {
 	cmdSystem->ArgCompletion_FolderExtension( args, callback, "def/", true, ".def", NULL );
-}
-
-/*
-===============
-Cmd_TestId_f
-outputs a string from the string table for the specified id
-===============
-*/
-void Cmd_TestId_f( const idCmdArgs &args ) {
-#ifdef MULTIPLAYER
-	idStr	id;
-	int		i;
-	if ( args.Argc() == 1 ) {
-		common->Printf( "usage: testid <string id>\n" );
-		return;
-	}
-
-	for ( i = 1; i < args.Argc(); i++ ) {
-		id += args.Argv( i );
-	}
-	if ( idStr::Cmpn( id, STRTABLE_ID, STRTABLE_ID_LENGTH ) != 0 ) {
-		id = STRTABLE_ID + id;
-	}
-	gameLocal.mpGame.AddChatLine( common->Translate( id ), "<nothing>", "<nothing>", "<nothing>" );	
-#endif
 }
 
 void Cmd_SetClipMask(const idCmdArgs& args)
@@ -2895,6 +2776,28 @@ void Cmd_ShowLoot_f( const idCmdArgs& args )
 	gameLocal.Printf( "Gold: %d, Jewels: %d, Goods: %d\n", gold, jewels, goods );
 }
 
+void Cmd_GiveLoot_f(const idCmdArgs& args)
+{
+	if (gameLocal.GameState() != GAMESTATE_ACTIVE)
+	{
+		gameLocal.Printf("No map running\n");
+		return;
+	}
+
+	idPlayer *player = gameLocal.GetLocalPlayer();
+
+	for (idEntity* ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next())
+	{
+		if (ent == NULL) continue;
+
+		int value = ent->spawnArgs.GetInt("inv_loot_value", "-1");
+
+		if (value <= 0) continue; // no loot item
+
+		player->AddToInventory(ent);
+	}
+}
+
 void Cmd_ShowFrobs_f( const idCmdArgs& args )
 {
 	if ( gameLocal.GameState() != GAMESTATE_ACTIVE )
@@ -2968,8 +2871,7 @@ void Cmd_ShowKeys_f( const idCmdArgs& args )
 
 		//if ( strcmp( common->GetI18N()->Translate( value ), "Keys" ) ) continue; // no key
 		if ( strcmp( value, "#str_02392" ) ) continue; // no key
-		if ( !(ent->thinkFlags & TH_UPDATEVISUALS) )
-			continue;
+		//if ( !(ent->thinkFlags & TH_UPDATEVISUALS) ) continue;
 
 		value = ent->spawnArgs.GetString( "inv_name" );
 		auto invItem = gameLocal.GetLocalPlayer()->InventoryCursor()->Inventory()->GetItem( value );
@@ -3065,7 +2967,7 @@ typedef std::multimap< eVertexBlendType, ImageInfo_s > ImageInfoMap;
 bool GetValidStageExpression( idLexer &a_lexSource, idStr & a_strStageTextureName )
 {
 	int iOffset, nBrackets;
-	a_strStageTextureName.Empty();
+	a_strStageTextureName.Clear();
 
 	std::vector< idStr > arrStrInvalidTokens;
 	
@@ -3330,190 +3232,6 @@ bool FindBlockContainingWords(  const char *a_text, std::vector<idStr>& a_arrSea
 	return false;
 }
 
-void CreateNewAmbientBlock( const ImageInfoMap& a_arrDiffusemapInfo, const ImageInfoMap& a_arrBumpmapInfo, const ImageInfoMap& a_arrSpecularmapInfo, std::vector<char>& a_arrCharNewAmbientBlock )
-{
-	static const char newAmbientBlock[] = {	
-		"\n	{							\n"
-		"		if (global5 == 1)		\n"
-		"		blend add				\n"
-		"		map				%s		\n"
-		"		scale			%s		\n"
-		"		red				global2	\n"
-		"		green			global3	\n"
-		"		blue			global4	\n"
-		"	}							\n"
-		"	{							\n"
-		"		if (global5 == 2)		\n"
-		"		blend add				\n"
-		"		program	ambientEnvironment.vfp	\n"
-		"		vertexParm		0		%s, %s		// UV Scales for Diffuse and Bump	\n"
-		"		vertexParm		1		%s, 1, 1	// (X,Y) UV Scale for specular		\n"
-		"		vertexParm		2		global2, global3, global4, 1	\n"
-		"																\n"
-		"		fragmentMap		0		cubeMap env/gen1				\n"
-		"		fragmentMap		1		%s			// Bump				\n"
-		"		fragmentMap		2		%s			// Diffuse			\n"
-		"		fragmentMap		3		%s			// Specular			\n"
-		"	}"
-	};
-
-	static const char newAmbientBlockVertColorBlended[] = {	
-		"\n	{							\n"
-		"		if (global5 == 1)		\n"
-		"		blend add				\n"
-		"		map				%s		\n"
-		"		scale			%s		\n"
-		"		red				global2	\n"
-		"		green			global3	\n"
-		"		blue			global4	\n"
-		"		vertexColor				\n"
-		"	}							\n"
-		"	{							\n"
-		"		if (global5 == 1)		\n"
-		"		blend add				\n"
-		"		map				%s		\n"
-		"		scale			%s		\n"
-		"		red				global2	\n"
-		"		green			global3	\n"
-		"		blue			global4	\n"
-		"		inverseVertexColor		\n"
-		"	}							\n"
-		"	{							\n"
-		"		if (global5 == 2)		\n"
-		"		blend add				\n"
-		"		program	ambientEnvVertexBlend.vfp	\n"
-		"		vertexParm		0		%s, %s		// UV Scales for Diffuse1 and Bump1	resp.	\n"
-		"		vertexParm		1		%s, %s		// UV Scale for specular1 and Diffuse2 resp.\n"
-		"		vertexParm		2		%s, %s		// UV Scale for Bump2 and specular2 resp.	\n"
-		"		vertexParm		3		global2, global3, global4, 1	\n"
-		"		//----------- VertexColored -------------------			\n"
-		"		fragmentMap		0		cubeMap env/gen1				\n"
-		"		fragmentMap		1		%s			// Bump1			\n"
-		"		fragmentMap		2		%s			// Diffuse1			\n"
-		"		fragmentMap		3		%s			// Specular1		\n"
-		"		//----------- InverseVertexColored ------------			\n"
-		"		fragmentMap		4		%s			// Bump2			\n"
-		"		fragmentMap		5		%s			// Diffuse2			\n"
-		"		fragmentMap		6		%s			// Specular2		\n"
-		"	}"
-	};
-
-
-
-	ImageInfoMap::const_iterator itrDiffusemapInfoVertexColored		= a_arrDiffusemapInfo.find( eVertexBlendType_VertexColored );
-	ImageInfoMap::const_iterator itrBumpmapInfoVertexColored		= a_arrBumpmapInfo.find( eVertexBlendType_VertexColored );
-	ImageInfoMap::const_iterator itrSpecularmapInfoVertexColored	= a_arrSpecularmapInfo.find( eVertexBlendType_VertexColored );
-
-	ImageInfoMap::const_iterator itrDiffusemapInfoInvVertexColored	= a_arrDiffusemapInfo.find( eVertexBlendType_InvVertexColored );
-	ImageInfoMap::const_iterator itrBumpmapInfoInvVertexColored		= a_arrBumpmapInfo.find( eVertexBlendType_InvVertexColored );
-	ImageInfoMap::const_iterator itrSpecularmapInfoInvVertexColored	= a_arrSpecularmapInfo.find( eVertexBlendType_InvVertexColored );
-
-	bool bIsVertexColorBlended = ( ( a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored || a_arrBumpmapInfo.end() != itrBumpmapInfoVertexColored || 
-		a_arrSpecularmapInfo.end() != itrSpecularmapInfoVertexColored )	&&
-		(a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored || a_arrBumpmapInfo.end() != itrBumpmapInfoInvVertexColored || 
-		a_arrSpecularmapInfo.end() != itrSpecularmapInfoInvVertexColored ) );
-
-	ImageInfoMap::const_iterator itrDiffusemapInfo	= a_arrDiffusemapInfo.find( eVertexBlendType_None );
-	ImageInfoMap::const_iterator itrBumpmapInfo		= a_arrBumpmapInfo.find( eVertexBlendType_None );
-	ImageInfoMap::const_iterator itrSpecularmapInfo	= a_arrSpecularmapInfo.find( eVertexBlendType_None );
-
-
-	if ( bIsVertexColorBlended )
-	{
-		gameLocal.Printf("This material is vertex-color blended. \n");
-	
-		// Find out normal maps for vertex blending.
-
-		// Handle cases where vertexColor is not used for bumpmaps
-		if ( a_arrBumpmapInfo.end() == itrBumpmapInfoVertexColored )
-			itrBumpmapInfoVertexColored = itrBumpmapInfo;
-
-		if ( a_arrBumpmapInfo.end() == itrBumpmapInfoInvVertexColored )
-		{
-			ImageInfoMap::const_iterator itrBumpmapInfo2 = itrBumpmapInfo;
-			if( a_arrBumpmapInfo.end() != itrBumpmapInfo2 )
-			{
-				// Try and see if there's a second bumpmap with no vertex-color blend.
-				++itrBumpmapInfo2;
-				itrBumpmapInfoInvVertexColored =  a_arrBumpmapInfo.end() != itrBumpmapInfo2 ? ( eVertexBlendType_None == (*itrBumpmapInfo2).first ? itrBumpmapInfo2 : itrBumpmapInfo ) : itrBumpmapInfo;  
-			}
-		}
-		unsigned int uiBlockSize =	idStr::Length( newAmbientBlockVertColorBlended ) + 1 + 
-			//------------------ For vertexColor ----------------
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored	? (*itrDiffusemapInfoVertexColored).second.m_strImageName.Length()	: idStr::Length("_black")	) * 2	+
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored	? (*itrDiffusemapInfoVertexColored).second.m_strUVScale.Length()	: idStr::Length("1, 1")		) * 2	+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfoVertexColored		? (*itrBumpmapInfoVertexColored).second.m_strImageName.Length()		: idStr::Length("_flat")	) 		+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfoVertexColored		? (*itrBumpmapInfoVertexColored).second.m_strUVScale.Length()		: idStr::Length("1, 1")		)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfoVertexColored	? (*itrSpecularmapInfoVertexColored).second.m_strImageName.Length()	: idStr::Length("_black")	)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfoVertexColored	? (*itrSpecularmapInfoVertexColored).second.m_strUVScale.Length()	: idStr::Length("1, 1")		)		+ 
-			//------------------ For inverseVertexColor ---------
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored		? (*itrDiffusemapInfoInvVertexColored).second.m_strImageName.Length()	: idStr::Length("_black")	) * 2	+
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored		? (*itrDiffusemapInfoInvVertexColored).second.m_strUVScale.Length()		: idStr::Length("1, 1")		) * 2	+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfoInvVertexColored		? (*itrBumpmapInfoInvVertexColored).second.m_strImageName.Length()		: idStr::Length("_flat")	) 		+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfoInvVertexColored		? (*itrBumpmapInfoInvVertexColored).second.m_strUVScale.Length()		: idStr::Length("1, 1")		)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfoInvVertexColored	? (*itrSpecularmapInfoInvVertexColored).second.m_strImageName.Length()	: idStr::Length("_black")	)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfoInvVertexColored	? (*itrSpecularmapInfoInvVertexColored).second.m_strUVScale.Length()	: idStr::Length("1, 1")		);
-
-
-		a_arrCharNewAmbientBlock.resize( uiBlockSize, 0 );
-
-		idStr::snPrintf( &a_arrCharNewAmbientBlock[0], uiBlockSize, newAmbientBlockVertColorBlended, 
-			//------------------ For vertexColor ----------------
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored ?	(*itrDiffusemapInfoVertexColored).second.m_strImageName.c_str()				: "_black", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored ?	(*itrDiffusemapInfoVertexColored).second.m_strUVScale.c_str()				: "1, 1", 
-			//------------------ For inverseVertexColor ---------
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored ?	(*itrDiffusemapInfoInvVertexColored).second.m_strImageName.c_str()		: "_black", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored ?	(*itrDiffusemapInfoInvVertexColored).second.m_strUVScale.c_str()		: "1, 1", 
-			//---------------------------------------------------
-
-			//------------------ For vertexColor ----------------
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored ?	(*itrDiffusemapInfoVertexColored).second.m_strUVScale.c_str()			: "1, 1", 
-			a_arrBumpmapInfo.end() != itrBumpmapInfoVertexColored ?			(*itrBumpmapInfoVertexColored).second.m_strUVScale.c_str()				: "1, 1", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfoVertexColored ?	(*itrSpecularmapInfoVertexColored).second.m_strUVScale.c_str()			: "1, 1", 
-			//------------------ For inverseVertexColor ---------
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored ?	(*itrDiffusemapInfoInvVertexColored).second.m_strUVScale.c_str()	: "1, 1", 
-			a_arrBumpmapInfo.end() != itrBumpmapInfoInvVertexColored ?			(*itrBumpmapInfoInvVertexColored).second.m_strUVScale.c_str()		: "1, 1", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfoInvVertexColored ?	(*itrSpecularmapInfoInvVertexColored).second.m_strUVScale.c_str()	: "1, 1", 
-			//---------------------------------------------------
-
-			//------------------ For vertexColor ----------------
-			a_arrBumpmapInfo.end() != itrBumpmapInfoVertexColored ?			(*itrBumpmapInfoVertexColored).second.m_strImageName.c_str()			: "_flat", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoVertexColored ?	(*itrDiffusemapInfoVertexColored).second.m_strImageName.c_str()			: "_black", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfoVertexColored ?	(*itrSpecularmapInfoVertexColored).second.m_strImageName.c_str()		: "_black",
-			//------------------ For inverseVertexColor ---------
-			a_arrBumpmapInfo.end() != itrBumpmapInfoInvVertexColored ?			(*itrBumpmapInfoInvVertexColored).second.m_strImageName.c_str()			: "_flat", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfoInvVertexColored ?	(*itrDiffusemapInfoInvVertexColored).second.m_strImageName.c_str()		: "_black", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfoInvVertexColored ?	(*itrSpecularmapInfoInvVertexColored).second.m_strImageName.c_str()		: "_black"
-			//---------------------------------------------------
-			);
-	}
-	else
-	{
-		gameLocal.Printf("This material is vertex-color blended. \n");
-		unsigned int uiBlockSize =	idStr::Length( newAmbientBlock ) + 1 + 
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfo		? (*itrDiffusemapInfo).second.m_strImageName.Length()	: idStr::Length("_black")	) * 2	+
-			(a_arrDiffusemapInfo.end() != itrDiffusemapInfo		? (*itrDiffusemapInfo).second.m_strUVScale.Length()		: idStr::Length("1, 1")		) * 2	+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfo		? (*itrBumpmapInfo).second.m_strImageName.Length()		: idStr::Length("_flat")	)		+ 
-			(	a_arrBumpmapInfo.end() != itrBumpmapInfo		? (*itrBumpmapInfo).second.m_strUVScale.Length()		: idStr::Length("1, 1")		)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfo	? (*itrSpecularmapInfo).second.m_strImageName.Length()	: idStr::Length("_black")	)		+ 
-			(a_arrSpecularmapInfo.end() != itrSpecularmapInfo	? (*itrSpecularmapInfo).second.m_strUVScale.Length()	: idStr::Length("1, 1")		); 
-
-		a_arrCharNewAmbientBlock.resize( uiBlockSize, 0 );
-
-		idStr::snPrintf( &a_arrCharNewAmbientBlock[0], uiBlockSize, newAmbientBlock, 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfo ?	(*itrDiffusemapInfo).second.m_strImageName.c_str()		: "_black", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfo ?	(*itrDiffusemapInfo).second.m_strUVScale.c_str()		: "1, 1", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfo ?	(*itrDiffusemapInfo).second.m_strUVScale.c_str()		: "1, 1", 
-			a_arrBumpmapInfo.end() != itrBumpmapInfo ?			(*itrBumpmapInfo).second.m_strUVScale.c_str()			: "1, 1", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfo ?	(*itrSpecularmapInfo).second.m_strUVScale.c_str()		: "1, 1", 
-			a_arrBumpmapInfo.end() != itrBumpmapInfo ?			(*itrBumpmapInfo).second.m_strImageName.c_str()			: "_flat", 
-			a_arrDiffusemapInfo.end() != itrDiffusemapInfo ?	(*itrDiffusemapInfo).second.m_strImageName.c_str()		: "_black", 
-			a_arrSpecularmapInfo.end() != itrSpecularmapInfo ?	(*itrSpecularmapInfo).second.m_strImageName.c_str()		: "_black"
-			);
-	}
-
-}
-
 void Cmd_BatchConvertMaterials_f( const idCmdArgs& args )
 {
 
@@ -3753,7 +3471,7 @@ void Cmd_BatchConvertMaterials_f( const idCmdArgs& args )
 
 		std::vector<char> arrCharNewAmbientBlock;
 
-		CreateNewAmbientBlock( arrDiffusemapInfo, arrBumpMapInfo, arrSpecularmapInfo, arrCharNewAmbientBlock );
+		//CreateNewAmbientBlock( arrDiffusemapInfo, arrBumpMapInfo, arrSpecularmapInfo, arrCharNewAmbientBlock );
 
 		strMatTextWithNewBlock.Insert( &arrCharNewAmbientBlock[0], uiOffset );
 
@@ -3774,11 +3492,6 @@ void Cmd_BatchConvertMaterials_f( const idCmdArgs& args )
 	gameLocal.Printf(" %lu Materials processed and changed in total.\n", ulMaterialsProcessed );
 }
 
-
-void Cmd_updateCookedMathData_f( const idCmdArgs& args )
-{
-	cvarSystem->Find("r_postprocess_colorCurveBias")->SetModified();
-}
 
 void Cmd_LODBiasChanged_f( const idCmdArgs& args )
 {
@@ -3825,6 +3538,28 @@ void Cmd_ResetTimers_f(const idCmdArgs& args)
 }
 #endif // TIMING_BUILD 
 
+void Cmd_ReloadMap_f(const idCmdArgs& args)
+{
+	bool skipTimestampCheck = false;
+	if (args.Argc() >= 2 && idStr::Icmp(args.Argv(1), "nocheck") == 0)
+		skipTimestampCheck = true;
+	gameLocal.HotReloadMap(NULL, skipTimestampCheck);
+}
+
+void Cmd_GetGameTime_f(const idCmdArgs& args) {
+	common->Printf("%d\n", gameLocal.time);
+}
+
+void Cmd_SetGameTime_f(const idCmdArgs& args) {
+	if (args.Argc() != 2 || !idStr::IsNumeric(args.Argv(1))) {
+		common->Printf("One integer argument must be specified: desired game time in milliseconds\n");
+		return;
+	}
+	int newValue = atoi(args.Argv(1));
+	gameLocal.time = newValue;
+	common->Printf("Game time reset to %d\n", newValue);
+}
+
 /*
 =================
 idGameLocal::InitConsoleCommands
@@ -3840,15 +3575,12 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "game_memory",			idClass::DisplayInfo_f,		CMD_FL_GAME,				"displays game class info" );
 	cmdSystem->AddCommand( "listClasses",			idClass::ListClasses_f,		CMD_FL_GAME,				"lists game classes" );
 	cmdSystem->AddCommand( "listThreads",			idThread::ListThreads_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"lists script threads" );
+	cmdSystem->AddCommand( "listEvents",			Cmd_EventList_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"lists game events currently alive" );
 	cmdSystem->AddCommand( "listEntities",			Cmd_EntityList_f,			CMD_FL_GAME | CMD_FL_CHEAT, "lists game entities" );
 	cmdSystem->AddCommand( "countEntities",			Cmd_EntityCount_f,			CMD_FL_GAME | CMD_FL_CHEAT, "counts game entities by class" ); // #3924
 	cmdSystem->AddCommand( "listActiveEntities",	Cmd_ActiveEntityList_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"lists active game entities" );
 	cmdSystem->AddCommand( "listMonsters",			idAI::List_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"lists monsters" );
 	cmdSystem->AddCommand( "listSpawnArgs",			Cmd_ListSpawnArgs_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"list the spawn args of an entity", idGameLocal::ArgCompletion_EntityName );
-	cmdSystem->AddCommand( "say",					Cmd_Say_f,					CMD_FL_GAME,				"text chat" );
-	cmdSystem->AddCommand( "sayTeam",				Cmd_SayTeam_f,				CMD_FL_GAME,				"team text chat" );
-	cmdSystem->AddCommand( "addChatLine",			Cmd_AddChatLine_f,			CMD_FL_GAME,				"internal use - core to game chat lines" );
-	cmdSystem->AddCommand( "gameKick",				Cmd_Kick_f,					CMD_FL_GAME,				"same as kick, but recognizes player names" );
 	cmdSystem->AddCommand( "give",					Cmd_Give_f,					CMD_FL_GAME|CMD_FL_CHEAT,	"gives one or more items" );
 	cmdSystem->AddCommand( "centerview",			Cmd_CenterView_f,			CMD_FL_GAME,				"centers the view" );
 	cmdSystem->AddCommand( "god",					Cmd_God_f,					CMD_FL_GAME|CMD_FL_CHEAT,	"enables god mode" );
@@ -3863,6 +3595,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "teleport",				Cmd_Teleport_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"teleports the player to an entity location", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "trigger",				Cmd_Trigger_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"triggers an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "spawn",					Cmd_Spawn_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity", idCmdSystem::ArgCompletion_Decl<DECL_ENTITYDEF> );
+	cmdSystem->AddCommand( "respawn",				Cmd_ReSpawn_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"respawns game entity with given name", idGameLocal::ArgCompletion_MapEntityName );
 	cmdSystem->AddCommand( "damage",				Cmd_Damage_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"apply damage to an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "remove",				Cmd_Remove_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"removes an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "killMonsters",			Cmd_KillMonsters_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all monsters" );
@@ -3894,7 +3627,6 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "testBlend",				idTestModel::TestBlend_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"tests animation blending" );
 	cmdSystem->AddCommand( "reloadScript",			Cmd_ReloadScript_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"reloads scripts" );
 
-	cmdSystem->AddCommand( "tdm_updateCookedMathData",	Cmd_updateCookedMathData_f,		CMD_FL_GAME,	"Updates lookup textures" );
 	cmdSystem->AddCommand( "tdm_lod_bias_changed",		Cmd_LODBiasChanged_f,			CMD_FL_GAME,	"Updates entity visibility according to tdm_lod_bias." );
 
 	cmdSystem->AddCommand( "script",				Cmd_Script_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"executes a line of script" );
@@ -3941,6 +3673,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "tdm_show_frobs",		Cmd_ShowFrobs_f, CMD_FL_GAME | CMD_FL_CHEAT, "Highlight all frobables in the map." );
 	cmdSystem->AddCommand( "tdm_show_keys",			Cmd_ShowKeys_f,	CMD_FL_GAME | CMD_FL_CHEAT,	"Highlight all keys in the map." );
 	cmdSystem->AddCommand( "tdm_show_loot",			Cmd_ShowLoot_f, CMD_FL_GAME | CMD_FL_CHEAT, "Highlight all loot items in the map." );
+	cmdSystem->AddCommand( "tdm_give_loot",			Cmd_GiveLoot_f, CMD_FL_GAME | CMD_FL_CHEAT, "Adds all loot items in the map to in inventory of the player.");
 
 	cmdSystem->AddCommand( "tdm_activatelogclass",		Cmd_ActivateLog_f,			CMD_FL_GAME,	"Activates a specific log class during run-time (as defined in darkmod.ini)", CGlobal::ArgCompletion_LogClasses );
 	cmdSystem->AddCommand( "tdm_deactivatelogclass",	Cmd_DeactivateLog_f,		CMD_FL_GAME,	"De-activates a specific log class during run-time (as defined in darkmod.ini)", CGlobal::ArgCompletion_LogClasses );
@@ -3958,34 +3691,23 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "disasmScript",			Cmd_DisasmScript_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"disassembles script" );
 	cmdSystem->AddCommand( "exportmodels",			Cmd_ExportModels_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"exports models", ArgCompletion_DefFile );
 
-#ifdef MULTIPLAYER
-	// multiplayer client commands ( replaces old impulses stuff )
-	cmdSystem->AddCommand( "clientDropWeapon",		idMultiplayerGame::DropWeapon_f, CMD_FL_GAME,			"drop current weapon" );
-	cmdSystem->AddCommand( "clientMessageMode",		idMultiplayerGame::MessageMode_f, CMD_FL_GAME,			"ingame gui message mode" );
-	// FIXME: implement
-//	cmdSystem->AddCommand( "clientVote",			idMultiplayerGame::Vote_f,	CMD_FL_GAME,				"cast your vote: clientVote yes | no" );
-//	cmdSystem->AddCommand( "clientCallVote",		idMultiplayerGame::CallVote_f,	CMD_FL_GAME,			"call a vote: clientCallVote si_.. proposed_value" );
-	cmdSystem->AddCommand( "clientVoiceChat",		idMultiplayerGame::VoiceChat_f,	CMD_FL_GAME,			"voice chats: clientVoiceChat <sound shader>" );
-	cmdSystem->AddCommand( "clientVoiceChatTeam",	idMultiplayerGame::VoiceChatTeam_f,	CMD_FL_GAME,		"team voice chats: clientVoiceChat <sound shader>" );
-	cmdSystem->AddCommand( "serverForceReady", idMultiplayerGame::ForceReady_f, CMD_FL_GAME, "force all players ready" );
-#endif
-
-	// multiplayer server commands
-	cmdSystem->AddCommand( "serverMapRestart",		idGameLocal::MapRestart_f,	CMD_FL_GAME,				"restart the current game" );
-	cmdSystem->AddCommand( "serverNextMap",			idGameLocal::NextMap_f,		CMD_FL_GAME,				"change to the next map" );
-
 	// greebo: Added commands to alter the clipmask/contents of entities.
 	cmdSystem->AddCommand( "setClipMask",			Cmd_SetClipMask,			CMD_FL_GAME,				"Set the clipmask of the target entity, usage: 'setClipMask crate01 1313'", idGameLocal::ArgCompletion_EntityName);
 	cmdSystem->AddCommand( "setClipContents",		Cmd_SetClipContents,		CMD_FL_GAME,				"Set the contents flags of the target entity, usage: 'setClipContents crate01 1313'", idGameLocal::ArgCompletion_EntityName);
 
+	// stgatilov: hot-reload feature
+	cmdSystem->AddCommand( "reloadMap",				Cmd_ReloadMap_f,			CMD_FL_GAME,				"Reload .map file and try to update running game accordingly" );
+
 	// localization help commands
 	cmdSystem->AddCommand( "nextGUI",				Cmd_NextGUI_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"teleport the player to the next func_static with a gui" );
-	cmdSystem->AddCommand( "testid",				Cmd_TestId_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"output the string for the specified id." );
 #ifdef TIMING_BUILD
 	cmdSystem->AddCommand( "listTimers",			Cmd_ListTimers_f,			CMD_FL_GAME,				"Shows total run time and max time of timers (TIMING_BUILD only)." );
 	cmdSystem->AddCommand( "writeTimerCSV",			Cmd_WriteTimerCSV_f,		CMD_FL_GAME,				"Writes the timer data to a csv file (usage: writeTimerCSV <separator> <commaChar>). The default separator is ';', the default comma is '.'");
 	cmdSystem->AddCommand( "resetTimers",			Cmd_ResetTimers_f,			CMD_FL_GAME,				"Resets the timer data so far.");
 #endif
+
+	cmdSystem->AddCommand( "getGameTime",			Cmd_GetGameTime_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"prints current game time (gameLocal.time) in milliseconds" );
+	cmdSystem->AddCommand( "setGameTime",			Cmd_SetGameTime_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"assigns specified value in milliseconds to game time (gameLocal.time)\nnote: this is unsafe!" );
 }
 
 /*

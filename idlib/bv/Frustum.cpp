@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -45,8 +45,10 @@ BoxToPoints
 ============
 */
 void BoxToPoints( const idVec3 &center, const idVec3 &extents, const idMat3 &axis, idVec3 points[8] ) {
-	idMat3 ax;
-	idVec3 temp[4];
+	//idMat3 ax;
+	//idVec3 temp[4]; duzenko: unnecessary implicit loop for(int 0<=i<4): temp[i][0]=[1]=[2]=0
+	idVec3* ax = (idVec3*)_alloca( 3 * sizeof( idVec3 ) );
+	idVec3* temp = (idVec3*)_alloca( 4 * sizeof( idVec3 ) );
 
 	ax[0] = extents[0] * axis[0];
 	ax[1] = extents[1] * axis[1];
@@ -2033,8 +2035,6 @@ bool idFrustum::ProjectionBounds( const idBounds &bounds, idBounds &projectionBo
 	return ProjectionBounds( idBox( bounds, vec3_origin, mat3_identity ), projectionBounds );
 }
 
-#if !defined(__linux__) && !defined(MACOS_X)
-
 /*
 ============
 idFrustum::ProjectionBounds
@@ -2145,10 +2145,20 @@ bool idFrustum::ProjectionBounds( const idBox &box, idBounds &projectionBounds )
 		}
 	}
 
+	//stgatilov: in rare cases no point is added to projectionBounds
+	//then returning empty box is bad idea, better return full box
+	if ( projectionBounds.IsBackwards() ) {
+		float boxMin, boxMax, base;
+		base = origin * axis[0];
+		box.AxisProjection( axis[0], boxMin, boxMax );
+		projectionBounds[0].x = boxMin - base;
+		projectionBounds[1].x = boxMax - base;
+		projectionBounds[0].y = projectionBounds[0].z = -1.0f;
+		projectionBounds[1].y = projectionBounds[1].z = 1.0f;
+	}
+
 	return true;
 }
-
-#endif
 
 /*
 ============
@@ -2417,6 +2427,9 @@ void idFrustum::ClipFrustumToBox( const idBox &box, float clipFractions[4], int 
 	bounds[1] = box.GetExtents();
 
 	minf = ( dNear + 1.0f ) * invFar;
+
+	//stgatilov: cornerVecs[i] can be zero, causing division-by-zero inside loop
+	idIgnoreFpExceptions guard;
 
 	for ( i = 0; i < 4; i++ ) {
 

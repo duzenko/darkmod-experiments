@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SESSIONLOCAL_H__
@@ -52,9 +52,7 @@ struct fileTIME_T {
 					operator int() const { return timeStamp; }
 };
 
-#ifndef MULTIPLAYER
 #define MAX_ASYNC_CLIENTS 1
-#endif
 
 typedef struct {
 	idDict			serverInfo;
@@ -69,6 +67,13 @@ typedef enum {
 	TD_YES,
 	TD_YES_THEN_QUIT
 } timeDemo_t;
+
+typedef enum {
+	MMSS_MAINMENU,
+	MMSS_SUCCESS,
+	MMSS_FAILURE,
+	MMSS_BRIEFING,
+} mainMenuStartState_t;
 
 const int USERCMD_PER_DEMO_FRAME	= 2;
 const int CONNECT_TRANSMIT_TIME		= 1000;
@@ -93,15 +98,14 @@ public:
 
 	virtual void		Frame();
 
-#ifdef MULTIPLAYER
-	virtual bool		IsMultiplayer();
-#endif
 	virtual bool		ProcessEvent( const sysEvent_t *event );
 
 	virtual void		StartMenu( bool playIntro = false );
 	virtual void		ExitMenu();
 	virtual void		GuiFrameEvents();
 	virtual void		SetGUI( idUserInterface *gui, HandleGuiCommand_t handle );
+	virtual idUserInterface* GetGui(GuiType type) const;
+	virtual bool		RunGuiScript(const char *windowName, int scriptNum);
 
 	virtual const char *MessageBox( msgBoxType_t type, const char *message, const char *title = NULL, bool wait = false, const char *fire_yes = NULL, const char *fire_no = NULL, bool network = false  );
 	virtual void		StopBox( void );
@@ -112,10 +116,13 @@ public:
 
 	virtual int			GetSaveGameVersion( void );
     
-	virtual void		RunGameTic();
+	virtual void		RunGameTic(int timestepMs);
 	virtual void		ActivateFrontend();
 	virtual void		WaitForFrontendCompletion();
 	virtual void		StartFrontendThread();
+	virtual void		ExecuteFrameCommand(const char *command, bool delayed);
+	virtual void		ExecuteDelayedFrameCommands();
+
 
 	virtual const char *GetCurrentMapName();
 
@@ -143,7 +150,27 @@ public:
 	void				ScrubSaveGameFileName( idStr &saveFileName ) const;
 	idStr				GetAutoSaveName( const char *mapName ) const;
 
-	bool				LoadGame(const char *saveName);
+	enum eSaveConflictHandling
+	{
+		eSaveConflictHandling_QueryUser,
+		eSaveConflictHandling_Ignore,
+		eSaveConflictHandling_LoadMapStart,
+	};
+
+	bool				LoadGame(const char *saveName, eSaveConflictHandling conflictHandling = eSaveConflictHandling_QueryUser);
+
+private: // Helper methods for LoadGame
+	bool				ParseSavegamePreamble(const char * saveName, idFile** savegameFile, idStr* saveMap);
+	enum SavegameValidity
+	{
+		savegame_valid,
+		savegame_invalid,
+		savegame_versionMismatch,
+	};
+	SavegameValidity	IsSavegameValid(const char *saveName, int* savegameRevision = NULL);
+	bool				DoLoadGame(const char *saveName, const bool initialializedLoad);
+
+public:
 	bool				SaveGame(const char *saveName, bool autosave = false, bool skipCheck = false);
 
 	//=====================================
@@ -152,6 +179,9 @@ public:
 	static idCVar		com_showTics;
 	static idCVar		com_minTics;
 	static idCVar		com_fixedTic;
+	static idCVar		com_maxFPS;
+	static idCVar		com_maxTicTimestep;
+	static idCVar		com_maxTicsPerFrame;
 	static idCVar		com_showDemo;
 	static idCVar		com_skipGameDraw;
 	static idCVar		com_aviDemoWidth;
@@ -180,7 +210,6 @@ public:
 
 	float				pct;					// grayman #3763 - used by PacifierUpdate()
 	float				pct_delta;				// grayman #3763 - used by PacifierUpdate()
-	int					loadDoneTime;			// grayman #3763 - used by PacifierUpdate()
 
 	// we don't want to redraw the loading screen for every single
 	// console print that happens
@@ -191,6 +220,7 @@ public:
 	mapSpawnData_t		mapSpawnData;
 	idStr				currentMapName;			// for checking reload on same level
 	bool				mapSpawned;				// cleared on Stop()
+	mainMenuStartState_t mainMenuStartState;	// stgatilov: which state of main menu to start with when it activates?
 
 	int					numClients;				// from serverInfo
 
@@ -203,8 +233,7 @@ public:
 
 	bool				insideUpdateScreen;	// true while inside ::UpdateScreen()
 
-	bool				loadingSaveGame;	// currently loading map from a SaveGame
-	idFile *			savegameFile;		// this is the savegame file to load from
+	idStr				lastSaveName;
 	int					savegameVersion;
 
 	idFile *			cmdDemoFile;		// if non-zero, we are reading commands from a file
@@ -235,7 +264,6 @@ public:
 	idUserInterface *	guiInGame;
 	idUserInterface *	guiMainMenu;
 	idListGUI *			guiMainMenu_MapList;		// easy map list handling
-	idUserInterface *	guiRestartMenu;
 	idUserInterface *	guiLoading;
 	idUserInterface *	guiTest;
 	
@@ -259,22 +287,18 @@ public:
 	int					emptyDrawCount;				// watchdog to force the main menu to restart
 #endif
 
-	int					gameTicsToRun;
-	std::thread			frontendThread;
+	int					gameTicsToRun;			// how many game ticks to run this frame
+	int					gameTimestepTotal;		// total timestep for all game tics to be run this frame (in milliseconds)
+	uintptr_t			frontendThread;
 	std::condition_variable signalFrontendThread;
 	std::condition_variable signalMainThread;
 	std::mutex			signalMutex;
 	volatile bool		frontendActive;
 	volatile bool		shutdownFrontend;
 	std::shared_ptr<ErrorReportedException> frontendException;
-	double				frontendTimeWaiting;
-	double				frontendTimeGameTics;
-	double				frontendTimeDrawing;
-	double				frontendTimeSignal;
 
 	void				FrontendThreadFunction();
 	bool				IsFrontend() const;
-	void				LogFrontendTimings( idFile& logFile ) const;
 
 	//=====================================
 	void				Clear();
@@ -313,7 +337,7 @@ public:
 //	int					GetBytesNeededForMapLoad( const char *mapName ); // #3763 debug - no longer used
 	void				SetBytesNeededForMapLoad( const char *mapName, int bytesNeeded );
 
-	void				ExecuteMapChange( bool noFadeWipe = false );
+	bool				ExecuteMapChange( idFile* savegameFile = NULL, bool noFadeWipe = false );
 	void				UnloadMap();
 
 	//------------------
@@ -334,6 +358,9 @@ public:
 	void				HandleMsgCommands( const char *menuCommand );
 	void				GetSaveGameList( idStrList &fileList, idList<fileTIME_T> &fileTimes );
 	void				UpdateMPLevelShot( void );
+	void				ResetMainMenu() override;
+	void				CreateMainMenu();
+	void				SetMainMenuStartAtBriefing() override;
 
 	void				SetSaveGameGuiVars( void );
 	void				SetMainMenuGuiVars( void );
@@ -344,7 +371,9 @@ public:
 private:
 	bool				BoxDialogSanityCheck( void );
 	idStr				authMsg;
+	idStrList			delayedFrameCommands;
 };
+
 
 extern idSessionLocal	sessLocal;
 

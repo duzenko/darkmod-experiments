@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -29,7 +29,10 @@
 #define CACHETYPE_AREA				1
 #define CACHETYPE_PORTAL			2
 
-#define MAX_ROUTING_CACHE_MEMORY	(2*1024*1024)
+//stgatilov #4755: should be large enough for EAS initialization
+//if cache is not large enough, then EAS setup becomes much slower
+//P.S. Shadowhide WIP needs at least 6 MB
+#define MAX_ROUTING_CACHE_MEMORY	(20*1024*1024)
 
 #define LEDGE_TRAVELTIME_PENALTY	250
 

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "../idlib/precompiled.h"
@@ -56,7 +56,7 @@ public:
 	virtual void			StartupVariable( const char *match, bool once ) {}
 	virtual void			InitTool( const toolFlag_t tool, const idDict *dict ) {}
 	virtual void			ActivateTool( bool active ) {}
-	virtual void			WriteConfigToFile( const char *filename, const char* basePath ) {}
+	virtual void			WriteConfigToFile( const char *filename, const char* basePath, const eConfigExport configexport = eConfigExport_all ) {}
 	virtual void			WriteFlaggedCVarsToFile( const char *filename, int flags, const char *setCmd ) {}
 	virtual void			BeginRedirect( char *buffer, int buffersize, void (*flush)( const char * ) ) {}
 	virtual void			EndRedirect( void ) {}
@@ -64,6 +64,7 @@ public:
 	virtual void			Printf( const char *fmt, ... ) { STDIO_PRINT( "", "" ); }
 	virtual void			VPrintf( const char *fmt, va_list arg ) { vprintf( fmt, arg ); }
 	virtual void			DPrintf( const char *fmt, ... ) { /*STDIO_PRINT( "", "" );*/ }
+	virtual void			PrintCallStack() {}
 	virtual void			Warning( const char *fmt, ... ) { STDIO_PRINT( "WARNING: ", "\n" ); }
 	virtual void			DWarning( const char *fmt, ...) { /*STDIO_PRINT( "WARNING: ", "\n" );*/ }
 	virtual void			PrintWarnings( void ) {}
@@ -87,6 +88,7 @@ public:
 };
 
 idCVar com_developer( "developer", "0", CVAR_BOOL|CVAR_SYSTEM, "developer mode" );
+idCVar com_fpexceptions;
 
 idCommonLocal		commonLocal;
 idCommon *			common = &commonLocal;
@@ -101,7 +103,6 @@ idCommon *			common = &commonLocal;
 
 void			Sys_Mkdir( const char *path ) {}
 ID_TIME_T		Sys_FileTimeStamp( FILE *fp ) { return 0; }
-ID_TIME_T       Sys_DosToUnixTime( unsigned long dostime ) { return 0; }
 
 #ifdef _WIN32
 
@@ -191,6 +192,8 @@ int Sys_ListFiles( const char *directory, const char *extension, idStrList &list
 	return list.Num();
 }
 
+void GetDeclLoadedFiles(idList<idStr> &) {}
+
 #else
 
 const char *	Sys_DefaultBasePath( void ) { return ""; }
@@ -199,11 +202,14 @@ int				Sys_ListFiles( const char *directory, const char *extension, idStrList &l
 
 #endif
 
-xthreadInfo *	g_threads[MAX_THREADS];
-int				g_thread_count;
-
-void			Sys_CreateThread( xthread_t function, void *parms, xthreadPriority priority, xthreadInfo &info, const char *name, xthreadInfo *threads[MAX_THREADS], int *thread_count ) {}
-void			Sys_DestroyThread( xthreadInfo& info ) {}
+#if 0
+uintptr_t		Sys_CreateThread( xthread_t function, void* parms, xthreadPriority priority,
+	const char* name, core_t core, int stackSize,
+	bool suspended ) {
+	return  0; 
+}
+void			Sys_DestroyThread( uintptr_t info ) {}
+#endif
 
 void			Sys_EnterCriticalSection( int index ) {}
 void			Sys_LeaveCriticalSection( int index ) {}
@@ -225,6 +231,9 @@ cpuid_t			idSysLocal::GetProcessorId( void ) { return (cpuid_t)0; }
 const char *	idSysLocal::GetProcessorString( void ) { return ""; }
 void			idSysLocal::FPU_SetFTZ( bool enable ) {}
 void			idSysLocal::FPU_SetDAZ( bool enable ) {}
+void			idSysLocal::FPU_SetExceptions( bool enable ) {}
+void			idSysLocal::ThreadStartup( void ) {}
+void			idSysLocal::ThreadHeartbeat( void ) {}
 
 bool			idSysLocal::LockMemory( void *ptr, int bytes ) { return false; }
 bool			idSysLocal::UnlockMemory( void *ptr, int bytes ) { return false; }

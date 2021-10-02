@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -34,10 +33,10 @@ void CShop::Init()
 
 void CShop::Clear()
 {
-	_itemsForSale.Clear();
-	_itemsPurchased.Clear();
-	_startingItems.Clear();
-	_itemDefs.Clear();
+	_itemsForSale.ClearFree();
+	_itemsPurchased.ClearFree();
+	_startingItems.ClearFree();
+	_itemDefs.ClearFree();
 	_forSaleTop = 0;
 	_purchasedTop = 0;
 	_startingTop = 0;
@@ -877,9 +876,6 @@ void CShop::DisplayShop(idUserInterface *gui)
 	const idStr& curStartingMap = gameLocal.m_MissionManager->GetCurrentStartingMap();
 
 	idStr filename = va("maps/%s", curStartingMap.c_str());
-
-	// Let the GUI know which map to load
-	gui->SetStateString("mapStartCmd", va("exec 'map %s'", curStartingMap.c_str()));
 
 	// Load the map from the missiondata class (provides cached loading)
 	idMapFile* mapFile = gameLocal.m_MissionData->LoadMap(filename);

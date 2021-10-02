@@ -16,27 +16,22 @@ Project: The Dark Mod (http://www.thedarkmod.com/)
 #ifndef __VERTEXCACHE_H__
 #define __VERTEXCACHE_H__
 
-#include "BufferObject.h"
-#include <atomic>
+#include "backend/GpuBuffer.h"
 
 // vertex cache calls should only be made by the front end
 
 const int VERTCACHE_NUM_FRAMES = 3;
 
-const int VERTCACHE_STATIC = 1;					// in the static set, not the per-frame set
-const int VERTCACHE_SIZE_SHIFT = 1;
-const int VERTCACHE_SIZE_MASK = 0x7fffff;		// 8 megs 
-const int VERTCACHE_OFFSET_SHIFT = 24;
-const int VERTCACHE_OFFSET_MASK = 0xfffffff;	// 256 megs 
-const int VERTCACHE_FRAME_SHIFT = 52;
-const int VERTCACHE_FRAME_MASK = 0xfff;		// 12 bits = 4k frames to wrap around
+static const uint32 drawVertSize = sizeof(idDrawVert);
+static const uint32 shadowCacheSize = sizeof(shadowCache_t);
+static const uint32 VERTCACHE_FRAME_MASK = ( 1 << VERTCACHE_FRAMENUM_BITS ) - 1;
 
 // 240 is the least common multiple between 16-byte alignment and the size of idDrawVert and shadowCache_t.
 // The vertex cache positions need to be divisible by either size for glDrawElementsBaseVertex and similar
 // functions.
 const int VERTEX_CACHE_ALIGN = 240;
 const int INDEX_CACHE_ALIGN = 16;
-#define ALIGN( x, a ) ( ( ( x ) + ((a)-1) ) - ( ( (x) + (a) - 1 ) % a ) )
+//#define ALIGN( x, a ) ( ( ( x ) + ((a)-1) ) - ( ( (x) + (a) - 1 ) % a ) )
 
 enum cacheType_t {
 	CACHE_VERTEX,
@@ -45,40 +40,26 @@ enum cacheType_t {
 };
 
 struct geoBufferSet_t {
-	BufferObject		indexBuffer;
-	BufferObject		vertexBuffer;
+	GpuBuffer			indexBuffer;
+	GpuBuffer			vertexBuffer;
 	byte *				mappedVertexBase;
 	byte *				mappedIndexBase;
-	std::atomic<int>	indexMemUsed;
-	std::atomic<int>	vertexMemUsed;
+	idSysInterlockedInteger	indexMemUsed;
+	idSysInterlockedInteger	vertexMemUsed;
 	int					allocations;	// number of index and vertex allocations combined
-	int					vertexMapOffset;
-	int					indexMapOffset;
-	GLsync				bufferLock;
 
-	geoBufferSet_t( GLenum usage = GL_DYNAMIC_DRAW_ARB );
-};
-
-/**
- * Describes a single entry in the static or dynamic vertex or index cache in 64 bits.
- */
-struct vertCacheHandle_t {
-	uint32_t	size		: 23;
-	uint32_t	offset		: 28;
-	uint16_t	frameNumber : 12;
-	bool		isStatic	:  1;
-
-	bool IsValid() const { 
-		return size != 0;
-	}
+	geoBufferSet_t();
 };
 
 static const vertCacheHandle_t NO_CACHE = { 0, 0, 0, false };
 
+enum attribBind_t {
+	ATTRIB_REGULAR,
+	ATTRIB_SHADOW,
+};
+
 class idVertexCache {
 public:
-	idVertexCache();
-
 	void			Init();
 	void			Shutdown();
 
@@ -87,10 +68,10 @@ public:
 	void			PurgeAll();
 
 	// will be an int offset cast to a pointer of ARB_vertex_buffer_object
-	void *			VertexPosition( vertCacheHandle_t handle );
+	void			VertexPosition( vertCacheHandle_t handle, attribBind_t attrib = attribBind_t::ATTRIB_REGULAR );
 	void *			IndexPosition( vertCacheHandle_t handle );
 
-	// if you need to draw something without an indexCache, this must be called to reset GL_ELEMENT_ARRAY_BUFFER_ARB
+	// if you need to draw something without an indexCache, this must be called to reset GL_ELEMENT_ARRAY_BUFFER
 	void			UnbindIndex();
 
 	// updates the counter for determining which temp space to use
@@ -103,33 +84,15 @@ public:
 
 	// this data is only valid for one frame of rendering
 	vertCacheHandle_t AllocVertex( const void * data, int bytes ) {
-		return ActuallyAlloc( frameData[listNum], data, bytes, CACHE_VERTEX );
+		return ActuallyAlloc( dynamicData, data, bytes, CACHE_VERTEX );
 	}
 	vertCacheHandle_t AllocIndex( const void * data, int bytes ) {
-		return ActuallyAlloc( frameData[listNum], data, bytes, CACHE_INDEX );
+		return ActuallyAlloc( dynamicData, data, bytes, CACHE_INDEX );
 	}
 
 	// this data is valid until the next map load
-	vertCacheHandle_t AllocStaticVertex( const void *data, int bytes ) {
-		if( staticData.mappedVertexBase == nullptr ) {
-			common->Error( "AllocStaticVertex called, but static vertex cache is not ready for upload." );
-		}
-		vertCacheHandle_t handle = ActuallyAlloc( staticData, data, bytes, CACHE_VERTEX );
-		if( !handle.IsValid() ) {
-			common->FatalError( "AllocStaticVertex failed, out of memory" );
-		}
-		return handle;
-	}
-	vertCacheHandle_t AllocStaticIndex( const void *data, int bytes ) {
-		if( staticData.mappedIndexBase == nullptr ) {
-			common->Error( "AllocStaticIndex called, but static index cache is not ready for upload." );
-		}
-		vertCacheHandle_t handle = ActuallyAlloc( staticData, data, bytes, CACHE_INDEX );
-		if( !handle.IsValid() ) {
-			common->FatalError( "AllocStaticIndex failed, out of memory" );
-		}
-		return handle;
-	}
+	vertCacheHandle_t AllocStaticVertex( const void* data, int bytes );
+	vertCacheHandle_t AllocStaticIndex( const void* data, int bytes );
 
 	// Returns false if it's been purged
 	// This can only be called by the front end, the back end should only be looking at
@@ -138,6 +101,13 @@ public:
 		return handle.isStatic || ( handle.IsValid() && handle.frameNumber == ( currentFrame & VERTCACHE_FRAME_MASK ) );
 	}
 
+	int GetBaseVertex() {
+		if ( currentVertexBuffer == 0 ) {
+			common->Printf( "GetBaseVertex called, but no vertex buffer is bound. Vertex cache resize?\n" );
+			//return;
+		}
+		return basePointer;
+	}
 
 public:
 	static idCVar	r_showVertexCache;
@@ -146,18 +116,22 @@ public:
 	static idCVar	r_frameVertexMemory;
 	static idCVar	r_frameIndexMemory;
 
-	int				currentFrame;			// for purgable block tracking
-	int				listNum;				// currentFrame % NUM_VERTEX_FRAMES, determines which tempBuffers to use
-	int				backendListNum;
+	drawSurf_t		screenRectSurf;
 
-	geoBufferSet_t	frameData[VERTCACHE_NUM_FRAMES];
-	geoBufferSet_t  staticData;
+private:
+
+	int				currentFrame;			// for purgable block tracking
+	int				basePointer;
+
+	geoBufferSet_t	dynamicData;
+	GLuint			staticVertexBuffer;
+	GLuint			staticIndexBuffer;
 
 	GLuint			currentVertexBuffer;
 	GLuint			currentIndexBuffer;
 
-	int				staticBufferUsed;
-	int				tempBufferUsed;
+	int				indexAllocCount, vertexAllocCount;
+	int				indexUseCount, vertexUseCount;
 
 	int				currentVertexCacheSize;
 	int				currentIndexCacheSize;

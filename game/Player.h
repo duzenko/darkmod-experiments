@@ -1,22 +1,23 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #ifndef __GAME_PLAYER_H__
 #define __GAME_PLAYER_H__
 
 #include "ButtonStateTracker.h"
 #include "Listener.h"
+#include "FrobHelper.h"
 
 class CInventoryItem;
 typedef std::shared_ptr<CInventoryItem> CInventoryItemPtr;
@@ -75,7 +76,7 @@ const int	LAND_RETURN_TIME = 300;
 const int	FOCUS_TIME = 300;
 const int	FOCUS_GUI_TIME = 500;
 
-#define TDM_PLAYER_WEAPON_CATEGORY			"Weapons"
+#define TDM_PLAYER_WEAPON_CATEGORY			"#str_02411"
 #define TDM_PLAYER_MAPS_CATEGORY			"#str_02390"
 
 #define ARROW_WEAPON_INDEX_BEGIN 3		// grayman #597 - weapons at or above this index are arrows
@@ -232,6 +233,7 @@ enum {
 	EIM_ITEM_USE			= BIT(14),	// Using items
 	EIM_ITEM_SELECT			= BIT(15),	// Selecting items.
 	EIM_ITEM_DROP			= BIT(16),	// Dropping inventory items.
+	EIM_LEAN				= BIT(17),  // Leaning
 };
 
 typedef struct {
@@ -389,6 +391,9 @@ public:
 	// or toggle crouch is active
 	bool					m_CrouchIntent;
 
+	// STiFU: FrobHelper alpha calculation
+	CFrobHelper				m_FrobHelper;
+
 
 	/**
 	* Hack to fix the leaning test of key-releases
@@ -472,8 +477,8 @@ public:
 
 	// A pointer to our weaponslot.
 	CInventoryCursorPtr		m_WeaponCursor;
-	// A pointer to the current map/floorplan.
-	CInventoryCursorPtr		m_MapCursor;
+	// An index of the current map/floorplan.
+	int						m_MapCursorIdx;
 	// The name of the item that was current before pressing inventory clear
 	idStr					m_LastItemNameBeforeClear;
 
@@ -573,9 +578,12 @@ public:
 	void					OnStopShoulderingBody(idEntity* body);
 
 	/**
-	 * greebo: Plays the footstep sound according to the current movement type.
+	 * @brief		greebo:	Plays the footstep sound according to the current movement type.
+	 * @remark		STiFU #4947: Refactored to give a clearer structure and added further arguments
+	 * @param		pPointOfContact If not NULL, the material type is checked at this given position instead of the player position. Furthermore, the waterlevel is ignored because it is invalid at this position.
+	 * @param		skipTimeCheck If true, the sound is played regardless of the last playtime
 	 */
-	virtual void			PlayFootStepSound();
+	virtual void			PlayFootStepSound(idVec3* pPointOfContact = NULL, const bool skipTimeCheck = false);
 
 	void					UpdateConditions( void );
 	void					SetViewAngles( const idAngles &angles );
@@ -812,14 +820,6 @@ public:
 	// Virtal override of idActor::OnElevator()
 	virtual CMultiStateMover* OnElevator(bool mustBeMoving) const;
 
-#ifdef MULTIPLAYER
-	idPlayerIcon			playerIcon;
-	virtual	void			UpdatePlayerIcons( void );
-	virtual	void			DrawPlayerIcons( void );
-	virtual	void			HidePlayerIcons( void );
-	bool					NeedsIcon( void );
-#endif
-
 	bool					SelfSmooth( void );
 
 	void					SetSelfSmooth( bool b );
@@ -829,6 +829,7 @@ public:
 	* Do the frobbing trace and bounds intersection to mark entities as frobable
 	**/
 	void					PerformFrobCheck();
+	void					PerformFrobCheckInternal();
 
 	/**
 	 * greebo: Performs a frob action on the given entity. The above method
@@ -839,9 +840,14 @@ public:
 	 * @impulseState: the button state of the frob key. Pass EPressed if you
 	 * want to simulate a one-time frob event.
 	 *
+	 * @allowUseCurrentInvItem (#5542): if true, then also try to use currently selected inventory item
+	 * if "Use-by-frobbing" (tdm_inv_use_on_frob) player setting is on.
+	 * This happens e.g. when frobbing door while having lockpick/key selected.
+	 * When run from game script, it must always be false!
+	 *
 	 * Hold time: The amount of time the button has been held, if applicable (0 by default)
 	 */
-	void					PerformFrob(EImpulseState impulseState, idEntity* frobbed);
+	void					PerformFrob(EImpulseState impulseState, idEntity* frobbed, bool allowUseCurrentInvItem);
 
 	// Gets called when the player hits the frob button.
 	void					PerformFrob();
@@ -986,6 +992,9 @@ public:
 	// Runs the "Click when ready" GUI, returns TRUE if the player is ready
 	bool			WaitUntilReady();
 
+	// stgatilov #2454: enable/disable subtitles overlay and update active text to be displayed
+	void			UpdateSubtitlesGUI();
+
 	/**
 	* greebo: Sets the time between health "pulses" if the healthPool > 0
 	*
@@ -1087,6 +1096,9 @@ private:
 
 	// The GUI handle used by the in-game inventory grid display -- Durandall #4286
 	int						inventoryGridOverlay;
+
+	// The GUI handle used by the in-game subtitles -- stgatilov #2454
+	int						subtitlesOverlay;
 
 	idInterpolate<float>	zoomFov;
 	idInterpolate<float>	centerView;
@@ -1192,15 +1204,6 @@ private:
 	loggedAccel_t			loggedAccel[NUM_LOGGED_ACCELS];	// [currentLoggedAccel & (NUM_LOGGED_ACCELS-1)]
 	int						currentLoggedAccel;
 
-	// if there is a focusGUIent, the attack button will be changed into mouse clicks
-#if 0
-	idEntity *				focusGUIent;
-	idUserInterface *		focusUI;				// focusGUIent->renderEntity.gui, gui2, or gui3
-	idAI *					focusCharacter;
-	int						talkCursor;				// show the state of the focusCharacter (0 == can't talk/dead, 1 == ready to talk, 2 == busy talking)
-	int						focusTime;
-	idAFEntity_Vehicle *	focusVehicle;
-#endif
 	idUserInterface *		cursor;
 	
 	// full screen guis track mouse movements directly
@@ -1222,15 +1225,8 @@ private:
 	bool					respawning;				// set to true while in SpawnToPoint for telefrag checks
 	bool					leader;					// for sudden death situations
 	int						lastSpectateChange;
-	int						lastTeleFX;
 	unsigned int			lastSnapshotSequence;	// track state hitches on clients
 	bool					weaponCatchup;			// raise up the weapon silently ( state catchups )
-	int						MPAim;					// player num in aim
-	int						lastMPAim;
-	int						lastMPAimTime;			// last time the aim changed
-	int						MPAimFadeTime;			// for GUI fade
-	bool					MPAimHighlight;
-	bool					isTelefragged;			// proper obituaries
 
 	bool					selfSmooth;
 
@@ -1241,9 +1237,6 @@ private:
 	void					FireWeapon( void );
 	void					BlockWeapon( void );
 	void					Weapon_Combat( void );
-#if 0
-	void					Weapon_NPC( void );
-#endif
 	void					Weapon_GUI( void );
 	void					UpdateWeapon( void );
 
@@ -1281,11 +1274,6 @@ private:
 	void					UpdateDeathSkin( bool state_hitch );
 	void					SetSpectateOrigin( void );
 
-#if 0
-	void					ClearFocus( void );
-	void					UpdateFocus( void );
-#endif
-
 	void					UpdateLocation( void );
 	idUserInterface *		ActiveGui( void );
 	void					ExtractEmailInfo( const idStr &email, const char *scan, idStr &out );
@@ -1297,6 +1285,8 @@ private:
 	// Considers item limits as defined in atdm:campaign_info entities placed in the map
 	// All items exceeding the defined limits are removed from the player's inventory
 	void					EnforcePersistentInventoryItemLimits();
+
+	void					CollectItemsAndCategoriesForInventoryGrid( idList<CInventoryItemPtr> &items, idStr &categoryNames, idStr &categoryValues );
 
 	void					Event_GetButtons( void );
 	void					Event_GetMove( void );
@@ -1382,6 +1372,7 @@ private:
 	void					Event_ObjectiveUnlatch( int ObjIndex );
 	void					Event_ObjectiveComponentUnlatch( int ObjIndex, int CompIndex );
 	void					Event_SetObjectiveVisible( int ObjIndex, bool bVal );
+	void					Event_GetObjectiveVisible( int ObjIndex );
 	void					Event_SetObjectiveOptional( int ObjIndex, bool bVal );
 	void					Event_SetObjectiveOngoing( int ObjIndex, bool bVal );
 	void					Event_SetObjectiveEnabling( int ObjIndex, const char *strIn );

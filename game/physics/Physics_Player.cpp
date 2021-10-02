@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "precompiled.h"
 #pragma hdrstop
@@ -255,7 +255,7 @@ Returns true if the velocity was clipped in some way
 */
 #define	MAX_CLIP_PLANES	5
 
-bool idPhysics_Player::SlideMove( bool gravity, bool stepUp, bool stepDown, bool push ) {
+bool idPhysics_Player::SlideMove( bool gravity, bool stepUp, bool stepDown, bool push, const float velocityLimit /*= -1.0*/ ) {
 	int			i, j, k, pushFlags;
 	int			bumpcount, numbumps, numplanes;
 	float		d, time_left, into;
@@ -635,6 +635,16 @@ bool idPhysics_Player::SlideMove( bool gravity, bool stepUp, bool stepDown, bool
 		current.velocity = gravityNormal * current.velocity * gravityNormal;
 	}
 
+	// Limit velocity
+	if (velocityLimit >= 0.0)
+	{
+		const float fSqrdVelocity = current.velocity.LengthSqr();
+		if (fSqrdVelocity > velocityLimit*velocityLimit)
+		{
+			current.velocity *= idMath::RSqrt(fSqrdVelocity) * velocityLimit;
+		}
+	}
+
 	return (bool)( bumpcount == 0 );
 }
 
@@ -796,8 +806,79 @@ void idPhysics_Player::WaterMove()
 		}
 	} else {
 
+		// Regular swim speed
 		wishvel = scale * (viewForward * command.forwardmove + viewRight * command.rightmove);
 		wishvel -= scale * gravityNormal * command.upmove;
+
+		// stifu #3550: Simulate swimming motion via additive modulation of speed
+		// 1) Sinosodial lead-in
+		// 2) max-speed plateau
+		// 3) Sinosodial lead-out
+		// Sum of all phase portions has to be 1.0f
+		static const float fLeadInPortion = 0.4f;
+		static const float fLeadOutPortion = 0.2f;
+		assert(fLeadInPortion + fLeadOutPortion < 1.0f);
+
+		static const float fMaxSpeedPortion = 1.0f - fLeadInPortion - fLeadOutPortion;
+		assert(fMaxSpeedPortion >= 0.0f && fMaxSpeedPortion < 1.0f);
+
+		// (Re-)initialize members
+		if (cv_pm_swimspeed_frequency.IsModified() || cv_pm_swimspeed_variation.IsModified()
+			|| m_fSwimLeadInDuration_s < 0.0f	   || m_fSwimLeadOutStart_s < 0.0f 
+			|| m_fSwimLeadOutDuration_s < 0.0f     || m_fSwimSpeedModCompensation < 0.0f)
+		{
+			const float fFrequency = cv_pm_swimspeed_frequency.GetFloat();
+			m_fSwimLeadInDuration_s = fLeadInPortion / fFrequency;
+			const float fSwimMaxSpeedDuration_s = fMaxSpeedPortion / fFrequency;
+			m_fSwimLeadOutStart_s = m_fSwimLeadInDuration_s + fSwimMaxSpeedDuration_s;
+			m_fSwimLeadOutDuration_s = fLeadOutPortion / fFrequency;
+
+			// Max-speed plateau changes avg. speed -> Compensate that by subtracting
+			// a constant offset from the speed
+			for (int i = 0; i < 2; i++) // In case the first computation is invalid
+			{
+				const float fMaxSpeedPortionTotal = fSwimMaxSpeedDuration_s
+					/ (m_fSwimLeadInDuration_s + fSwimMaxSpeedDuration_s + m_fSwimLeadOutDuration_s);
+
+				m_fSwimSpeedModCompensation = 1.0f - cv_pm_swimspeed_variation.GetFloat() * fMaxSpeedPortionTotal;
+
+				// NOTE: cv_pm_swimspeed_variation could be incompatible with function.
+				//       Try to correct the value in that case and recompute compensation
+				if (m_fSwimSpeedModCompensation - cv_pm_swimspeed_variation.GetFloat() < 0.0f)
+					cv_pm_swimspeed_variation.SetFloat(1/fMaxSpeedPortionTotal);
+				else
+					break;
+			}
+			
+			cv_pm_swimspeed_frequency.ClearModified();
+			cv_pm_swimspeed_variation.ClearModified();
+		}
+
+		// Modulate swimming speed for the animation
+		if (m_fSwimTimeStart_s < m_fSwimLeadInDuration_s)
+		{
+			wishvel *= (m_fSwimSpeedModCompensation - cv_pm_swimspeed_variation.GetFloat() 
+				* idMath::Cos(idMath::PI * m_fSwimTimeStart_s / m_fSwimLeadInDuration_s));
+		} else if (m_fSwimTimeStart_s < m_fSwimLeadOutStart_s)
+		{
+			wishvel *= (m_fSwimSpeedModCompensation + cv_pm_swimspeed_variation.GetFloat());
+			if (!m_bSwimSoundStarted)
+				PlaySwimBurstSound();
+		}
+		else if (m_fSwimTimeStart_s < (m_fSwimLeadOutStart_s + m_fSwimLeadOutDuration_s))
+		{
+			const float fTimeInLeadOut_s = m_fSwimTimeStart_s - m_fSwimLeadOutStart_s;
+			wishvel *= (m_fSwimSpeedModCompensation + cv_pm_swimspeed_variation.GetFloat() 
+				* idMath::Cos(idMath::PI * fTimeInLeadOut_s / m_fSwimLeadOutDuration_s));
+		}
+		else
+		{
+			// Animation finished. Restart it!
+			m_fSwimTimeStart_s = -frametime;
+			m_bSwimSoundStarted = false;
+		}
+		
+		m_fSwimTimeStart_s += frametime;
 	}
 
 	idVec3 wishdir = wishvel;
@@ -823,6 +904,36 @@ void idPhysics_Player::WaterMove()
 	}
 
 	idPhysics_Player::SlideMove( false, true, false, false );
+}
+
+void idPhysics_Player::PlaySwimBurstSound()
+{
+	idStr sSound("snd_swim_burst");
+	
+	idPlayer* pPlayer = static_cast<idPlayer*>(self);
+	if (pPlayer == nullptr)
+		return;
+
+	// speed mod
+	if ((pPlayer->usercmd.buttons & BUTTON_CREEP) || cv_tdm_creep_toggle.GetBool())
+	{
+		sSound += "_creep";
+	} else if (pPlayer->usercmd.buttons & BUTTON_RUN)
+	{
+		sSound += "_run";
+	}
+	else
+	{
+		sSound += "_walk";
+	}	
+
+	// waterlevel mod
+	if (waterLevel >= WATERLEVEL_HEAD)
+		sSound += "_underwater";
+	
+	pPlayer->StartSound(sSound, SND_CHANNEL_BODY, 0, false, nullptr);
+
+	m_bSwimSoundStarted = true;
 }
 
 /*
@@ -900,6 +1011,8 @@ void idPhysics_Player::AirMove( void ) {
 	}
 
 	idPhysics_Player::SlideMove( true, false, false, false );
+
+	m_bMidAir = true;
 }
 
 /*
@@ -945,8 +1058,7 @@ void idPhysics_Player::WalkMove( void )
 	viewForward.Normalize();
 	viewRight.Normalize();
 
-	idVec3 wishvel = viewForward * command.forwardmove + viewRight * command.rightmove;
-	idVec3 wishdir = wishvel;
+	idVec3 wishdir = viewForward * command.forwardmove + viewRight * command.rightmove;
 	float wishspeed = wishdir.Normalize();
 	wishspeed *= scale;
 
@@ -1233,54 +1345,60 @@ void idPhysics_Player::RopeMove( void )
 	}
 
 // ======================== Rope Swinging =====================
-	if( ( player->usercmd.buttons & BUTTON_ATTACK ) && !( player->oldButtons & BUTTON_ATTACK )
-		&& (gameLocal.time - m_RopeKickTime) > cv_pm_rope_swing_reptime.GetInteger() )
-	{
-		// default kick direction is forward
-		idVec3 kickDir = player->firstPersonViewAxis[0];
-		idVec3 bodyOrig = ropePhys->GetOrigin(bodID);
-		idMat3 rotDir = mat3_identity;
-		// apply modifiers if holding left/right/back
-		if( common->ButtonState(UB_MOVELEFT) )
-		{
-			rotDir = idAngles(0.0f, 90.0f, 0.0f).ToMat3();
-		}
-		else if( common->ButtonState(UB_MOVERIGHT) )
-		{
-			rotDir = idAngles(0.0f, 270.0f, 0.0f).ToMat3();
-		}
-		else if( common->ButtonState(UB_BACK) )
-		{
-			rotDir = idAngles(0.0f, 180.0f, 0.0f).ToMat3();
-		}
-		kickDir = rotDir * kickDir;
+	if ( player->usercmd.buttons & BUTTON_ATTACK ) {
+		bool newKick = !(player->oldButtons & BUTTON_ATTACK) && (gameLocal.time - m_RopeKickTime) > cv_pm_rope_swing_reptime.GetInteger();
+		bool kickContinued = (gameLocal.time - m_RopeKickTime) < cv_pm_rope_swing_duration.GetInteger();
+		if (newKick || kickContinued) {
+			// default kick direction is forward
+			idVec3 kickDir = player->firstPersonViewAxis[0];
+			idVec3 bodyOrig = ropePhys->GetOrigin(bodID);
+			idMat3 rotDir = mat3_identity;
+			// apply modifiers if holding left/right/back
+			if( common->ButtonState(UB_MOVELEFT) )
+			{
+				rotDir = idAngles(0.0f, 90.0f, 0.0f).ToMat3();
+			}
+			else if( common->ButtonState(UB_MOVERIGHT) )
+			{
+				rotDir = idAngles(0.0f, 270.0f, 0.0f).ToMat3();
+			}
+			else if( common->ButtonState(UB_BACK) )
+			{
+				rotDir = idAngles(0.0f, 180.0f, 0.0f).ToMat3();
+			}
+			kickDir = rotDir * kickDir;
 
-		// do a trace to see if a solid is in the way, if so, kick off of it
-		trace_t trKick;
+			if (newKick) {
+				// do a trace to see if a solid is in the way, if so, kick off of it
+				trace_t trKick;
 		
-		gameLocal.clip.TracePoint
-			( 
-				trKick, bodyOrig, 
-				bodyOrig + cv_pm_rope_swing_kickdist.GetFloat()*kickDir,
-				MASK_SOLID, self 
-			);
-		if( trKick.fraction < 1.0f )
-		{
-			// reverse direction to kick off
-			kickDir *= -1.0f;
-			// apply reaction force to entity kicked (TODO: watch out for exploits)
-			idEntity *kickedEnt = gameLocal.entities[trKick.c.entityNum];
-			float kickMag = cv_pm_rope_swing_impulse.GetFloat() / 25.0f; // divide by 25, it takes a lot to move AFs for some reason
-			kickedEnt->ApplyImpulse( self, trKick.c.id, trKick.c.point, -kickMag * kickDir );
-		}
+				gameLocal.clip.TracePoint
+					( 
+						trKick, bodyOrig, 
+						bodyOrig + cv_pm_rope_swing_kickdist.GetFloat()*kickDir,
+						MASK_SOLID, self 
+					);
+				if( trKick.fraction < 1.0f )
+				{
+					// reverse direction to kick off
+					kickDir *= -1.0f;
+					// apply reaction force to entity kicked (TODO: watch out for exploits)
+					idEntity *kickedEnt = gameLocal.entities[trKick.c.entityNum];
+					float kickMag = cv_pm_rope_swing_impulse.GetFloat();// / 25.0f; // divide by 25, it takes a lot to move AFs for some reason
+					kickedEnt->ApplyImpulse( self, trKick.c.id, trKick.c.point, -kickMag * kickDir );
+				}
 
-		// project to XY plane
-		kickDir -= GetGravityNormal() * (kickDir*GetGravityNormal());
-		kickDir.Normalize();
+				// test: apply velocity to all bodies lower as well?
+				m_RopeKickTime = gameLocal.time;
+			}
+
+			// project to XY plane
+			kickDir -= GetGravityNormal() * (kickDir*GetGravityNormal());
+			kickDir.Normalize();
 		
-		ropePhys->AddForce( bodID, bodyOrig, kickDir * cv_pm_rope_swing_impulse.GetFloat() );
-		// test: apply velocity to all bodies lower as well?
-		m_RopeKickTime = gameLocal.time;
+			float force = cv_pm_rope_swing_impulse.GetFloat() / MS2SEC(cv_pm_rope_swing_duration.GetFloat());
+			ropePhys->AddForce( bodID, bodyOrig, kickDir * force );
+		}
 	}
 
 // ==== Translate the player to the rope attachment point =====
@@ -1540,21 +1658,11 @@ void idPhysics_Player::LadderMove( void )
 	idVec3  dir( vec3_zero ), start( vec3_zero ), end( vec3_zero ), delta( vec3_zero );
 	idVec3	AttachVel( vec3_zero ), RefFrameVel( vec3_zero );
 	idVec3	vReqVert( vec3_zero ), vReqHoriz( vec3_zero ), vHorizVect( vec3_zero );
-	float	wishspeed(0.0f), scale(0.0f), accel(0.0f);
+	float	wishspeed(0.0f), scale(0.0f), accel(PM_ACCELERATE);
 	float	upscale(0.0f), horizscale(0.0f), NormalDot(0.0f);
 	trace_t SurfTrace;
 	bool	bMoveAllowed( true );
 
-	accel = PM_ACCELERATE;
-
-	// TODO: Support non-rope climbable AFs by storing the AF body hit in the trace?
-	SetRefEntVel( m_ClimbingOnEnt.GetEntity() );
-
-	// Move player into climbed on ent reference frame
-	current.velocity -= m_RefEntVelocity;
-
-	idVec3 ClimbNormXY = m_vClimbNormal - (m_vClimbNormal * gravityNormal) * gravityNormal;
-	ClimbNormXY.Normalize();
 
 	// jump off the climbable surface if they jump, or fall off if they hit crouch
 	// angua: detaching when hitting crouch is handled in idPlayer::PerformImpulse
@@ -1564,6 +1672,9 @@ void idPhysics_Player::LadderMove( void )
 		return;
 	}
 
+	idVec3 ClimbNormXY = m_vClimbNormal - (m_vClimbNormal * gravityNormal) * gravityNormal;
+	ClimbNormXY.Normalize();
+
 	NormalDot = ClimbNormXY * viewForward;
 	// detach if their feet are on the ground walking away from the surface
 	if ( walking && -NormalDot * command.forwardmove < LADDER_WALKDETACH_DOT )
@@ -1571,6 +1682,7 @@ void idPhysics_Player::LadderMove( void )
 		ClimbDetach();
 		return;
 	}
+
 
 	// ====================== stick to the ladder ========================
 	// Do a trace to figure out where to attach the player:
@@ -1665,6 +1777,19 @@ void idPhysics_Player::LadderMove( void )
 		// We should already have m_vClimbPoint stored from the initial trace
 		AttachVel = 12.0f * (m_vClimbPoint - current.origin);
 	}
+
+	// stifu #4948: Do a ladder slide with non-damange terminal velocity
+	if (m_bSlideOrDetachClimb)
+	{
+		idPhysics_Player::SlideMove(true, false, false, false, cv_pm_ladderSlide_speedLimit.GetFloat());
+		return;
+	}
+
+	// TODO: Support non-rope climbable AFs by storing the AF body hit in the trace?
+	SetRefEntVel(m_ClimbingOnEnt.GetEntity());
+
+	// Move player into climbed on ent reference frame
+	current.velocity -= m_RefEntVelocity;
 
 	current.velocity = (gravityNormal * current.velocity) * gravityNormal + AttachVel;
 
@@ -2024,7 +2149,7 @@ void idPhysics_Player::CheckDuck( void ) {
 			// greebo: Update the lean physics when crouching
 			UpdateLeanPhysics();
 		}
-		else if (!IsMantling() && idealCrouchState == false) // MantleMod: SophisticatedZombie (DH): Don't stand up if crouch during mantle
+		else if (!IsMantling() && !IsShouldering() && idealCrouchState == false) // MantleMod: SophisticatedZombie (DH): Don't stand up if crouch during mantle
 		{
 			// ideal crouch state is not negative anymore, check if we are still in crouch mode
 			// stand up if appropriate
@@ -2170,8 +2295,11 @@ void idPhysics_Player::CheckClimbable( void )
 	if ( IsMantling() )
 		return;
 
-	if ( m_bClimbDetachCrouchHeld )
+	if ( m_bOnRope && m_bSlideOrDetachClimb )
 		return;
+	// stifu #4948: Continue checking when sliding vine and ladder. A non-damaging
+	// slide speed is only achieved when the player is looking at the climb. 
+	// Otherwise, player will be detached.
 
 /*
 	// Don't attach if we are holding an object in our hands
@@ -2252,6 +2380,8 @@ void idPhysics_Player::CheckClimbable( void )
 		if ( ( ( trace.c.material && ( trace.c.material->IsLadder() ) ) || isVine )
 			&& 	( gameLocal.time > m_NextAttachTime ) )
 		{
+			m_bClimbableAhead = true;
+
 			idVec3 vStickPoint = trace.endpos;
 			// check a step height higher
 			end = current.origin - gravityNormal * ( maxStepHeight * 0.75f );
@@ -2286,13 +2416,20 @@ void idPhysics_Player::CheckClimbable( void )
 						static_cast<idPlayer *>(self)->SetImmobilization( "ClimbMove", EIM_WEAPON_SELECT | EIM_ATTACK );
 					}
 
-					m_bClimbableAhead = true;
 					m_bOnClimb = true;					
 
 					return;
 				}
 			}
 		}
+	}
+
+
+	if (!m_bClimbableAhead && m_bOnClimb && m_bSlideOrDetachClimb)
+	{
+		// Not facing towards climbable surface. Cancel slide.
+		ClimbDetach();
+		m_bSlideOrDetachClimb = false;
 	}
 
 	// Rope attachment failsafe: Check intersection with the rope as well
@@ -2585,6 +2722,7 @@ void idPhysics_Player::MovePlayer( int msec ) {
 	m_bRopeContact = false;
 	m_bClimbableAhead = false;
 	m_bClimbDetachThisFrame = false;
+	m_bMidAir = false;
 
 	// default speed
 	playerSpeed = walkSpeed;
@@ -2677,6 +2815,11 @@ void idPhysics_Player::MovePlayer( int msec ) {
 		// dead
 		DeadMove();
 	}
+	else if (m_eShoulderAnimState == eShoulderingAnimation_Active)
+	{
+		// Shouldering viewport animation
+		ShoulderingMove();
+	}
 	// continue moving on the rope if still attached
 	else if ( m_bOnRope )
 	{
@@ -2733,6 +2876,14 @@ void idPhysics_Player::MovePlayer( int msec ) {
 		// airborne
 		AirMove();
 	}
+
+	if (waterLevel <= WATERLEVEL_FEET && m_fSwimTimeStart_s != 0.0f)
+		// Reset swimming animation timer
+		m_fSwimTimeStart_s = 0.0f;
+
+	if (m_eShoulderAnimState == eShoulderingAnimation_Scheduled)
+		// Try to start shouldering animation
+		StartShoulderingAnim();
 
 	// enable weapon if not swimming
 	if ( ( waterLevel <= WATERLEVEL_FEET ) && static_cast<idPlayer*>(self)->GetImmobilization("WaterMove") && walking ) // grayman #3413
@@ -2868,6 +3019,25 @@ idPhysics_Player::idPhysics_Player
 ================
 */
 idPhysics_Player::idPhysics_Player( void ) 
+	: m_eShoulderAnimState(eShoulderingAnimation_NotStarted)
+	, m_fShoulderingTime(0.0f)
+    , m_bShouldering_SkipDucking(false)
+	, m_fShouldering_TimeToNextSound(0.0f)
+	, m_bMidAir(false)
+	, m_fPrevShoulderingPitchOffset(0.0f)
+	, m_PrevShoulderingPosOffset(vec3_zero)
+	, m_ShoulderingStartPos(vec3_zero)
+	, m_fSwimTimeStart_s(0.0f)
+	, m_fSwimLeadInDuration_s(-1.0f)
+	, m_fSwimLeadOutStart_s(-1.0f)
+	, m_fSwimLeadOutDuration_s(-1.0f)
+	, m_fSwimSpeedModCompensation(-1.0f)
+	, m_bSwimSoundStarted(false)
+	, m_mantleCancelStartRoll(0.0f)
+	, m_fmantleCancelDist(0.0f)
+	, m_mantleCancelStartPos(vec3_zero)
+	, m_mantleCancelEndPos(vec3_zero)
+	, m_mantleStartPosWorld(vec3_zero)
 {
 	debugLevel = false;
 	clipModel = NULL;
@@ -2916,7 +3086,8 @@ idPhysics_Player::idPhysics_Player( void )
 	m_ClimbMaxVelVert = 0.0f;
 	m_ClimbSndRepDistVert = 0;
 	m_ClimbSndRepDistHoriz = 0;
-	m_bClimbDetachCrouchHeld = false;
+	m_bSlideOrDetachClimb = false;
+	m_bSlideInitialized = false;
 
 	m_NextAttachTime = -1;
 
@@ -2937,7 +3108,6 @@ idPhysics_Player::idPhysics_Player( void )
 	m_mantleStartPossible = true;
 
 	// Leaning Mod
-	m_bIsLeaning = false;
 	m_leanYawAngleDegrees = 0.0;
 	m_CurrentLeanTiltDegrees = 0.0;
 	m_CurrentLeanStretch = 0.0;
@@ -3067,6 +3237,13 @@ void idPhysics_Player::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt(m_mantledEntityID);
 	savefile->WriteFloat(m_mantleTime);
 	savefile->WriteFloat(m_jumpHeldDownTime);
+
+	// Mantle cancel animation
+	savefile->WriteFloat(m_mantleCancelStartRoll);
+	savefile->WriteFloat(m_fmantleCancelDist);
+	savefile->WriteVec3(m_mantleCancelStartPos);
+	savefile->WriteVec3(m_mantleCancelEndPos);
+	savefile->WriteVec3(m_mantleStartPosWorld);
 	
 	// Lean mod
 	savefile->WriteFloat (m_leanYawAngleDegrees);
@@ -3085,6 +3262,22 @@ void idPhysics_Player::Save( idSaveGame *savefile ) const {
 	m_LeanEnt.Save( savefile );
 
 	savefile->WriteStaticObject(*m_PushForce);
+
+	savefile->WriteBool(m_bSlideInitialized);
+
+	// Shouldering anim
+	savefile->WriteInt(m_eShoulderAnimState);
+	savefile->WriteFloat(m_fShoulderingTime);
+	savefile->WriteVec3(m_PrevShoulderingPosOffset);
+	savefile->WriteVec3(m_ShoulderingStartPos);
+	savefile->WriteBool(m_bShouldering_SkipDucking);
+	savefile->WriteFloat(m_fShouldering_TimeToNextSound);
+	savefile->WriteFloat(m_fPrevShoulderingPitchOffset);
+	savefile->WriteBool(m_bMidAir);
+
+	// Swimming
+	savefile->WriteFloat(m_fSwimTimeStart_s);
+	savefile->WriteBool(m_bSwimSoundStarted);
 }
 
 /*
@@ -3153,10 +3346,12 @@ void idPhysics_Player::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt( waterType );
 
 	// Mantle mod
-	int temp;
-	savefile->ReadInt(temp);
-	assert(temp >= 0 && temp < NumMantlePhases); // sanity check
-	m_mantlePhase = static_cast<EMantlePhase>(temp);
+	{
+		int temp;
+		savefile->ReadInt(temp);
+		assert(temp >= 0 && temp < NumMantlePhases); // sanity check
+		m_mantlePhase = static_cast<EMantlePhase>(temp);
+	}
 
 	savefile->ReadBool(m_mantleStartPossible);
 	savefile->ReadVec3(m_mantlePullStartPos);
@@ -3166,6 +3361,13 @@ void idPhysics_Player::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt(m_mantledEntityID);
 	savefile->ReadFloat(m_mantleTime);
 	savefile->ReadFloat(m_jumpHeldDownTime);
+
+	// Mantle Cancel animation
+	savefile->ReadFloat(m_mantleCancelStartRoll);
+	savefile->ReadFloat(m_fmantleCancelDist);
+	savefile->ReadVec3(m_mantleCancelStartPos);
+	savefile->ReadVec3(m_mantleCancelEndPos);
+	savefile->ReadVec3(m_mantleStartPosWorld);
 
 	// Lean mod
 	savefile->ReadFloat (m_leanYawAngleDegrees);
@@ -3186,7 +3388,33 @@ void idPhysics_Player::Restore( idRestoreGame *savefile ) {
 	savefile->ReadStaticObject( *m_PushForce );
 
 	// ishtvan: To avoid accidental latching, clear held crouch key var
-	m_bClimbDetachCrouchHeld = false;
+	m_bSlideOrDetachClimb = false;
+
+	savefile->ReadBool(m_bSlideInitialized);
+
+	// Shouldering anim
+	{
+		int iSAS = 0;
+		savefile->ReadInt(iSAS);
+		assert(iSAS >= eShoulderingAnimation_NotStarted 
+			&& iSAS <= eShoulderingAnimation_Active); // sanity check
+		m_eShoulderAnimState = static_cast<eShoulderingAnimation>(iSAS);
+	}
+	savefile->ReadFloat(m_fShoulderingTime);
+	savefile->ReadVec3(m_PrevShoulderingPosOffset);
+	savefile->ReadVec3(m_ShoulderingStartPos);
+	savefile->ReadBool(m_bShouldering_SkipDucking);
+	savefile->ReadFloat(m_fShouldering_TimeToNextSound);
+	savefile->ReadFloat(m_fPrevShoulderingPitchOffset);
+	savefile->ReadBool(m_bMidAir);
+
+	// Swimming
+	savefile->ReadFloat(m_fSwimTimeStart_s);
+	savefile->ReadBool(m_bSwimSoundStarted);
+	m_fSwimLeadInDuration_s = -1.0f;
+	m_fSwimLeadOutStart_s = -1.0f;
+	m_fSwimLeadOutDuration_s = -1.0f;
+	m_fSwimSpeedModCompensation = -1.0f;
 
 	DM_LOG (LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Restore finished\n");
 }
@@ -3668,11 +3896,21 @@ float idPhysics_Player::GetMantleTimeForPhase(EMantlePhase mantlePhase)
 	case pull_DarkModMantlePhase:
 		return cv_pm_mantle_pull_msecs.GetFloat();
 
+	case pullFast_DarkModMantlePhase:
+		return cv_pm_mantle_pullFast_msecs.GetFloat();
+
 	case shiftHands_DarkModMantlePhase:
 		return cv_pm_mantle_shift_hands_msecs.GetFloat();
 
 	case push_DarkModMantlePhase:
 		return cv_pm_mantle_push_msecs.GetFloat();
+
+	case pushNonCrouched_DarkModMantlePhase:
+		return cv_pm_mantle_pushNonCrouched_msecs.GetFloat();
+
+	case canceling_DarkModMantlePhase:
+		assert(m_fmantleCancelDist >= 0.0f);
+		return m_fmantleCancelDist * 1000.0 / cv_pm_mantle_cancel_speed.GetFloat();
 
 	default:
 		return 0.0f;
@@ -3711,7 +3949,7 @@ void idPhysics_Player::MantleMove()
 			static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
 		}
 	}
-	else if (m_mantlePhase == pull_DarkModMantlePhase)
+	else if (m_mantlePhase == pull_DarkModMantlePhase || m_mantlePhase == pullFast_DarkModMantlePhase)
 	{
 		// Player pulls themself up to shoulder even with the surface
 		totalMove = m_mantlePullEndPos - m_mantlePullStartPos;
@@ -3732,17 +3970,19 @@ void idPhysics_Player::MantleMove()
 			static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
 		}
 	}
-	else if (m_mantlePhase == push_DarkModMantlePhase)
+	else if (m_mantlePhase == push_DarkModMantlePhase || m_mantlePhase == pushNonCrouched_DarkModMantlePhase)
 	{
 		// Rocking back and forth to get legs up over edge
-		float rockDistance = 10.0f;
+		// STiFU #4930: Reduce rockdistance for pushNonCrouched
+		const float rockDistance = (m_mantlePhase == push_DarkModMantlePhase) ? 10.0f : 5.0f;
 
 		// Player pushes themselves upward to get their legs onto the surface
 		totalMove = m_mantlePushEndPos - m_mantlePullEndPos;
 		newPosition = m_mantlePullEndPos + (totalMove * idMath::Sin(timeRatio * (idMath::PI/2)) );
 
 		// We go into duck during this phase and stay there until end
-		current.movementFlags |= PMF_DUCKED;
+		if (m_mantlePhase == push_DarkModMantlePhase)
+			current.movementFlags |= PMF_DUCKED;
 
 		float timeRadians = idMath::PI * timeRatio;
 		newPosition += (idMath::Sin (timeRadians) * rockDistance) * viewRight;
@@ -3762,6 +4002,22 @@ void idPhysics_Player::MantleMove()
 			static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
 		}
 	}
+	else if (m_mantlePhase == canceling_DarkModMantlePhase)
+	{
+		// STiFU #4509: Use linear animation instead of sinus here so that we can
+		// maintain speed when the animation is finished resulting in a smoother 
+		// transition to AirMove()
+		totalMove = m_mantleCancelEndPos - m_mantleCancelStartPos;
+		newPosition = m_mantleCancelStartPos + timeRatio*totalMove;
+
+		float timeRadians = idMath::HALF_PI * timeRatio;
+		viewAngles.roll = idMath::Cos(timeRadians) * m_mantleCancelStartRoll;
+
+		if (self != NULL)
+		{
+			static_cast<idPlayer*>(self)->SetViewAngles(viewAngles);
+		}
+	}
 
 	// If there is a mantled entity, positions are relative to it.
 	// Transform position to be relative to world origin.
@@ -3774,10 +4030,66 @@ void idPhysics_Player::MantleMove()
 			// Ishtvan: Track rotation as well
 			// newPosition += p_physics->GetOrigin();
 			newPosition = p_physics->GetOrigin() + p_physics->GetAxis() * newPosition;
+
+			if (IsMantleEndPosClipping(p_physics))
+				CancelMantle();
 		}
 	}
 
 	SetOrigin(newPosition);
+}
+
+
+const bool idPhysics_Player::IsMantleEndPosClipping(idPhysics* pPhysicsMantledEntity)
+{
+	if (pPhysicsMantledEntity == nullptr)
+		return false;
+
+	// Transform coordinates relative to entity to world
+	const idVec3 mantleEndWorld = pPhysicsMantledEntity->GetOrigin() 
+		+ pPhysicsMantledEntity->GetAxis() * m_mantlePushEndPos;
+
+	// Load appropriate clipping model
+	if (current.movementFlags & PMF_DUCKED)
+	{
+		// Load crouching model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_crouchheight.GetFloat();
+
+		clipModel->LoadModel(pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds));
+	}
+	else
+	{
+		// Load standing model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_normalheight.GetFloat();
+
+		clipModel->LoadModel(pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds));
+	}
+
+	// Check clipping
+	trace_t endPosTrace;
+	gameLocal.clip.Translation(endPosTrace, mantleEndWorld, mantleEndWorld,
+		clipModel, clipModel->GetAxis(), clipMask, self);
+	if (endPosTrace.fraction >= 1.0f)
+	{
+		// No clipping
+		return false;
+	}
+	else
+	{
+		// We intersect with world geometry
+
+		if ((current.movementFlags & PMF_DUCKED) == 0)
+		{
+			// We will clip standing up. Go to ducked state and retry
+			DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("MantleMod: Clipping into world. Going to crouched state\r");
+			current.movementFlags |= PMF_DUCKED;
+			return IsMantleEndPosClipping(pPhysicsMantledEntity);
+		}
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("MantleMod: Clipping into world. Canceling mantle.\r");
+		return true;
+	}		
 }
 
 //----------------------------------------------------------------------
@@ -3813,12 +4125,24 @@ void idPhysics_Player::UpdateMantleTimers()
 			case hang_DarkModMantlePhase:
 				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: Pulling up...\r");
 				m_mantlePhase = pull_DarkModMantlePhase;
+				player->StartSound("snd_player_mantle_rustle_short", SND_CHANNEL_BODY3, 0, false, NULL);
 				player->StartSound("snd_player_mantle_pull", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
 				break;
 
 			case pull_DarkModMantlePhase:
 				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: Shifting hand position...\r");
 				m_mantlePhase = shiftHands_DarkModMantlePhase;
+				break;
+
+			case pullFast_DarkModMantlePhase: // STiFU #4945: Skip shift hands
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("MantleMod: Quickly pushing self up...\r");
+				m_mantlePhase = pushNonCrouched_DarkModMantlePhase;
+
+				// Go into crouch
+				current.movementFlags |= PMF_DUCKED;
+
+				player->StartSound("snd_player_mantle_rustle_short", SND_CHANNEL_BODY3, 0, false, NULL);
+				player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
 				break;
 
 			case shiftHands_DarkModMantlePhase:
@@ -3828,9 +4152,11 @@ void idPhysics_Player::UpdateMantleTimers()
 				// Go into crouch
 				current.movementFlags |= PMF_DUCKED;
 
+				player->StartSound("snd_player_mantle_rustle_short", SND_CHANNEL_BODY3, 0, false, NULL);
 				player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
 				break;
 
+			case pushNonCrouched_DarkModMantlePhase:
 			case push_DarkModMantlePhase:
 				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("MantleMod: mantle completed\r");
 
@@ -3842,6 +4168,15 @@ void idPhysics_Player::UpdateMantleTimers()
 				// will advance to notMantling when the player isn't clipping
 				m_mantlePhase = fixClipping_DarkModMantlePhase;
 
+				break;
+
+			case canceling_DarkModMantlePhase:
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("MantleMod: cancel mantle completed\r");
+				MantleMove();
+				static_cast<idPlayer*>(self)->SetImmobilization("MantleMove", 0);
+				m_fmantleCancelDist = -1.0f;
+				m_mantlePhase = notMantling_DarkModMantlePhase;
+				m_mantleTime = 0.0f;
 				break;
 
 			default:
@@ -3857,7 +4192,10 @@ void idPhysics_Player::UpdateMantleTimers()
 			{
 				// Handle end of mantle
 				// Ishtvan 11/20/05 - Raise weapons after mantle is done
-				static_cast<idPlayer*>(self)->SetImmobilization("MantleMove", 0);		
+				static_cast<idPlayer*>(self)->SetImmobilization("MantleMove", 0);
+
+				// The mantle consumes all velocity
+				current.velocity.Zero();
 			}
 		}
 
@@ -3893,8 +4231,44 @@ void idPhysics_Player::CancelMantle()
 {
 	DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Mantle cancelled\r");
 
-	m_mantlePhase = notMantling_DarkModMantlePhase;
-	m_mantleTime = 0.0f;
+	// STiFU #4509: Add canceling animation
+	// - Move back to last non-clipping location
+	// - Rotate back viewAngles.roll to 0
+	m_p_mantledEntity = NULL;
+	m_mantlePhase = canceling_DarkModMantlePhase;
+
+	m_mantleCancelStartPos = GetOrigin();
+	m_mantleCancelStartRoll = viewAngles.roll;
+
+	// Find last non clipping location
+	// NOTE: There is no guarantee the end position does not clip by the time the 
+	// canceling animation is finished. But there is nothing we can do about that.	
+	trace_t cancelEndPosTrace;
+	gameLocal.clip.Translation(cancelEndPosTrace, m_mantleStartPosWorld, m_mantleCancelStartPos,
+		clipModel, clipModel->GetAxis(), clipMask, self);
+	m_mantleCancelEndPos = m_mantleStartPosWorld + cancelEndPosTrace.fraction * (m_mantleCancelStartPos - m_mantleStartPosWorld);
+
+	// Set current velocity: Null the XY-component so the player falls down after the cancel animation
+	idVec3 mantleCancelDir = m_mantleCancelEndPos - m_mantleCancelStartPos;
+	m_fmantleCancelDist = fabs(mantleCancelDir.NormalizeFast());
+	current.velocity = ((mantleCancelDir * cv_pm_mantle_cancel_speed.GetFloat()) * gravityNormal) * gravityNormal;
+
+	// Set mantle time. Must be called AFTER setting m_fmantleCancelDist
+	m_mantleTime = GetMantleTimeForPhase(canceling_DarkModMantlePhase);
+
+	// Prevent awkward returning to uncrouched state while falling after
+	// canceling the mantle
+	idPlayer* pPlayer = static_cast<idPlayer*>(self);
+	if (pPlayer == nullptr)
+		return;	
+	if ((current.movementFlags & PMF_DUCKED) != 0)
+	{
+		pPlayer->m_CrouchIntent = true;
+		pPlayer->m_IdealCrouchState = true;
+	}
+
+	// Play a canceling sound
+ 	pPlayer->StartSound("snd_player_mantle_cancel", SND_CHANNEL_ANY, 0, false, NULL);
 }
 
 //----------------------------------------------------------------------
@@ -3929,13 +4303,8 @@ void idPhysics_Player::StartMantle
 	// when the jump key is released outside a mantle phase
 	m_mantleStartPossible = false;
 
-	// If mantling from a jump, cancel any velocity so that it does
-	// not continue after the mantle is completed.
-	current.velocity.Zero();
-
 	// Calculate mantle distance
 	idVec3 mantleDistanceVec = endPos - startPos;
-//	float mantleDistance = mantleDistanceVec.Length();
 
 	idPlayer* player = static_cast<idPlayer*>(self); // grayman #3010
 
@@ -3943,6 +4312,8 @@ void idPhysics_Player::StartMantle
 	if (initialMantlePhase == hang_DarkModMantlePhase)
 	{
 		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with hang\r");
+		player->StartSound("snd_player_mantle_impact", SND_CHANNEL_BODY2, 0, false, NULL);
+		player->StartSound("snd_player_mantle_rustle", SND_CHANNEL_BODY3, 0, false, NULL);
 
 		// Impart a force on mantled object?
 		if (m_p_mantledEntity != NULL && self != NULL)
@@ -3960,7 +4331,15 @@ void idPhysics_Player::StartMantle
 	else if (initialMantlePhase == pull_DarkModMantlePhase)
 	{
 		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with pull upward\r");
+		player->StartSound("snd_player_mantle_impact", SND_CHANNEL_BODY2, 0, false, NULL);
+		player->StartSound("snd_player_mantle_rustle", SND_CHANNEL_BODY3, 0, false, NULL);
 		player->StartSound("snd_player_mantle_pull", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+	}
+	else if (initialMantlePhase == pullFast_DarkModMantlePhase)
+	{
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with quick silent pull upward\r"); 
+		player->StartSound("snd_player_mantle_impact_subtle", SND_CHANNEL_BODY2, 0, false, NULL);
+		player->StartSound("snd_player_mantle_rustle", SND_CHANNEL_BODY3, 0, false, NULL);
 	}
 	else if (initialMantlePhase == shiftHands_DarkModMantlePhase)
 	{
@@ -3973,7 +4352,25 @@ void idPhysics_Player::StartMantle
 
 		// Start with push upward
 		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with push upward\r");
+		player->StartSound("snd_player_mantle_impact_subtle", SND_CHANNEL_BODY2, 0, false, NULL);
+		player->StartSound("snd_player_mantle_rustle", SND_CHANNEL_BODY3, 0, false, NULL);
 		player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL); // grayman #3010
+	}
+	else if (initialMantlePhase == pushNonCrouched_DarkModMantlePhase)
+	{
+		DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantle starting with push non-crouched upward\r");
+
+		// We make contact with the feet. Play footstep sound and the endpos
+		idPlayer* pPlayer = dynamic_cast<idPlayer*>(self);
+		if (pPlayer)
+			pPlayer->PlayFootStepSound(&endPos, true);
+
+		// Play grunt at high velocity
+		if (current.velocity.LengthSqr() >
+			pow(cv_pm_mantle_pushNonCrouched_playgrunt_speedthreshold.GetFloat(), 2))
+		{
+			player->StartSound("snd_player_mantle_push", SND_CHANNEL_VOICE, 0, false, NULL);
+		}
 	}
 
 	m_mantlePhase = initialMantlePhase;
@@ -3989,11 +4386,6 @@ void idPhysics_Player::StartMantle
 			const idMat3& mantledEntityAxis = p_physics->GetAxis();
 
 			// ishtvan 1/3/2010: Incorporate entity rotation as well as translation
-			/*
-			startPos -= mantledEntityOrigin;
-			eyePos -= mantledEntityOrigin;
-			endPos -= mantledEntityOrigin;
-			*/
 			startPos = (startPos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
 			eyePos = (eyePos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
 			endPos = (endPos - mantledEntityOrigin) * mantledEntityAxis.Transpose();
@@ -4003,7 +4395,8 @@ void idPhysics_Player::StartMantle
 	// Set end position
 	m_mantlePushEndPos = endPos;
 
-	if (initialMantlePhase == pull_DarkModMantlePhase || initialMantlePhase == hang_DarkModMantlePhase)
+	if (	initialMantlePhase == pull_DarkModMantlePhase 
+		||	initialMantlePhase == hang_DarkModMantlePhase )
 	{
 		// Pull from start position up to about 2/3 of eye height
 		m_mantlePullStartPos = startPos;
@@ -4011,11 +4404,19 @@ void idPhysics_Player::StartMantle
 
 		m_mantlePullEndPos += GetGravityNormal() * pm_normalheight.GetFloat() / 3.0f;
 	}
+	else if (initialMantlePhase == pullFast_DarkModMantlePhase)
+	{
+		// Pull from start position up to eye height
+		m_mantlePullStartPos = startPos;
+		m_mantlePullEndPos = eyePos;
+	}
 	else
 	{
 		// Starting with push from current position
 		m_mantlePullEndPos = startPos;
 	}
+
+	m_mantleStartPosWorld = GetOrigin();
 }
 
 //----------------------------------------------------------------------
@@ -4144,7 +4545,7 @@ void idPhysics_Player::MantleTargetTrace
 
 //----------------------------------------------------------------------
 
-bool idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
+idPhysics_Player::EMantleable idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
 (	
 	float maxVerticalReachDistance,
 	float maxHorizontalReachDistance,
@@ -4160,7 +4561,7 @@ bool idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
 		if (ent == NULL || !ent->IsMantleable())
 		{
 			// The mantle target is an unmantleable entity
-			return false;
+			return EMantleable_No;
 		}
 	}
 
@@ -4339,6 +4740,14 @@ bool idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
 			}
 		}
 	}
+
+	// Return Val
+	EMantleable Mantleable = EMantleable_No;
+	if (b_mantlePossible)
+	{
+		out_mantleEndPoint = testPosition;
+		Mantleable = EMantleable_YesCrouched;
+	}
 	
 	// Must restore standing model if player is not crouched
 	if (!(current.movementFlags & PMF_DUCKED))
@@ -4348,14 +4757,23 @@ bool idPhysics_Player::DetermineIfMantleTargetHasMantleableSurface
 		bounds[1][2] = pm_normalheight.GetFloat();
 
 		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
-	}
 
-	// Return result
-	if (b_mantlePossible)
-	{
-		out_mantleEndPoint = testPosition;
+		// STiFU #4930: Test if the end position can also be reached standing up.
+		// Do this only if player is non-crouched
+		if (b_mantlePossible)
+		{
+			trace_t ceilTrace;
+			gameLocal.clip.Translation(ceilTrace, testPosition, testPosition,
+				clipModel, clipModel->GetAxis(), clipMask, self);
+			if (ceilTrace.fraction >= 1.0f)
+			{
+				Mantleable = EMantleable_YesUpstraight;
+				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Surface can be mantled upstraight\r");
+			}
+		}
 	}
-	return b_mantlePossible;
+	
+	return Mantleable;
 }
 
 //----------------------------------------------------------------------
@@ -4364,6 +4782,7 @@ bool idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible
 (
 	float maxVerticalReachDistance,
 	float maxHorizontalReachDistance,
+	bool  testCrouched,
 	const idVec3& in_eyePos,
 	const idVec3& in_mantleStartPoint,
 	const idVec3& in_mantleEndPoint
@@ -4385,14 +4804,25 @@ bool idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible
 	MoveUpEnd.y += -gravityNormal.y * in_mantleEndPoint.y;
 	MoveUpEnd.z += -gravityNormal.z * in_mantleEndPoint.z;
 
-	// Use crouch clip model
-	if (!(current.movementFlags & PMF_DUCKED))
+	// Change clip model if needed
+	bool clipModelChanged = false;
+	if (testCrouched && !(current.movementFlags & PMF_DUCKED))
 	{
 		// Load crouching model
 		idBounds bounds = clipModel->GetBounds();
 		bounds[1][2] = pm_crouchheight.GetFloat();
 
 		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+		clipModelChanged = true;
+	}
+	else if (!testCrouched && (current.movementFlags & PMF_DUCKED))
+	{
+		// Load standing model
+		idBounds bounds = clipModel->GetBounds();
+		bounds[1][2] = pm_normalheight.GetFloat();
+
+		clipModel->LoadModel(pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds));
+		clipModelChanged = true;
 	}
 
 	gameLocal.clip.Translation
@@ -4406,14 +4836,25 @@ bool idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible
 		self 
 	);
 
-	// Done with crouch model if not currently crouched
-	if (!(current.movementFlags & PMF_DUCKED))
+	// Change back clip model
+	if (clipModelChanged)
 	{
-		// Load back standing model
-		idBounds bounds = clipModel->GetBounds();
-		bounds[1][2] = pm_normalheight.GetFloat();
+		if (testCrouched)
+		{
+			// Load back standing model
+			idBounds bounds = clipModel->GetBounds();
+			bounds[1][2] = pm_normalheight.GetFloat();
 
-		clipModel->LoadModel( pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds) );
+			clipModel->LoadModel(pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds));
+		}
+		else
+		{
+			// Load back crouching model
+			idBounds bounds = clipModel->GetBounds();
+			bounds[1][2] = pm_crouchheight.GetFloat();
+
+			clipModel->LoadModel(pm_usecylinder.GetBool() ? idTraceModel(bounds, 8) : idTraceModel(bounds));
+		}
 	}
 
 	// Log
@@ -4442,7 +4883,7 @@ bool idPhysics_Player::DetermineIfPathToMantleSurfaceIsPossible
 
 //----------------------------------------------------------------------
 
-bool idPhysics_Player::ComputeMantlePathForTarget
+idPhysics_Player::EMantleable idPhysics_Player::ComputeMantlePathForTarget
 (	
 	float maxVerticalReachDistance,
 	float maxHorizontalReachDistance,
@@ -4458,7 +4899,7 @@ bool idPhysics_Player::ComputeMantlePathForTarget
 	const idVec3& mantleStartPoint = GetOrigin();
 
 	// Check if trace target has a mantleable surface
-	bool b_canBeMantled = DetermineIfMantleTargetHasMantleableSurface
+	EMantleable IsSurfaceMantleable = DetermineIfMantleTargetHasMantleableSurface
 	(
 		maxVerticalReachDistance,
 		maxHorizontalReachDistance,
@@ -4466,19 +4907,41 @@ bool idPhysics_Player::ComputeMantlePathForTarget
 		out_mantleEndPoint
 	);
 
-	if (b_canBeMantled)
+	if (IsSurfaceMantleable > EMantleable_No)
 	{
 		// Check if path to mantle end point is not blocked
-		b_canBeMantled &= DetermineIfPathToMantleSurfaceIsPossible
-		(
-			maxVerticalReachDistance,
-			maxHorizontalReachDistance,
-			eyePos,
-			mantleStartPoint,
-			out_mantleEndPoint
-		);
+		if (IsSurfaceMantleable == EMantleable_YesUpstraight)
+		{
+			// STiFU #4930: Try standing up first, if that fails, try crouched
+			static const bool bCrouchedTest = false;
+			const bool bPathClearStandingUp = DetermineIfPathToMantleSurfaceIsPossible(
+				maxVerticalReachDistance,
+				maxHorizontalReachDistance,
+				bCrouchedTest,
+				eyePos,
+				mantleStartPoint,
+				out_mantleEndPoint
+			);
+			if (!bPathClearStandingUp)
+				IsSurfaceMantleable = EMantleable_YesCrouched;
+		}
+		if (IsSurfaceMantleable != EMantleable_YesUpstraight)
+		{
+			static const bool bCrouchedTest = true;
+			const bool bPathClearCrouched = DetermineIfPathToMantleSurfaceIsPossible(
+				maxVerticalReachDistance,
+				maxHorizontalReachDistance,
+				bCrouchedTest,
+				eyePos,
+				mantleStartPoint,
+				out_mantleEndPoint
+			);
+			if (!bPathClearCrouched)
+				IsSurfaceMantleable = EMantleable_No;
+		}
+		
 
-		if (b_canBeMantled)
+		if (IsSurfaceMantleable > EMantleable_No)
 		{
 			// Is end point too far away?
 			idVec3 endDistanceVector = out_mantleEndPoint - eyePos;
@@ -4496,7 +4959,7 @@ bool idPhysics_Player::ComputeMantlePathForTarget
 			if (upDist < 0.0)
 			{
 				DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING("Mantleable surface was below player's feet. No belly slide allowed.\r");
-				b_canBeMantled = false;
+				IsSurfaceMantleable = EMantleable_No;
 			}
 			else if	(upDist > maxVerticalReachDistance || nonUpDist > maxHorizontalReachDistance)
 			{
@@ -4510,7 +4973,7 @@ bool idPhysics_Player::ComputeMantlePathForTarget
 					maxHorizontalReachDistance
 				);
 
-				b_canBeMantled = false;
+				IsSurfaceMantleable = EMantleable_No;
 			}
 
 			// Distances are reasonable
@@ -4518,7 +4981,7 @@ bool idPhysics_Player::ComputeMantlePathForTarget
 	}
 
 	// Return result
-	return b_canBeMantled;
+	return IsSurfaceMantleable;
 }
 
 //----------------------------------------------------------------------
@@ -4532,9 +4995,21 @@ void idPhysics_Player::PerformMantle()
 		return;
 	}
 
-	if (static_cast<idPlayer*>(self)->GetImmobilization() & EIM_MANTLE)
+	idPlayer* p_player = static_cast<idPlayer*>(self);
+	if (p_player == NULL)
+	{
+		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("p_player is NULL\r");
+		return;
+	}
+
+	if (p_player->GetImmobilization() & EIM_MANTLE)
 	{
 		return; // greebo: Mantling disabled by immobilization system
+	}
+
+	if (waterLevel >= WATERLEVEL_HEAD)
+	{
+		return; // STiFU: #1037: Do not mantle underwater
 	}
 
 	// Clear mantled entity members to indicate nothing is
@@ -4547,8 +5022,7 @@ void idPhysics_Player::PerformMantle()
 	forward.Normalize();
 
 	// We use gravity alot here...
-	idVec3 gravityNormal = GetGravityNormal();
-	idVec3 upVector = -gravityNormal;
+	const idVec3& gravityNormal = GetGravityNormal();
 
 	// Get maximum reach distances for mantling
 	float maxVerticalReachDistance; 
@@ -4563,14 +5037,6 @@ void idPhysics_Player::PerformMantle()
 	);
 
 	// Get start position of gaze trace, which is player's eye position
-	idPlayer* p_player = static_cast<idPlayer*>(self);
-
-	if (p_player == NULL)
-	{
-		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("p_player is NULL\r");
-		return;
-	}
-
 	DM_LOG(LC_MOVEMENT, LT_DEBUG)LOGSTRING ("Getting eye position\r");
 	idVec3 eyePos = p_player->GetEyePosition();
 
@@ -4606,14 +5072,15 @@ void idPhysics_Player::PerformMantle()
 		// Find mantle end point and make sure mantle is
 		// possible
 		idVec3 mantleEndPoint;
-		if (ComputeMantlePathForTarget
+		EMantleable IsMantleable = ComputeMantlePathForTarget
 		(
 			maxVerticalReachDistance,
 			maxHorizontalReachDistance,
 			eyePos,
 			trace,
 			mantleEndPoint
-		))
+		);
+		if (IsMantleable > EMantleable_No)
 		{
 			// Mantle target passed mantleability tests
 
@@ -4626,9 +5093,50 @@ void idPhysics_Player::PerformMantle()
 				mantleEndPoint.z
 			);
 
-			// Start with log phase dependent on position relative
+			// Start with mantle phase dependent on position relative
 			// to the mantle end point
-			if (mantleEndPoint * gravityNormal < eyePos * gravityNormal)
+			const float mantleEndHeight = -(mantleEndPoint * gravityNormal);			
+			float floorHeight = std::numeric_limits<float>::lowest();
+			{
+				idVec3 floorPos;
+				if (self->GetFloorPos(pm_normalviewheight.GetFloat(), floorPos))
+					floorHeight = -floorPos * gravityNormal;
+			}
+			const float eyeHeight = -eyePos * gravityNormal;
+
+			const bool bFallingFast = 
+				(current.velocity * gravityNormal) > 
+				cv_pm_mantle_fallingFast_speedthreshold.GetFloat();
+
+			if (cv_pm_mantle_fastLowObstaces.GetBool()) // STiFU #4930
+			{
+				const float feetHeight = -(GetOrigin() * gravityNormal);
+				if (   IsMantleable == EMantleable_YesUpstraight	// Upstraight mantle possible
+					&& !bFallingFast
+					&& (mantleEndHeight < floorHeight + cv_pm_mantle_maxLowObstacleHeight.GetFloat() // Only allow the full obstacle height when near the floor
+					|| mantleEndHeight < feetHeight + cv_pm_mantle_maxLowObstacleHeight.GetFloat()*0.66f)) // Reduce allowed obstacle height mid-air
+				{
+					// Do a fast mantle over low obstacle
+					StartMantle(pushNonCrouched_DarkModMantlePhase, eyePos, GetOrigin(), mantleEndPoint);
+					return;
+				}
+			}
+			if (cv_pm_mantle_fastMediumObstaclesCrouched.GetBool()) // STiFU #4945
+			{
+				// Use floorHeight instead of feetHeight to allow this mantle also when jump-mantling medium sized obstacles
+				const bool bIsCrouched = current.movementFlags & PMF_DUCKED;
+
+				if (   bIsCrouched
+					&& !bFallingFast
+					&& eyeHeight < mantleEndHeight // When endheight lower than eyes, use the regular push mantle
+					&& mantleEndHeight < floorHeight + pm_normalviewheight.GetFloat())
+				{
+					// Do a fast pull-push mantle over medium sized obstacle
+					StartMantle(pullFast_DarkModMantlePhase, eyePos, GetOrigin(), mantleEndPoint);
+					return;
+				}
+			}
+			if (eyeHeight < mantleEndHeight)
 			{
 				// Start with pull if on the ground, hang if not
 				if (groundPlane)
@@ -4642,7 +5150,6 @@ void idPhysics_Player::PerformMantle()
 			}
 			else
 			{
-				// We are above it, start with push
 				StartMantle(push_DarkModMantlePhase, eyePos, GetOrigin(), mantleEndPoint);
 			}
 		}
@@ -4663,6 +5170,16 @@ void idPhysics_Player::PerformMantle()
 
 void idPhysics_Player::ToggleLean(float leanYawAngleDegrees)
 {
+	idPlayer* pPlayer = static_cast<idPlayer*>(self);
+	if (pPlayer == NULL)
+	{
+		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("pPlayer is NULL\r");
+		return;
+	}
+	if (pPlayer->GetImmobilization() & EIM_LEAN)
+		// If lean immobilization is set, do nothing!
+		return;
+
 	//if (m_CurrentLeanTiltDegrees < 0.0001) // prevent floating point compare errors
 	if (m_CurrentLeanTiltDegrees < 0.00001) // prevent floating point compare errors
 	{
@@ -4889,9 +5406,9 @@ void idPhysics_Player::UpdateLeanAngle (float deltaLeanTiltDegrees, float deltaL
 				}
 				else
 				{
-					idEntity* entityList[MAX_GENTITIES];
+					idClip_EntityList entityList;
 					int num;
-					num = gameLocal.EntitiesWithinRadius(player->GetEyePosition(), PEEK_MAX_DIST, entityList, MAX_GENTITIES);
+					num = gameLocal.EntitiesWithinRadius(player->GetEyePosition(), PEEK_MAX_DIST, entityList);
 					for ( int i = 0 ; i < num ; i++ )
 					{
 						idEntity *candidate = entityList[i];
@@ -4957,6 +5474,24 @@ void idPhysics_Player::UpdateLeanAngle (float deltaLeanTiltDegrees, float deltaL
 
 void idPhysics_Player::LeanMove()
 {
+	// Test for leaning immobilization
+	idPlayer* pPlayer = static_cast<idPlayer*>(self);
+	if (pPlayer == NULL)
+	{
+		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("pPlayer is NULL\r");
+		return;
+	}
+	if (pPlayer->GetImmobilization() & EIM_LEAN)
+	{
+		// Cancel all leaning
+		if (m_leanMoveEndTilt > 0.0f)
+		{
+			m_leanMoveStartTilt = m_CurrentLeanTiltDegrees;
+			m_leanTime = cv_pm_lean_forward_time.GetFloat();
+			m_b_leanFinished = false;
+			m_leanMoveEndTilt = 0.0f;
+		}
+	}
 
 	// Change in lean tilt this frame
 	float deltaLeanTiltDegrees = 0.0;
@@ -5153,6 +5688,12 @@ float idPhysics_Player::GetDeltaViewPitch( void )
 	return m_DeltaViewPitch;
 }
 
+
+bool idPhysics_Player::IsMidAir() const
+{
+	return m_bMidAir;
+}
+
 void idPhysics_Player::UpdateLeanedInputYaw( idAngles &InputAngles )
 {
 	if (!IsLeaning()) return; // nothing to do
@@ -5333,11 +5874,11 @@ void idPhysics_Player::UpdateLean( void ) // grayman #4882 - expanded to handle 
 			/** More precise test (Not currently used)
 
 			int numEnts = 0;
-			idEntity *ents[MAX_GENTITIES];
 			idEntity *ent = NULL;
 			bool bMatchedDoor(false);
 
-			numEnts = gameLocal.clip.EntitiesTouchingBounds( TestBounds, CONTENTS_SOLID, ents, MAX_GENTITIES);
+			idClip_EntityList ents;
+			numEnts = gameLocal.clip.EntitiesTouchingBounds( TestBounds, CONTENTS_SOLID, ents );
 			for( int i=0; i < numEnts; i++ )
 			{
 			if( ents[i] == (idEntity *) door )
@@ -5490,4 +6031,175 @@ int idPhysics_Player::GetMovementFlags( void )
 void idPhysics_Player::SetMovementFlags( int flags )
 {
 	current.movementFlags = flags;
+}
+
+
+void idPhysics_Player::StartShouldering(idEntity const * const pBody)
+{
+	if (cv_pm_shoulderAnim_msecs.GetFloat() <= 0.0f)
+		return;
+
+	// Initialize
+	if (m_eShoulderAnimState == eShoulderingAnimation_NotStarted)
+	{
+		if (pBody == nullptr)
+		{
+			DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("Shouldering: pBody is NULL\r");
+			return;
+		}
+
+		idPlayer* pPlayer = static_cast<idPlayer*>(self);
+		if (pPlayer == nullptr)
+		{
+			DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("Shouldering: pPlayer is NULL\r");
+			return;
+		}
+
+		static const int iImmobilization =
+			EIM_CLIMB | EIM_ITEM_SELECT | EIM_WEAPON_SELECT | EIM_ATTACK | EIM_ITEM_USE
+			| EIM_MANTLE | EIM_FROB_COMPLEX | EIM_MOVEMENT | EIM_CROUCH_HOLD
+			| EIM_CROUCH | EIM_JUMP | EIM_FROB | EIM_FROB_HILIGHT | EIM_LEAN;
+
+		pPlayer->SetImmobilization("ShoulderingAnimation", iImmobilization);
+
+		// Check height of body: If heigher than crouched, do not go to crouched state
+		const float fBodyHeight = pBody->GetPhysics()->GetOrigin() * (-gravityNormal);
+		const float fCrouchedHeight = GetOrigin() * (-gravityNormal) + pm_crouchviewheight.GetFloat();
+		m_bShouldering_SkipDucking = fBodyHeight > fCrouchedHeight || cv_pm_shoulderAnim_delay_msecs.GetFloat() <= 0.0f;
+
+		// Get rustle sound to play while shouldering
+		const idKeyValue* const pKeyValue = pBody->spawnArgs.FindKey("snd_rustle");
+		if (pKeyValue != nullptr)
+		{
+			pPlayer->spawnArgs.Set("snd_shouldering_rustle", pKeyValue->GetValue());
+			m_fShouldering_TimeToNextSound = 0.0f;
+		}
+		else
+		{
+			// No appropriate rustle sound found. Skip playing rustle sound
+			m_fShouldering_TimeToNextSound = FLT_MAX;
+			pPlayer->spawnArgs.Set("snd_shouldering_rustle", "");
+		}
+				
+		m_eShoulderAnimState = eShoulderingAnimation_Initialized;
+	}
+
+	StartShoulderingAnim();
+}
+
+bool idPhysics_Player::IsShouldering() const
+{
+	return m_eShoulderAnimState == eShoulderingAnimation_Active;
+}
+
+void idPhysics_Player::StartShoulderingAnim()
+{
+	// Try starting the animation
+	if (m_eShoulderAnimState == eShoulderingAnimation_Initialized
+		|| m_eShoulderAnimState == eShoulderingAnimation_Scheduled)
+	{
+		if (IsLeaning())
+		{
+			// Wait for unlean first
+			m_eShoulderAnimState = eShoulderingAnimation_Scheduled;
+		}
+		else
+		{
+			// Start animation right away
+			m_fShoulderingTime = cv_pm_shoulderAnim_msecs.GetFloat();
+			m_fPrevShoulderingPitchOffset = 0.0f;
+			m_PrevShoulderingPosOffset = vec3_zero;
+			m_ShoulderingStartPos = GetOrigin();
+			
+			m_eShoulderAnimState = eShoulderingAnimation_Active;
+			if (!m_bShouldering_SkipDucking && !IsCrouching())
+			{
+				current.movementFlags |= PMF_DUCKED;
+				
+				// Reserve some additional time for going to ducked state
+				// before playing the animation
+				m_fShoulderingTime += cv_pm_shoulderAnim_delay_msecs.GetFloat();
+			}
+		}
+	}
+}
+
+void idPhysics_Player::ShoulderingMove()
+{
+	if (m_eShoulderAnimState != eShoulderingAnimation_Active)
+		return;
+
+	idPlayer* pPlayer = static_cast<idPlayer*>(self);
+	if (pPlayer == nullptr)
+	{
+		DM_LOG(LC_MOVEMENT, LT_ERROR)LOGSTRING("ShoulderingMove: pPlayer is NULL\r");
+
+		// Cancel
+		static_cast<idPlayer*>(self)->SetImmobilization("ShoulderingAnimation", 0);
+		m_eShoulderAnimState = eShoulderingAnimation_NotStarted;
+		return;
+	}
+
+	// Are we allowed to play the view animation already?
+	if (m_fShoulderingTime <= cv_pm_shoulderAnim_msecs.GetFloat())
+	{
+		// Play a rustle sound if the time is up
+		if (m_fShouldering_TimeToNextSound <= 0.0f)
+		{
+			const idKeyValue* const pKeyValue = pPlayer->spawnArgs.FindKey("snd_shouldering_rustle");
+			if (pKeyValue != nullptr && pKeyValue->GetValue().Length() > 0)
+			{
+				int iLength_ms = 0;
+				pPlayer->StartSound("snd_shouldering_rustle", SND_CHANNEL_ANY, SSF_GLOBAL, 0, &iLength_ms);
+				m_fShouldering_TimeToNextSound = static_cast<float>(iLength_ms) * 0.5 * (1 + gameLocal.random.RandomFloat());
+			}
+			else
+				m_fShouldering_TimeToNextSound = FLT_MAX;
+		}
+
+		// Compute view angles and position for lean
+		const float fTimeRadians = idMath::PI * m_fShoulderingTime / cv_pm_shoulderAnim_msecs.GetFloat();
+		idVec3 newPositionOffset = (idMath::Sin(fTimeRadians) * cv_pm_shoulderAnim_rockDist.GetFloat()) * viewForward;		
+		const float fPitchOffset = idMath::Sin(fTimeRadians) * cv_pm_shoulderAnim_rockDist.GetFloat();
+
+		// Add vertical dip animation
+		const float fAbsoluteDipDuration = 
+			cv_pm_shoulderAnim_dip_duration.GetFloat()*cv_pm_shoulderAnim_msecs.GetFloat();
+		const float fDipStart =
+			cv_pm_shoulderAnim_msecs.GetFloat()*0.5f + fAbsoluteDipDuration * 0.5f;
+		const float fDipEnd = 
+			cv_pm_shoulderAnim_msecs.GetFloat()*0.5f - fAbsoluteDipDuration * 0.5f;
+		if (m_fShoulderingTime >= fDipEnd && m_fShoulderingTime < fDipStart)
+		{
+			const float fDipTimeRadians = idMath::PI * (fDipEnd - m_fShoulderingTime) / fAbsoluteDipDuration;
+			newPositionOffset += (-idMath::Sin(fDipTimeRadians) * cv_pm_shoulderAnim_dip_dist.GetFloat()) * gravityNormal;
+		}
+
+		// Apply animation to player position and view angle
+		const idVec3 newPosition = current.origin + (newPositionOffset - m_PrevShoulderingPosOffset);
+		m_PrevShoulderingPosOffset = newPositionOffset;
+		SetOrigin(newPosition);
+
+		viewAngles.pitch += (fPitchOffset - m_fPrevShoulderingPitchOffset);
+		m_fPrevShoulderingPitchOffset = fPitchOffset;
+		pPlayer->SetViewAngles(viewAngles);		
+	}
+
+	// Are we done?
+	if (m_fShoulderingTime == 0.0f) // We explicitly set 0.0f below, so equality check with 0.0f is ok.
+	{
+		static_cast<idPlayer*>(self)->SetImmobilization("ShoulderingAnimation", 0);
+		m_eShoulderAnimState = eShoulderingAnimation_NotStarted;
+
+		// Explicitly return to start position to avoid clipping due to quantization errors
+		SetOrigin(m_ShoulderingStartPos);
+
+		return;
+	}
+
+	// Update animation timer
+	m_fShouldering_TimeToNextSound -= framemsec;
+	m_fShoulderingTime -= framemsec;
+	if (m_fShoulderingTime < 0.0f)
+		m_fShoulderingTime = 0.0f;
 }

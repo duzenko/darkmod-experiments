@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -789,13 +789,11 @@ void IN_Frame( void ) {
 
 
 void	Sys_GrabMouseCursor( bool grabIt ) {
-#ifndef	ID_DEDICATED
 	win32.mouseReleased = !grabIt;
 	if ( !grabIt ) {
 		// release it right now
 		IN_Frame();
 	}
-#endif
 }
 
 void Sys_AdjustMouseMovement(float &dx, float &dy) {
@@ -989,15 +987,15 @@ void Sys_QueMouseEvents( int dwElements ) {
 			Sys_QueEvent( polled_didod[i].dwTimeStamp, SE_KEY, K_MOUSE1 + ( polled_didod[i].dwOfs - DIMOFS_BUTTON0 ), value, 0, NULL );
 		} else {
 			switch (polled_didod[i].dwOfs) {
-			case DIMOFS_X:
+			case offsetof(DIMOUSESTATE,lX):
 				value = polled_didod[i].dwData;
 				Sys_QueEvent( polled_didod[i].dwTimeStamp, SE_MOUSE, value, 0, 0, NULL );
 				break;
-			case DIMOFS_Y:
+			case offsetof(DIMOUSESTATE, lY):
 				value = polled_didod[i].dwData;
 				Sys_QueEvent( polled_didod[i].dwTimeStamp, SE_MOUSE, 0, value, 0, NULL );
 				break;
-			case DIMOFS_Z:
+			case offsetof(DIMOUSESTATE, lZ):
 				value = ( (int) polled_didod[i].dwData ) / WHEEL_DELTA;
 				int key = value < 0 ? K_MWHEELDOWN : K_MWHEELUP;
 				value = abs( value );
@@ -1054,15 +1052,15 @@ int Sys_ReturnMouseInputEvent( const int n, int &action, int &value ) {
 	}
 
 	switch( diaction ) {
-		case DIMOFS_X:
+		case offsetof(DIMOUSESTATE, lX):
 			value = polled_didod[n].dwData;
 			action = M_DELTAX;
 			return 1;
-		case DIMOFS_Y:
+		case offsetof(DIMOUSESTATE, lY):
 			value = polled_didod[n].dwData;
 			action = M_DELTAY;
 			return 1;
-		case DIMOFS_Z:
+		case offsetof(DIMOUSESTATE, lZ):
 			// mouse wheel actions are impulses, without a specific up / down
 			value = ( (int) polled_didod[n].dwData ) / WHEEL_DELTA;
 			action = M_DELTAZ;

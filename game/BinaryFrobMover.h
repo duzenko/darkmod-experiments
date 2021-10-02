@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Gerhard W. Gruber <sparhawk@gmx.at>
@@ -207,7 +207,7 @@ public:
 	 * @fraction: [0..1] where 0 refers to the original position and 
 	 *            a value of 1 refers to the fully rotated handle.
 	 */
-	void SetFractionalPosition(float fraction);
+	void SetFractionalPosition(float fraction, bool immediately);
 
 	float GetFractionalPosition();
 
@@ -287,6 +287,9 @@ public:
 	{
 		return m_Lock;
 	};
+
+	//stgatilov #5683: update members after moving this via hot-reload
+	void SetMapOriginAxis(const idVec3 *newOrigin, const idMat3 *newAxis);
 
 protected:
 
@@ -385,6 +388,11 @@ protected:
 	// An event for convenience. Gets called right after spawn time at time 0.
 	// Override this event to do your stuff in the subclass, but be sure to call the baseclass
 	virtual void PostSpawn();
+
+	/**
+	 * stgatilov #5683: Recompute m_ClosedBox, m_ClosedPos, m_OpenPos, m_OpenDir from basic members.
+	 */
+	void ComputeAdditionalMembers();
 
 	/** 
 	 * greebo: Tells the frobmover to start moving. The boolean specifies whether

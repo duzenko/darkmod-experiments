@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -37,30 +37,18 @@ const idStr& BlindedState::GetName() const
 
 void BlindedState::Init(idAI* owner)
 {
-	// Init base class first
-	State::Init(owner);
+	// grayman #4270 - if the AI is sitting, get up first
 
-	owner->movementSubsystem->ClearTasks();
-	owner->senseSubsystem->ClearTasks();
-	owner->actionSubsystem->ClearTasks();
-	owner->searchSubsystem->ClearTasks(); // grayman #3857
-
-	owner->StopMove(MOVE_STATUS_DONE);
-
-	owner->SetAnimState(ANIMCHANNEL_TORSO, "Torso_Blinded", 4);
-	owner->SetAnimState(ANIMCHANNEL_LEGS, "Legs_Blinded", 4);
-
-	owner->SetWaitState("blinded"); // grayman #3431
-	owner->SetWaitState(ANIMCHANNEL_TORSO, "blinded");
-	owner->SetWaitState(ANIMCHANNEL_LEGS, "blinded");
+	if ( owner->GetMoveType() == MOVETYPE_SIT )
+	{
+		owner->GetUp();
+	}
 
 	Memory& memory = owner->GetMemory();
-	memory.StopReacting(); // grayman #3559
-
 	memory.currentSearchEventID = owner->LogSuspiciousEvent(E_EventTypeMisc, memory.alertPos, NULL, true); // grayman #3857
 
 	CommMessagePtr message(new CommMessage(
-		CommMessage::RequestForHelp_CommType, 
+		CommMessage::RequestForHelp_CommType,
 		owner, NULL, // from this AI to anyone 
 		NULL,
 		memory.alertPos,
@@ -69,30 +57,60 @@ void BlindedState::Init(idAI* owner)
 
 	owner->commSubsystem->AddCommTask(CommunicationTaskPtr(new SingleBarkTask("snd_blinded", message)));
 
-	if (cv_ai_debug_transition_barks.GetBool())
+	if ( cv_ai_debug_transition_barks.GetBool() )
 	{
-		gameLocal.Printf("%d: %s is blinded, barks 'snd_blinded'\n",gameLocal.time,owner->GetName());
+		gameLocal.Printf("%d: %s is blinded, barks 'snd_blinded'\n", gameLocal.time, owner->GetName());
 	}
 
-	float duration = SEC2MS(owner->spawnArgs.GetFloat("blind_time", "8")) + 
-		(gameLocal.random.RandomFloat() - 0.5f) * 2 * SEC2MS(owner->spawnArgs.GetFloat("blind_time_fuzziness", "4"));
-
-	_endTime = gameLocal.time + static_cast<int>(duration);
-
 	_oldVisAcuity = owner->GetBaseAcuity("vis"); // grayman #3552
-//	_oldVisAcuity = owner->GetAcuity("vis");
 	owner->SetAcuity("vis", 0);
 
 	_oldAudAcuity = owner->GetBaseAcuity("aud"); // grayman #3552
-	//_oldAudAcuity = owner->GetAcuity("aud"); // Smoke #2829
-	owner->SetAcuity("aud",_oldAudAcuity*0.25f); // Smoke #2829
+	owner->SetAcuity("aud", _oldAudAcuity*0.25f); // Smoke #2829
 
-	_staring = false; // grayman #3431 (set to true when you stare at the ground)
+	_initialized = false; // grayman #4270
 }
 
 // Gets called each time the mind is thinking
 void BlindedState::Think(idAI* owner)
 {
+	// grayman #4270 - Delay initialization if getting up from sitting.
+	if ( (owner->GetMoveType() == MOVETYPE_SIT) || (owner->GetMoveType() == MOVETYPE_GET_UP) )
+	{
+		return;
+	}
+
+	if (!_initialized)
+	{
+		// Init base class first
+		State::Init(owner);
+
+		owner->movementSubsystem->ClearTasks();
+		owner->senseSubsystem->ClearTasks();
+		owner->actionSubsystem->ClearTasks();
+		owner->searchSubsystem->ClearTasks(); // grayman #3857
+
+		owner->StopMove(MOVE_STATUS_DONE);
+
+		owner->SetAnimState(ANIMCHANNEL_TORSO, "Torso_Blinded", 4);
+		owner->SetAnimState(ANIMCHANNEL_LEGS, "Legs_Blinded", 4);
+
+		owner->SetWaitState("blinded"); // grayman #3431
+		owner->SetWaitState(ANIMCHANNEL_TORSO, "blinded");
+		owner->SetWaitState(ANIMCHANNEL_LEGS, "blinded");
+
+		Memory& memory = owner->GetMemory();
+		memory.StopReacting(); // grayman #3559
+
+		float duration = SEC2MS(owner->spawnArgs.GetFloat("blind_time", "8")) +
+			(gameLocal.random.RandomFloat() - 0.5f) * 2 * SEC2MS(owner->spawnArgs.GetFloat("blind_time_fuzziness", "4"));
+
+		_endTime = gameLocal.time + static_cast<int>(duration);
+
+		_staring = false; // grayman #3431 (set to true when you stare at the ground)
+		_initialized = true; // grayman #4270
+	}
+
 	if (gameLocal.time >= _endTime)
 	{
 		owner->SetAnimState(ANIMCHANNEL_TORSO, "Torso_Idle", 4);
@@ -142,6 +160,7 @@ void BlindedState::Save(idSaveGame* savefile) const
 	savefile->WriteFloat(_oldVisAcuity);
 	savefile->WriteFloat(_oldAudAcuity); // Smoke #2829
 	savefile->WriteBool(_staring); // grayman #3431
+	savefile->WriteBool(_initialized); // grayman #4270
 }
 
 void BlindedState::Restore(idRestoreGame* savefile)
@@ -152,6 +171,7 @@ void BlindedState::Restore(idRestoreGame* savefile)
 	savefile->ReadFloat(_oldVisAcuity);
 	savefile->ReadFloat(_oldAudAcuity); // Smoke #2829
 	savefile->ReadBool(_staring); // grayman #3431
+	savefile->ReadBool(_initialized); // grayman #4270
 }
 
 StatePtr BlindedState::CreateInstance()

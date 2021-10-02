@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -1605,7 +1605,7 @@ void CXYWnd::OnPaint() {
 			qglPopMatrix();
 		}
 
-		qwglSwapBuffers(dc.m_hDC);
+		SwapBuffers(dc.m_hDC);
 		TRACE("XY Paint\n");
 	}
 }
@@ -2730,7 +2730,7 @@ void CXYWnd::XY_DrawGrid() {
 	int		w, h;
 	char	text[32];
 
-	int startPos = max ( 64 , g_qeglobals.d_gridsize );
+	int startPos = std::max<float> ( 64 , g_qeglobals.d_gridsize );
 
 	w = m_nWidth / 2 / m_fScale;
 	h = m_nHeight / 2 / m_fScale;
@@ -2772,7 +2772,7 @@ void CXYWnd::XY_DrawGrid() {
 
 	int stepSize = 64 * 0.1 / m_fScale;
 	if (stepSize < 64) {
-		stepSize = max ( 64 , g_qeglobals.d_gridsize ); 
+		stepSize = std::max<float> ( 64 , g_qeglobals.d_gridsize ); 
 	}
 	else {
 		int i;
@@ -2977,7 +2977,6 @@ void CXYWnd::XY_DrawBlockGrid() {
 }
 
 void GLColoredBoxWithLabel(float x, float y, float size, idVec4 color, const char *text, idVec4 textColor, float xofs, float yofs, float lineSize) {
-	globalImages->BindNull();	
 	qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	qglDisable(GL_CULL_FACE);
 	qglDisable(GL_BLEND);
@@ -3016,7 +3015,6 @@ void CXYWnd::DrawRotateIcon() {
 	}
 
 	qglEnable(GL_BLEND);
-	globalImages->BindNull();
 	qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	qglDisable(GL_CULL_FACE);
 	qglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3115,7 +3113,6 @@ void CXYWnd::DrawZIcon(void) {
 		float	x = z.origin[0];
 		float	y = z.origin[1];
 		qglEnable(GL_BLEND);
-		globalImages->BindNull();
 		qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		qglDisable(GL_CULL_FACE);
 		qglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3539,8 +3536,8 @@ void CXYWnd::XY_Draw() {
 	m_bDirty = false;
 
 	GL_State( GLS_DEFAULT );
-	GL_Viewport(0, 0, m_nWidth, m_nHeight);
-	GL_Scissor(0, 0, m_nWidth, m_nHeight);
+	GL_ViewportVidSize(0, 0, m_nWidth, m_nHeight);
+	GL_ScissorVidSize(0, 0, m_nWidth, m_nHeight);
 	qglClearColor
 	(
 		g_qeglobals.d_savedinfo.colors[COLOR_GRIDBACK][0],
@@ -3574,7 +3571,6 @@ void CXYWnd::XY_Draw() {
 	qglOrtho(mins[0], maxs[0], mins[1], maxs[1], MIN_WORLD_COORD, MAX_WORLD_COORD);
 
 	// draw stuff
-	globalImages->BindNull();
 	// now draw the grid
 	qglLineWidth(0.25);
 	XY_DrawGrid();
@@ -4074,7 +4070,7 @@ void CleanCopyEntities() {
 	entity_t	*pe = g_enClipboard.next;
 	while (pe != NULL && pe != &g_enClipboard) {
 		entity_t	*next = pe->next;
-		pe->epairs.Clear();
+		pe->epairs.ClearFree();
 
 		Entity_Free(pe);
 		pe = next;

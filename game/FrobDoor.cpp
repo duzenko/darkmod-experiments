@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Gerhard W. Gruber <sparhawk@gmx.at>
@@ -442,10 +441,10 @@ void CFrobDoor::ClearDoorTravelFlag()
 			valid_aas = true;
 		}
 	}
-	if (!valid_aas)
+	/*if (!valid_aas)
 	{
 		gameLocal.Warning("Door %s is not within a valid AAS area", name.c_str());
-	}
+	}*/
 }
 
 void CFrobDoor::Lock(bool bMaster)
@@ -845,14 +844,58 @@ void CFrobDoor::UpdateSoundLoss()
 
 void CFrobDoor::FindDoubleDoor()
 {
-	idClipModel* clipModelList[MAX_GENTITIES];
+	if ( m_DoubleDoor.GetEntity() != NULL )
+		return;
+
+#if 1 // grayman 5109
+	/* grayman 5109 - Rather than rely on dmap's buggy clipmodel setup for sliding
+	   doors whose origins aren't near each other, look through all doors and see if
+	   the portal for a door matches the portal for this door. Ignore yourself. If so,
+	   make that door the double door for this door, and this door the double door for
+	   that one. If someone fixes dmap's clipmodel bug, it won't affect this new approach,
+	   which doesn't rely on clipmodels.
+	*/
+
+	for( idEntity *ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() )
+	{
+		if ( !ent )
+		{
+			continue;	// skip nulls
+		}
+
+		if ( ent == this ) // skip yourself
+		{
+			continue;
+		}
+
+		if ( ent->IsType(CFrobDoor::Type) )
+		{
+			CFrobDoor* doubleDoor = static_cast<CFrobDoor*>(ent);
+
+			if ( doubleDoor->m_DoubleDoor.GetEntity() != NULL )
+			{
+				continue;
+			}
+
+			int portal = gameRenderWorld->FindPortal(doubleDoor->GetPhysics()->GetAbsBounds());
+			if (( portal != 0 ) && (portal == areaPortal))
+			{
+				m_DoubleDoor = static_cast<CFrobDoor *>(ent); // I'm paired with my double
+				doubleDoor->m_DoubleDoor = this; // My double is paired with me
+				break; // grayman #3042
+			}
+		}
+	}
+	// end of new code
+#else // old code
+	idClip_ClipModelList clipModelList;
 
 	idBounds clipBounds = physicsObj.GetAbsBounds();
 	clipBounds.ExpandSelf( 10.0f );
 
-	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, CONTENTS_SOLID, clipModelList, MAX_GENTITIES );
+	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, CONTENTS_SOLID, clipModelList );
 
-	for ( int i = 0 ; i < numListedClipModels ; i++ ) 
+	for ( int i = 0 ; i < numListedClipModels ; i++ )
 	{
 		idClipModel* clipModel = clipModelList[i];
 		idEntity* obEnt = clipModel->GetEntity();
@@ -865,22 +908,27 @@ void CFrobDoor::FindDoubleDoor()
 
 		if ( obEnt->IsType(CFrobDoor::Type) )
 		{
-			// check the visportal inside the other door, if it's the same as this one => double door
+				// check the visportal inside the other door, if it's the same as this one => double door
 			int testPortal = gameRenderWorld->FindPortal(obEnt->GetPhysics()->GetAbsBounds());
 
 			if ( ( testPortal == areaPortal ) && ( testPortal != 0 ) )
 			{
-				DM_LOG(LC_FROBBING, LT_DEBUG)LOGSTRING("FrobDoor %s found double door %s\r", name.c_str(), obEnt->name.c_str());
 				m_DoubleDoor = static_cast<CFrobDoor*>(obEnt);
 				break; // grayman #3042
 			}
 		}
 	}
+#endif // end of old code
 }
 
 CFrobDoor* CFrobDoor::GetDoubleDoor()
 {
 	return m_DoubleDoor.GetEntity();
+}
+
+int CFrobDoor::GetControllerNumber() // grayman 5109
+{
+	return m_controllers.Num();
 }
 
 void CFrobDoor::SetLossBase( float lossAI, float lossPlayer ) // grayman #3042
@@ -971,7 +1019,7 @@ void CFrobDoor::UpdateHandlePosition()
 
 		if (handle == NULL) continue;
 
-		handle->SetFractionalPosition(fraction);
+		handle->SetFractionalPosition(fraction, false);
 	}
 }
 
@@ -1353,6 +1401,25 @@ bool CFrobDoor::GetPhysicsToSoundTransform(idVec3 &origin, idMat3 &axis)
 
 	axis.Identity();
 
+	if (areaPortal) {
+		//stgatilov #5462: ensure origin and player are on the same side of the door portal
+		idPlane portalPlane = gameRenderWorld->GetPortalPlane(areaPortal);
+		assert(fabs(portalPlane.Normal().Length() - 1.0f) <= 1e-3f);
+
+		float eyeDist = portalPlane.Distance(eyePos);
+		float originDist = portalPlane.Distance(origin);
+		if (eyeDist * originDist < 0.0f) {	//different sides
+			//move origin to the portal plane plus one unit
+			float shift = fabs(originDist) + 1.0f;
+			//don't move by more than 30% of door diameter
+			float cap = 0.3f * bounds.GetSize().Length();
+			if (shift > cap)
+				shift = cap;
+			idVec3 displacement = (originDist < 0.0f ? 1.0f : -1.0f) * shift * portalPlane.Normal();
+			origin += displacement;
+		}
+	}
+
 	// The caller expects the origin in local space
 	origin -= GetPhysics()->GetOrigin();
 
@@ -1420,16 +1487,6 @@ void CFrobDoor::Event_HandleLockRequest()
 		PostEventMS(&EV_TDM_FrobMover_HandleLockRequest, LOCK_REQUEST_DELAY);
 	}
 }
-
-/* grayman #3643 - moved to CBinaryFrobMover
-void CFrobDoor::Event_ClearPlayerImmobilization(idEntity* player)
-{
-	if (!player->IsType(idPlayer::Type)) return;
-
-	// Release the immobilization imposed on the player by Lockpicking
-	static_cast<idPlayer*>(player)->SetImmobilization("Lockpicking", 0);
-}
-*/
 
 // grayman #2859
 

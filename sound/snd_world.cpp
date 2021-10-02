@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -37,6 +37,8 @@ void idSoundWorldLocal::Init( idRenderWorld *renderWorld ) {
 	listenerArea = 0;
 	listenerAreaName = "Undefined";
 	listenerEffect = AL_EFFECTSLOT_NULL;
+	// nbohr1more: #5587 Reverb volume control
+	listenerSlotReverbGain = 1.0f;
 
 	if (idSoundSystemLocal::useEFXReverb) {
 		if (!soundSystemLocal.alIsAuxiliaryEffectSlot(listenerSlot)) {
@@ -67,6 +69,9 @@ void idSoundWorldLocal::Init( idRenderWorld *renderWorld ) {
 				soundSystemLocal.alFilterf(listenerFilter, AL_LOWPASS_GAIN, 0.718208f);
 				// pow(10.0, -1150/2000.0)
 			}
+			// nbohr1more: #5587 Reverb volume control
+			listenerSlotReverbGain = soundSystemLocal.s_alReverbGain.GetFloat();
+			soundSystemLocal.alAuxiliaryEffectSlotf(listenerSlot, AL_EFFECTSLOT_GAIN, listenerSlotReverbGain);
 		}
 	}
 
@@ -94,6 +99,8 @@ void idSoundWorldLocal::Init( idRenderWorld *renderWorld ) {
 	slowmoActive		= false;
 	slowmoSpeed			= 0;
 	enviroSuitActive	= false;
+
+	activeSubtitlesFrame = 0;
 }
 
 /*
@@ -147,9 +154,15 @@ void idSoundWorldLocal::Shutdown() {
 			delete emitters[i];
 			emitters[i] = NULL;
 		}
+		//nbohr1more: #5587 Reverb volume control
+		listenerSlotReverbGain = 1.0f;
 	}
 	localSound = NULL;
 	secondarySound = NULL; // grayman #4882
+
+	activeSubtitles[0].ClearFree();
+	activeSubtitles[1].ClearFree();
+	activeSubtitlesFrame = -1;
 }
 
 /*
@@ -448,7 +461,7 @@ float idSoundWorldLocal::CurrentShakeAmplitudeForPosition( const int time, const
 
 /*
 ===================
-idSoundWorldLocal::MixLoop
+idSoundWorldLocal::MixLoopInternal
 
 Sum all sound contributions into finalMixBuffer, an unclamped float buffer holding
 all output channels.  MIXBUFFER_SAMPLES samples will be created, with each sample consisting
@@ -458,7 +471,7 @@ this is normally called from the sound thread, but also from the main thread
 for AVIdemo writing
 ===================
 */
-void idSoundWorldLocal::MixLoop( int current44kHz, int numSpeakers, float *finalMixBuffer ) {
+void idSoundWorldLocal::MixLoopInternal( int current44kHz, int numSpeakers, float *finalMixBuffer ) {
 	int i, j;
 	idSoundEmitterLocal *sound;
 
@@ -492,6 +505,13 @@ void idSoundWorldLocal::MixLoop( int current44kHz, int numSpeakers, float *final
 	if (idSoundSystemLocal::useEFXReverb && soundSystemLocal.efxloaded) {
 		ALuint effect = AL_EFFECTSLOT_NULL;
 		idStr s(listenerArea);
+
+		//nbohr1more: #5587 Reverb volume control
+		float gain = soundSystemLocal.s_alReverbGain.GetFloat();
+		if (listenerSlotReverbGain != gain) {
+			listenerSlotReverbGain = gain;
+			soundSystemLocal.alAuxiliaryEffectSlotf(listenerSlot, AL_EFFECTSLOT_GAIN, gain);
+		}
 
 		bool found = soundSystemLocal.EFXDatabase.FindEffect(s, &effect);
 		if (!found) {
@@ -539,6 +559,9 @@ void idSoundWorldLocal::MixLoop( int current44kHz, int numSpeakers, float *final
 		if ( !sound ) {
 			continue;
 		}
+		const char *shaderName = "";
+		if (auto shader = sound->channels[0].soundShader)
+			shaderName = shader->GetName();
 		// if no channels are active, do nothing
 		if ( !sound->playing ) {
 			continue;
@@ -561,6 +584,32 @@ void idSoundWorldLocal::MixLoop( int current44kHz, int numSpeakers, float *final
 	if (false && enviroSuitActive) {
 		soundSystemLocal.DoEnviroSuit( finalMixBuffer, MIXBUFFER_SAMPLES, numSpeakers );
 	}
+}
+
+/*
+===================
+idSoundWorldLocal::MixLoop
+
+stgatilov #2454: Simple wrapper which makes sure activeSubtitles are filled on every call
+===================
+*/
+void idSoundWorldLocal::MixLoop( int current44kHz, int numSpeakers, float *finalMixBuffer ) {
+	activeSubtitles[!activeSubtitlesFrame].Clear();
+
+	MixLoopInternal( current44kHz, numSpeakers, finalMixBuffer );
+
+	idScopedCriticalSection section(activeSubtitlesMutex);
+	activeSubtitlesFrame ^= 1;
+}
+
+/*
+===================
+idSoundWorldLocal::GetSubtitles
+===================
+*/
+void idSoundWorldLocal::GetSubtitles( idList<SubtitleMatch> &dest ) {
+	idScopedCriticalSection section(activeSubtitlesMutex);
+	dest = activeSubtitles[activeSubtitlesFrame];
 }
 
 //==============================================================================
@@ -843,7 +892,6 @@ bool idSoundWorldLocal::ResolveOrigin( bool primary, const int stackDepth, const
 	int numPortals = rw->NumPortalsInArea( soundArea );
 
 	idList<SoundChainResults *> chainResults;
-	chainResults.Clear();
 	
 	for ( int p = 0 ; p < numPortals ; p++ )
 	{
@@ -1022,7 +1070,6 @@ bool idSoundWorldLocal::ResolveOrigin( bool primary, const int stackDepth, const
 			float maxd = def->maxDistance * METERS_TO_DOOM;
 			bool quadratic = idSoundSystemLocal::s_quadraticFalloff.GetBool();
 			idList<float> volList; // list of effective chain volumes
-			volList.Clear();
 	
 			for ( int i = 0 ; i < numChains ; i++ )
 			{
@@ -1277,8 +1324,8 @@ void idSoundWorldLocal::ForegroundUpdate( int current44kHzTime ) {
 //		def->Spatialize( listenerPos, listenerArea, rw ); // grayman #4882
 
 		// per-sound debug options
-		if ( idSoundSystemLocal::s_drawSounds.GetInteger() && rw ) {
-			if ( def->distance < def->maxDistance || idSoundSystemLocal::s_drawSounds.GetInteger() > 1 ) {
+		if ( s_drawSounds.GetInteger() && rw ) {
+			if ( def->distance < def->maxDistance || s_drawSounds.GetInteger() > 1 ) {
 				idBounds ref;
 				ref.Clear();
 				ref.AddPoint( idVec3( -10, -10, -10 ) );
@@ -1296,7 +1343,7 @@ void idSoundWorldLocal::ForegroundUpdate( int current44kHzTime ) {
 				// draw the index
 				idVec3	textPos = def->origin;
 				textPos[2] -= 8;
-				rw->DrawText( va("%i", def->index), textPos, 0.1f, idVec4(1,0,0,1), listenerAxis );
+				rw->DebugText( va("%i (%.1f)", def->index, def->volumeLoss), textPos, 0.1f, idVec4(1,0,0,1), listenerAxis );
 				textPos[2] += 8;
 
 				// run through all the channels
@@ -1312,9 +1359,9 @@ void idSoundWorldLocal::ForegroundUpdate( int current44kHzTime ) {
 					float	min = chan->parms.minDistance;
 					float	max = chan->parms.maxDistance;
 					const char	*defaulted = chan->leadinSample->defaultSound ? "(DEFAULTED)" : "";
-					sprintf( text, "%s (%i/%i %i/%i)%s", chan->soundShader->GetName(), (int)def->distance,
-						(int)def->realDistance, (int)min, (int)max, defaulted );
-					rw->DrawText( text, textPos, 0.1f, idVec4(1,0,0,1), listenerAxis );
+					sprintf( text, "%s (%.1f/%.1f %.0f/%.0f)%s", chan->soundShader->GetName(), def->distance,
+						def->realDistance, min, max, defaulted );
+					rw->DebugText( text, textPos, 0.1f, idVec4(1,0,0,1), listenerAxis );
 					textPos[2] += 8;
 				}
 			}
@@ -1911,11 +1958,11 @@ void idSoundWorldLocal::AddChannelContribution( idSoundEmitterLocal *sound, idSo
 
 	// get the actual shader
 	const idSoundShader *shader = chan->soundShader;
-
 	// this might happen if the foreground thread just deleted the sound emitter
 	if ( !shader ) {
 		return;
 	}
+	const char *shaderName = shader->GetName();
 
 	float maxd = parms->maxDistance;
 	float mind = parms->minDistance;
@@ -2066,6 +2113,13 @@ void idSoundWorldLocal::AddChannelContribution( idSoundEmitterLocal *sound, idSo
 	// 
 	if ( sound->removeStatus < REMOVE_STATUS_SAMPLEFINISHED )
 	{
+		// stgatilov #2454: add any active subtitles to soundWorld's buffer
+		int subsNum = chan->GatherSubtitles(
+			offset * sample->objectInfo.nChannels,
+			activeSubtitles[!activeSubtitlesFrame],
+			cv_tdm_subtitles.GetInteger()
+		);
+
 		if ( !alIsSource( chan->openalSource ) ) {
 			chan->openalSource = soundSystemLocal.AllocOpenALSource( chan, !chan->leadinSample->hardwareBuffer || !chan->soundShader->entries[0]->hardwareBuffer || looping, chan->leadinSample->objectInfo.nChannels == 2 );
 		}
@@ -2113,7 +2167,8 @@ void idSoundWorldLocal::AddChannelContribution( idSoundEmitterLocal *sound, idSo
 				}
 			}
 
-			if ( ( !looping && chan->leadinSample->hardwareBuffer ) || ( looping && chan->soundShader->entries[0]->hardwareBuffer ) ) {
+			bool isStreaming = !( ( !looping && chan->leadinSample->hardwareBuffer ) || ( looping && chan->soundShader->entries[0]->hardwareBuffer ) );
+			if ( !isStreaming ) {
 				// handle uncompressed (non streaming) single shot and looping sounds
 				if ( chan->triggered ) {
 					alSourcei( chan->openalSource, AL_BUFFER, looping ? chan->soundShader->entries[0]->openalBuffer : chan->leadinSample->openalBuffer );
@@ -2175,9 +2230,15 @@ void idSoundWorldLocal::AddChannelContribution( idSoundEmitterLocal *sound, idSo
 			}
 			
 			// (re)start if needed..
-			ALint state = 0;
-			alGetSourcei( chan->openalSource, AL_SOURCE_STATE, &state);
-			if ( chan->triggered || state != AL_PLAYING ) {
+			bool restart = chan->triggered;
+			if (isStreaming) {
+				// #4540,#4949 stgatilov: force restart on streaming sounds
+				ALint state = 0;
+				alGetSourcei( chan->openalSource, AL_SOURCE_STATE, &state);
+				if (state != AL_PLAYING)
+					restart = true;
+			}
+			if ( restart ) {
 				alSourcePlay( chan->openalSource );
 				chan->triggered = false;
 			}

@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 #include "precompiled.h"
@@ -18,10 +18,14 @@
 #include "tr_local.h"
 #include "FrameBuffer.h"
 #include "glsl.h"
-#include "Profiling.h"
+#include "backend/RenderBackend.h"
+#include "FrameBufferManager.h"
 
 idRenderSystemLocal	tr;
 idRenderSystem	*renderSystem = &tr;
+
+idCVarBool r_tonemap( "r_tonemap", "1", CVAR_RENDERER | CVAR_ARCHIVE, "Use the tonemap correction (gamma, brightness, etc)" );
+idCVar r_smallCharSpacing( "r_smallCharSpacing", "1", CVAR_RENDERER | CVAR_ARCHIVE, "Console text symbol spacing", 0.5, 1 );
 
 /*
 =====================
@@ -34,10 +38,11 @@ only be called when the back end thread is idle.
 static void R_PerformanceCounters( void ) {
 	if ( r_showPrimitives.GetInteger() != 0 ) {
 
-		float megaBytes = globalImages->SumOfUsedImages() / ( 1024 * 1024.0 );
+		int numUsed = -1;
+		int bytesUsed = globalImages->SumOfUsedImages(&numUsed);
 
 		if ( r_showPrimitives.GetInteger() > 1 ) {
-			common->Printf( "v:%i ds:%i t:%i/%i v:%i/%i st:%i sv:%i image:%5.1f MB ml:%i\n",
+			common->Printf( "v:%i ds:%i t:%i/%i v:%i/%i st:%i sv:%i images:%d ml:%i\n",
 				tr.pc.c_numViews,
 				backEnd.pc.c_drawElements + backEnd.pc.c_shadowElements,
 				backEnd.pc.c_drawIndexes / 3,
@@ -46,17 +51,17 @@ static void R_PerformanceCounters( void ) {
 				(backEnd.pc.c_drawVertexes - backEnd.pc.c_drawRefVertexes),
 				backEnd.pc.c_shadowIndexes / 3,
 				backEnd.pc.c_shadowVertexes,
-				megaBytes,
+				numUsed,
 				backEnd.pc.c_matrixLoads
 			);
 		} else {
-			common->Printf( "views:%i draws:%i tris:%i (shdw:%i) (vbo:%i) image:%5.1f MB\n",
+			common->Printf( "views:%i draws:%i tris:%i (shdw:%i) (vbo:%i) image:%d MB\n",
 			                tr.pc.c_numViews,
 			                backEnd.pc.c_drawElements + backEnd.pc.c_shadowElements,
 			                ( backEnd.pc.c_drawIndexes + backEnd.pc.c_shadowIndexes ) / 3,
 			                backEnd.pc.c_shadowIndexes / 3,
 			                backEnd.pc.c_vboIndexes / 3,
-			                megaBytes
+			                bytesUsed >> 20
 			              );
 		}
 	}
@@ -116,6 +121,9 @@ Called by R_EndFrame each frame
 ====================
 */
 void R_IssueRenderCommands( frameData_t *frameData ) {
+	TRACE_CPU_SCOPE( "R_IssueRenderCommands" )
+	TRACE_GL_SCOPE( "RenderFrame" )
+
 	emptyCommand_t *cmds = frameData->cmdHead;
 	if ( cmds->commandId == RC_NOP
 	        && !cmds->next ) {
@@ -186,6 +194,9 @@ static void R_ViewStatistics( viewDef_t &parms ) {
 	common->Printf( "view:%i surfs:%i (%i)\n", tr.pc.c_numViews, parms.numDrawSurfs, tr.pc.c_noshadowSurfs );
 }
 
+viewDef_t lockSurfView;
+int lockFrameReserve;
+
 /*
 =============
 R_AddDrawViewCmd
@@ -204,7 +215,8 @@ void	R_AddDrawViewCmd( viewDef_t &parms ) {
 
 	if ( parms.viewEntitys ) {
 		// save the command for r_lockSurfaces debugging
-		tr.lockSurfacesCmd = *cmd;
+		lockSurfView = *cmd->viewDef;
+		lockFrameReserve = frameData->frameMemoryAllocated;
 	}
 	tr.pc.c_numViews++;
 
@@ -235,21 +247,23 @@ void R_LockSurfaceScene( viewDef_t &parms ) {
 	drawSurfsCommand_t	*cmd;
 	viewEntity_t			*vModel;
 
+	// add the stored off surface commands again
+	cmd = (drawSurfsCommand_t*) R_GetCommandBuffer( sizeof( *cmd ) );
+	cmd->commandId = RC_DRAW_VIEW;
+	cmd->viewDef = &lockSurfView;
+	frameData->frameMemoryAllocated = lockFrameReserve;
+
 	// set the matrix for world space to eye space
 	R_SetViewMatrix( parms );
-	tr.lockSurfacesCmd.viewDef->worldSpace = parms.worldSpace;
+	cmd->viewDef->worldSpace = parms.worldSpace;
 
 	// update the view origin and axis, and all
 	// the entity matricies
-	for ( vModel = tr.lockSurfacesCmd.viewDef->viewEntitys ; vModel ; vModel = vModel->next ) {
+	for ( vModel = cmd->viewDef->viewEntitys ; vModel ; vModel = vModel->next ) {
 		myGlMultMatrix( vModel->modelMatrix,
-		                tr.lockSurfacesCmd.viewDef->worldSpace.modelViewMatrix,
-		                vModel->modelViewMatrix );
+			cmd->viewDef->worldSpace.modelViewMatrix,
+		    vModel->modelViewMatrix );
 	}
-
-	// add the stored off surface commands again
-	cmd = ( drawSurfsCommand_t * )R_GetCommandBuffer( sizeof( *cmd ) );
-	*cmd = tr.lockSurfacesCmd;
 }
 
 /*
@@ -262,20 +276,19 @@ See if some cvars that we watch have changed
 static void R_CheckCvars( void ) {
 	globalImages->CheckCvars();
 
-	// gamma stuff
-	if ( r_brightness.IsModified() || r_gamma.IsModified() ) {
-		r_brightness.ClearModified();
-		r_gamma.ClearModified();
-		R_SetColorMappings();
-	}
-
-	// Force FBO for nVidia
-	if ( ( glConfig.vendor == glvNVIDIA ) && r_softShadowsQuality.GetBool() && r_nVidiaOverride.GetBool() && !r_useFbo.GetBool() ) {
-		GL_CheckErrors();
-		qglFinish();
-		common->Printf( "Nvidia Hardware Detected. Forcing FBO\n" );
-		r_useFbo.SetBool( true );
-		qglFinish();
+	// GL debug messages
+	if( r_glDebugOutput.IsModified() && GLAD_GL_KHR_debug ) {
+		r_glDebugOutput.ClearModified();
+		if( r_glDebugOutput.GetBool() ) {
+			qglEnable( GL_DEBUG_OUTPUT );
+		} else {
+			qglDisable( GL_DEBUG_OUTPUT );
+		}
+		if( r_glDebugOutput.GetInteger() == 2 ) {
+			qglEnable( GL_DEBUG_OUTPUT_SYNCHRONOUS );
+		} else {
+			qglDisable( GL_DEBUG_OUTPUT_SYNCHRONOUS );
+		}
 	}
 
 	// revelator: autoset depth bits to the max of what the gfx card supports, in case someone tries to supply an invalid bit depth.
@@ -289,7 +302,7 @@ static void R_CheckCvars( void ) {
 	}*/
 
 	// check for changes to logging state
-	GLimp_EnableLogging( r_logFile.GetInteger() != 0 );
+	//GLimp_EnableLogging( r_logFile.GetInteger() != 0 );
 }
 
 /*
@@ -394,11 +407,25 @@ void idRenderSystemLocal::DrawSmallChar( int x, int y, int ch, const idMaterial 
 	frow = row * 0.0625f;
 	fcol = col * 0.0625f;
 	size = 0.0625f;
-
-	DrawStretchPic( x, y, SMALLCHAR_WIDTH, SMALLCHAR_HEIGHT,
+	
+	extern idCVarBool con_legacyFont;
+	if ( con_legacyFont ) 
+		DrawStretchPic( x, y, SMALLCHAR_WIDTH, SMALLCHAR_HEIGHT,
 	                fcol, frow,
 	                fcol + size, frow + size,
 	                material );
+	else {
+		float fontAspect = (float)material->GetImageWidth() / material->GetImageHeight();
+		float screenAspect = (float)glConfig.vidWidth / glConfig.vidHeight;
+		float virtualAspect = (float)SCREEN_WIDTH / SCREEN_HEIGHT;
+		float charAspect = fontAspect / screenAspect * virtualAspect;
+		float charHeight = SMALLCHAR_HEIGHT * r_smallCharSpacing.GetFloat(), charWidth = charAspect * charHeight;
+		if ( charWidth > SMALLCHAR_WIDTH ) {
+			charWidth = SMALLCHAR_WIDTH;
+			charHeight = charWidth / charAspect;
+		}
+		DrawStretchPic( x, y, charWidth, charHeight, fcol, frow, fcol + size, frow + size, material );
+	}
 }
 
 /*
@@ -541,10 +568,10 @@ void idRenderSystemLocal::BeginFrame( int windowWidth, int windowHeight ) {
 	renderCrops[0].x = 0;
 	renderCrops[0].y = 0;
 
-	if ( r_useFbo.GetBool() ) { // duzenko #4425: allow virtual resolution
+/*	if ( r_useFbo.GetBool() ) { // duzenko #4425: allow virtual resolution
 		renderCrops[0].width = windowWidth * r_fboResolution.GetFloat();
 		renderCrops[0].height = windowHeight * r_fboResolution.GetFloat();
-	} else {
+	} else */{
 		renderCrops[0].width = windowWidth;
 		renderCrops[0].height = windowHeight;
 	}
@@ -599,46 +626,21 @@ Returns the number of msec spent in the back end
 =============
 */
 void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
-	static idFile *smpTimingsLogFile = nullptr;
-
 	if ( !glConfig.isInitialized ) {
 		return;
 	}
 
 	try {
-		ProfilingBeginFrame();
+		RB_CopyDebugPrimitivesToBackend();
 		common->SetErrorIndirection( true );
-		double startLoop = Sys_GetClockTicks();
 		session->ActivateFrontend();
-		double endSignal = Sys_GetClockTicks();
+		frameBuffers->BeginFrame();
 		// start the back end up again with the new command list
 		R_IssueRenderCommands( backendFrameData );
-		double endRender = Sys_GetClockTicks();
+		renderBackend->EndFrame();
 		session->WaitForFrontendCompletion();
-		double endWait = Sys_GetClockTicks();
 		common->SetErrorIndirection( false );
-		ProfilingEndFrame();
-
-		if ( r_logSmpTimings.GetBool() ) {
-			if ( !smpTimingsLogFile ) {
-				idStr fileName;
-				uint64_t currentTime = Sys_GetTimeMicroseconds();
-				sprintf( fileName, "smp_timings_%.20llu.txt", currentTime );
-				smpTimingsLogFile = fileSystem->OpenFileWrite( fileName, "fs_savepath", "" );
-			}
-			const double TO_MICROS = 1000000 / Sys_ClockTicksPerSecond();
-			static double lastEndTime = Sys_GetClockTicks();
-			double signalFrontend = ( endSignal - startLoop ) * TO_MICROS;
-			double render = ( endRender - endSignal ) * TO_MICROS;
-			double waitForFrontend = ( endWait - endRender ) * TO_MICROS;
-			double framePrep = ( startLoop - lastEndTime ) * TO_MICROS;
-			double totalFrameTime = ( endWait - lastEndTime ) * TO_MICROS;
-			lastEndTime = endWait;
-
-			smpTimingsLogFile->Printf( "Frame %.7d: preparation %.2f - total frame time %.2f us\n", frameCount, framePrep, totalFrameTime );
-			smpTimingsLogFile->Printf( "  Backend: signal frontend %.2f us - render %.2f us - wait for frontend %.2f us\n", signalFrontend, render, waitForFrontend );
-			session->LogFrontendTimings( *smpTimingsLogFile );
-		}
+		TracingEndFrame();
 	} catch ( std::shared_ptr<ErrorReportedException> e ) {
 		session->WaitForFrontendCompletion();
 		common->SetErrorIndirection( false );
@@ -647,6 +649,8 @@ void idRenderSystemLocal::EndFrame( int *frontEndMsec, int *backEndMsec ) {
 		else
 		{ common->DoError( e->ErrorMessage(), e->ErrorCode() ); }
 	}
+
+	session->ExecuteDelayedFrameCommands();
 
 	// check for dynamic changes that require some initialization
 	R_CheckCvars();
@@ -766,12 +770,14 @@ void	idRenderSystemLocal::CropRenderSize( int width, int height, bool makePowerO
 		height = renderView.height;
 	}
 
+#if 0 // duzenko 5068, remove the makePowerOfTwo param after 2.08 release
 	// if makePowerOfTwo, drop to next lower power of two after scaling to physical pixels
 	if ( makePowerOfTwo ) {
 		width = RoundDownToPowerOfTwo( width );
 		height = RoundDownToPowerOfTwo( height );
 		// FIXME: megascreenshots with offset viewports don't work right with this yet
 	}
+#endif
 
 	// we might want to clip these to the crop window instead
 	while ( width > glConfig.vidWidth )
@@ -834,7 +840,7 @@ PostProcess
 ================
 */
 void idRenderSystemLocal::PostProcess() {
-	emptyCommand_t *cmd = ( emptyCommand_t * )R_GetCommandBuffer( sizeof( *cmd ) );
+	bloomCommand_t* cmd = (bloomCommand_t*)R_GetCommandBuffer( sizeof( *cmd ) );
 	cmd->commandId = RC_BLOOM;
 }
 
@@ -879,14 +885,14 @@ void idRenderSystemLocal::CaptureRenderToBuffer( unsigned char *buffer, bool use
 		return; 
 	}
 	renderCrop_t rc = renderCrops[currentRenderCrop];
-	if ( r_useFbo.GetBool() && !usePbo ) { // 4676 duzenko FIXME usePbo has double function
+	/*if ( r_useFbo.GetBool() && !usePbo ) { // 4676 duzenko FIXME usePbo has double function
 		rc.width /= r_fboResolution.GetFloat();
 		rc.height /= r_fboResolution.GetFloat();
-	}
+	}*/
 	rc.width = ( rc.width + 3 ) & ~3; //opengl wants width padded to 4x
 
-	guiModel->EmitFullScreen();
-	guiModel->Clear();
+	//guiModel->EmitFullScreen();
+	//guiModel->Clear();
 
 	copyRenderCommand_t &cmd = *( copyRenderCommand_t * )R_GetCommandBuffer( sizeof( cmd ) );
 	cmd.commandId = RC_COPY_RENDER;
@@ -919,10 +925,6 @@ void idRenderSystemLocal::CaptureRenderToFile( const char *fileName, bool fixAlp
 	guiModel->EmitFullScreen();
 	guiModel->Clear();
 	R_IssueRenderCommands( frameData );
-
-	if ( !r_useFbo.GetBool() ) {	// duzenko #4425: not applicable, raises gl errors
-		qglReadBuffer( GL_BACK );
-	}
 
 	// calculate pitch of buffer that will be returned by qglReadPixels()
 	int alignment;

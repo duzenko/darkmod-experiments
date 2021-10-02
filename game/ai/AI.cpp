@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -52,6 +52,7 @@
 #include "../TimerManager.h"
 #include "../ProjectileResult.h" // grayman #2872
 #include "../Grabber.h"
+#include "../SearchManager.h"
 
 // For handling the opening of doors and other binary Frob movers
 #include "../BinaryFrobMover.h"
@@ -644,6 +645,14 @@ idAI::~idAI
 */
 idAI::~idAI()
 {
+	if (m_searchID > 0)
+	{
+		DM_LOG(LC_AI, LT_DEBUG)LOGSTRING("Destroying AI while search still active. Actively leaving search: SearchID=%d, AI=0x%p\r", m_searchID, this);
+		CSearchManager::Instance()->LeaveSearch(m_searchID, this);
+	}
+ 		
+	DM_LOG(LC_AI, LT_DEBUG)LOGSTRING("Destroying AI: 0x%p\r", this);
+
 	DeconstructScriptObject();
 	scriptObject.Free();
 	if ( worldMuzzleFlashHandle != -1 )
@@ -663,75 +672,75 @@ idAI::~idAI()
 idAI::Save
 =====================
 */
-void idAI::Save( idSaveGame *savefile ) const {
+void idAI::Save(idSaveGame *savefile) const {
 	int i;
 
-	savefile->WriteInt( travelFlags );
+	savefile->WriteInt(travelFlags);
 	savefile->WriteInt(lastAreaReevaluationTime);
 	savefile->WriteInt(maxAreaReevaluationInterval);
 	savefile->WriteInt(doorRetryTime);
 
-	move.Save( savefile );
-	savedMove.Save( savefile );
+	move.Save(savefile);
+	savedMove.Save(savefile);
 
 	// greebo: save the movestack
 	savefile->WriteInt(static_cast<int>(moveStack.size()));
-	for (std::list<idMoveState>::const_iterator m = moveStack.begin(); m != moveStack.end(); ++m)
+	for ( std::list<idMoveState>::const_iterator m = moveStack.begin(); m != moveStack.end(); ++m )
 	{
 		m->Save(savefile);
 	}
 
-	savefile->WriteFloat( kickForce );
-	savefile->WriteBool( ignore_obstacles );
-	savefile->WriteFloat( blockedRadius );
-	savefile->WriteInt( blockedMoveTime );
-	savefile->WriteInt( blockedAttackTime );
+	savefile->WriteFloat(kickForce);
+	savefile->WriteBool(ignore_obstacles);
+	savefile->WriteFloat(blockedRadius);
+	savefile->WriteInt(blockedMoveTime);
+	savefile->WriteInt(blockedAttackTime);
 
-	savefile->WriteFloat( ideal_yaw );
-	savefile->WriteFloat( current_yaw );
-	savefile->WriteFloat( turnRate );
-	savefile->WriteFloat( turnVel );
-	savefile->WriteFloat( anim_turn_yaw );
-	savefile->WriteFloat( anim_turn_amount );
-	savefile->WriteFloat( anim_turn_angles );
+	savefile->WriteFloat(ideal_yaw);
+	savefile->WriteFloat(current_yaw);
+	savefile->WriteFloat(turnRate);
+	savefile->WriteFloat(turnVel);
+	savefile->WriteFloat(anim_turn_yaw);
+	savefile->WriteFloat(anim_turn_amount);
+	savefile->WriteFloat(anim_turn_angles);
 	savefile->WriteVec3(sitting_turn_pivot);
 
 	savefile->WriteFloat(reachedpos_bbox_expansion);
 	savefile->WriteFloat(aas_reachability_z_tolerance);
 
-	savefile->WriteStaticObject( physicsObj );
+	savefile->WriteStaticObject(physicsObj);
 
-	savefile->WriteFloat( fly_speed );
-	savefile->WriteFloat( fly_bob_strength );
-	savefile->WriteFloat( fly_bob_vert );
-	savefile->WriteFloat( fly_bob_horz );
-	savefile->WriteInt( fly_offset );
-	savefile->WriteFloat( fly_seek_scale );
-	savefile->WriteFloat( fly_roll_scale );
-	savefile->WriteFloat( fly_roll_max );
-	savefile->WriteFloat( fly_roll );
-	savefile->WriteFloat( fly_pitch_scale );
-	savefile->WriteFloat( fly_pitch_max );
-	savefile->WriteFloat( fly_pitch );
+	savefile->WriteFloat(fly_speed);
+	savefile->WriteFloat(fly_bob_strength);
+	savefile->WriteFloat(fly_bob_vert);
+	savefile->WriteFloat(fly_bob_horz);
+	savefile->WriteInt(fly_offset);
+	savefile->WriteFloat(fly_seek_scale);
+	savefile->WriteFloat(fly_roll_scale);
+	savefile->WriteFloat(fly_roll_max);
+	savefile->WriteFloat(fly_roll);
+	savefile->WriteFloat(fly_pitch_scale);
+	savefile->WriteFloat(fly_pitch_max);
+	savefile->WriteFloat(fly_pitch);
 
-	savefile->WriteBool( allowMove );
-	savefile->WriteBool( allowHiddenMovement );
-	savefile->WriteBool( disableGravity );
+	savefile->WriteBool(allowMove);
+	savefile->WriteBool(allowHiddenMovement);
+	savefile->WriteBool(disableGravity);
 
-	savefile->WriteBool( lastHitCheckResult );
-	savefile->WriteInt( lastHitCheckTime );
-	savefile->WriteInt( lastAttackTime );
-	savefile->WriteFloat( fire_range );
-	savefile->WriteFloat( projectile_height_to_distance_ratio );
+	savefile->WriteBool(lastHitCheckResult);
+	savefile->WriteInt(lastHitCheckTime);
+	savefile->WriteInt(lastAttackTime);
+	savefile->WriteFloat(fire_range);
+	savefile->WriteFloat(projectile_height_to_distance_ratio);
 
-	savefile->WriteInt( missileLaunchOffset.Num() );
-	for( i = 0; i < missileLaunchOffset.Num(); i++ ) {
-		savefile->WriteVec3( missileLaunchOffset[ i ] );
+	savefile->WriteInt(missileLaunchOffset.Num());
+	for ( i = 0; i < missileLaunchOffset.Num(); i++ ) {
+		savefile->WriteVec3(missileLaunchOffset[i]);
 	}
 
 	savefile->WriteInt(projectileInfo.Num());
 
-	for (i = 0; i < projectileInfo.Num(); ++i)
+	for ( i = 0; i < projectileInfo.Num(); ++i )
 	{
 		const ProjectileInfo& info = projectileInfo[i];
 
@@ -755,12 +764,12 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteVec3(activeProjectile.info.gravity);
 	activeProjectile.projEnt.Save(savefile);
 
-	savefile->WriteString( attack );
+	savefile->WriteString(attack);
 
 	// grayman #2603 - delayed stim list
 
 	savefile->WriteInt(delayedStims.Num());
-	for (i = 0 ; i < delayedStims.Num() ; i++)
+	for ( i = 0; i < delayedStims.Num(); i++ )
 	{
 		DelayedStim ds = delayedStims[i];
 
@@ -771,7 +780,7 @@ void idAI::Save( idSaveGame *savefile ) const {
 	// grayman #4002 - entity alert list
 
 	savefile->WriteInt(alertQueue.Num());
-	for (i = 0 ; i < alertQueue.Num() ; i++)
+	for ( i = 0; i < alertQueue.Num(); i++ )
 	{
 		EntityAlert ea = alertQueue[i];
 
@@ -781,54 +790,54 @@ void idAI::Save( idSaveGame *savefile ) const {
 		savefile->WriteBool(ea.ignore);
 	}
 
-	savefile->WriteInt( talk_state );
-	talkTarget.Save( savefile );
+	savefile->WriteInt(talk_state);
+	talkTarget.Save(savefile);
 
-	savefile->WriteInt( num_cinematics );
-	savefile->WriteInt( current_cinematic );
+	savefile->WriteInt(num_cinematics);
+	savefile->WriteInt(current_cinematic);
 
-	savefile->WriteBool( allowJointMod );
-	focusEntity.Save( savefile );
-	savefile->WriteVec3( currentFocusPos );
-	savefile->WriteInt( focusTime );
-	savefile->WriteInt( alignHeadTime );
-	savefile->WriteInt( forceAlignHeadTime );
-	savefile->WriteAngles( eyeAng );
-	savefile->WriteAngles( lookAng );
-	savefile->WriteAngles( destLookAng );
-	savefile->WriteAngles( lookMin );
-	savefile->WriteAngles( lookMax );
+	savefile->WriteBool(allowJointMod);
+	focusEntity.Save(savefile);
+	savefile->WriteVec3(currentFocusPos);
+	savefile->WriteInt(focusTime);
+	savefile->WriteInt(alignHeadTime);
+	savefile->WriteInt(forceAlignHeadTime);
+	savefile->WriteAngles(eyeAng);
+	savefile->WriteAngles(lookAng);
+	savefile->WriteAngles(destLookAng);
+	savefile->WriteAngles(lookMin);
+	savefile->WriteAngles(lookMax);
 
-	savefile->WriteInt( lookJoints.Num() );
-	for( i = 0; i < lookJoints.Num(); i++ ) {
-		savefile->WriteJoint( lookJoints[ i ] );
-		savefile->WriteAngles( lookJointAngles[ i ] );
+	savefile->WriteInt(lookJoints.Num());
+	for ( i = 0; i < lookJoints.Num(); i++ ) {
+		savefile->WriteJoint(lookJoints[i]);
+		savefile->WriteAngles(lookJointAngles[i]);
 	}
-	savefile->WriteInt( lookJointsCombat.Num() );
-	for( i = 0; i < lookJointsCombat.Num(); i++ ) {
-		savefile->WriteJoint( lookJointsCombat[ i ] );
-		savefile->WriteAngles( lookJointAnglesCombat[ i ] );
+	savefile->WriteInt(lookJointsCombat.Num());
+	for ( i = 0; i < lookJointsCombat.Num(); i++ ) {
+		savefile->WriteJoint(lookJointsCombat[i]);
+		savefile->WriteAngles(lookJointAnglesCombat[i]);
 	}
 
-	savefile->WriteFloat( shrivel_rate );
-	savefile->WriteInt( shrivel_start );
+	savefile->WriteFloat(shrivel_rate);
+	savefile->WriteInt(shrivel_start);
 
-	savefile->WriteInt( particles.Num() );
-	for  ( i = 0; i < particles.Num(); i++ ) {
-		savefile->WriteParticle( particles[i].particle );
-		savefile->WriteInt( particles[i].time );
-		savefile->WriteJoint( particles[i].joint );
+	savefile->WriteInt(particles.Num());
+	for ( i = 0; i < particles.Num(); i++ ) {
+		savefile->WriteParticle(particles[i].particle);
+		savefile->WriteInt(particles[i].time);
+		savefile->WriteJoint(particles[i].joint);
 	}
-	savefile->WriteBool( restartParticles );
-	savefile->WriteBool( useBoneAxis );
+	savefile->WriteBool(restartParticles);
+	savefile->WriteBool(useBoneAxis);
 
-	enemy.Save( savefile );
-	savefile->WriteVec3( lastVisibleEnemyPos );
-	savefile->WriteVec3( lastVisibleEnemyEyeOffset );
-	savefile->WriteVec3( lastVisibleReachableEnemyPos );
-	savefile->WriteVec3( lastReachableEnemyPos );
-	savefile->WriteBool( enemyReachable );
-	savefile->WriteBool( wakeOnFlashlight );
+	enemy.Save(savefile);
+	savefile->WriteVec3(lastVisibleEnemyPos);
+	savefile->WriteVec3(lastVisibleEnemyEyeOffset);
+	savefile->WriteVec3(lastVisibleReachableEnemyPos);
+	savefile->WriteVec3(lastReachableEnemyPos);
+	savefile->WriteBool(enemyReachable);
+	savefile->WriteBool(wakeOnFlashlight);
 	savefile->WriteInt(lastUpdateEnemyPositionTime);
 
 	savefile->WriteInt(lastTimePlayerSeen);		// grayman #2887
@@ -839,16 +848,16 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool(emitFleeBarks);			// grayman #3474
 	fleeingFromPerson.Save(savefile);			// grayman #3847
 
-	savefile->WriteAngles( eyeMin );
-	savefile->WriteAngles( eyeMax );
+	savefile->WriteAngles(eyeMin);
+	savefile->WriteAngles(eyeMax);
 
-	savefile->WriteFloat( eyeVerticalOffset );
-	savefile->WriteFloat( eyeHorizontalOffset );
-	savefile->WriteFloat( eyeFocusRate );
-	savefile->WriteFloat( headFocusRate );
-	savefile->WriteInt( focusAlignTime );
+	savefile->WriteFloat(eyeVerticalOffset);
+	savefile->WriteFloat(eyeHorizontalOffset);
+	savefile->WriteFloat(eyeFocusRate);
+	savefile->WriteFloat(headFocusRate);
+	savefile->WriteInt(focusAlignTime);
 	savefile->WriteObject(m_tactileEntity);		// grayman #2345
-	savefile->WriteObject(m_bloodMarker);		// grayman #3075
+	m_bloodMarker.Save(savefile);				// grayman #3075
 	m_lastKilled.Save(savefile);				// grayman #2816
 	savefile->WriteBool(m_justKilledSomeone);	// grayman #2816
 	savefile->WriteBool(m_canResolveBlock);		// grayman #2345
@@ -859,56 +868,56 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool(m_allowAudioAlerts);	// grayman #3424
 	savefile->WriteInt(m_searchID);				// grayman #3857
 	savefile->WriteFloat(m_pathWaitTaskEndtime); // grayman #4046
-	savefile->WriteJoint( flashJointWorld );
-	savefile->WriteInt( muzzleFlashEnd );
+	savefile->WriteJoint(flashJointWorld);
+	savefile->WriteInt(muzzleFlashEnd);
 
-	savefile->WriteJoint( focusJoint );
-	savefile->WriteJoint( orientationJoint );
-	savefile->WriteJoint( flyTiltJoint );
+	savefile->WriteJoint(focusJoint);
+	savefile->WriteJoint(orientationJoint);
+	savefile->WriteJoint(flyTiltJoint);
 
 	// TDM Alerts:
-	savefile->WriteInt( m_Acuities.Num() );
-	for( i = 0; i < m_Acuities.Num(); i++ )
+	savefile->WriteInt(m_Acuities.Num());
+	for ( i = 0; i < m_Acuities.Num(); i++ )
 	{
-		savefile->WriteFloat( m_Acuities[ i ] );
+		savefile->WriteFloat(m_Acuities[i]);
 	}
 	savefile->WriteFloat(m_oldVisualAcuity);
 	savefile->WriteFloat(m_sleepFloorZ); // grayman #2416
 	savefile->WriteInt(m_getupEndTime);	 // grayman #2416
-	savefile->WriteFloat( m_AudThreshold );
-	savefile->WriteVec3( m_SoundDir );
-	savefile->WriteVec3( m_LastSight );
-	savefile->WriteFloat( m_AlertLevelThisFrame );
-	savefile->WriteBool( m_lookAtAlertSpot ); // grayman #3520
-	savefile->WriteVec3( m_lookAtPos ); // grayman #3520
-	savefile->WriteInt( m_prevAlertIndex );
-	savefile->WriteFloat( m_maxAlertLevel);
-	savefile->WriteInt( m_maxAlertIndex);
+	savefile->WriteFloat(m_AudThreshold);
+	savefile->WriteVec3(m_SoundDir);
+	savefile->WriteVec3(m_LastSight);
+	savefile->WriteFloat(m_AlertLevelThisFrame);
+	savefile->WriteBool(m_lookAtAlertSpot); // grayman #3520
+	savefile->WriteVec3(m_lookAtPos); // grayman #3520
+	savefile->WriteInt(m_prevAlertIndex);
+	savefile->WriteFloat(m_maxAlertLevel);
+	savefile->WriteInt(m_maxAlertIndex);
 	savefile->WriteFloat(m_recentHighestAlertLevel);
-	savefile->WriteBool( m_bIgnoreAlerts );
+	savefile->WriteBool(m_bIgnoreAlerts);
 
-	m_AlertedByActor.Save( savefile );
+	m_AlertedByActor.Save(savefile);
 
-	for (i = 0; i < ai::EAlertTypeCount; i++)
+	for ( i = 0; i < ai::EAlertTypeCount; i++ )
 	{
 		savefile->WriteInt(alertTypeWeight[i]);
 	}
 
-	m_TactAlertEnt.Save( savefile );
-	m_AlertGraceActor.Save( savefile );
-	savefile->WriteInt( m_AlertGraceStart );
-	savefile->WriteInt( m_AlertGraceTime );
-	savefile->WriteFloat( m_AlertGraceThresh );
-	savefile->WriteInt( m_AlertGraceCount );
-	savefile->WriteInt( m_AlertGraceCountLimit );
+	m_TactAlertEnt.Save(savefile);
+	m_AlertGraceActor.Save(savefile);
+	savefile->WriteInt(m_AlertGraceStart);
+	savefile->WriteInt(m_AlertGraceTime);
+	savefile->WriteFloat(m_AlertGraceThresh);
+	savefile->WriteInt(m_AlertGraceCount);
+	savefile->WriteInt(m_AlertGraceCountLimit);
 
 	savefile->WriteInt(m_Messages.Num());
-	for ( i = 0 ; i < m_Messages.Num() ; i++ )
+	for ( i = 0; i < m_Messages.Num(); i++ )
 	{
 		m_Messages[i]->Save(savefile);
 	}
 
-	savefile->WriteBool( GetPhysics() == static_cast<const idPhysics *>(&physicsObj) );
+	savefile->WriteBool(GetPhysics() == static_cast<const idPhysics *>(&physicsObj));
 
 	/* grayman #3857
 	// grayman #3424
@@ -925,9 +934,9 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt(m_HeadBodyID);
 	savefile->WriteJoint(m_HeadJointID);
 
-	savefile->WriteBool( m_bHeadCMSwapped );
-//	if( m_bHeadCMSwapped && m_OrigHeadCM )
-//		m_OrigHeadCM->Save( savefile );
+	savefile->WriteBool(m_bHeadCMSwapped);
+	//	if( m_bHeadCMSwapped && m_OrigHeadCM )
+	//		m_OrigHeadCM->Save( savefile );
 
 	savefile->WriteInt(m_AirTics);
 	savefile->WriteInt(m_AirTicksMax);
@@ -950,9 +959,9 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt(m_koState);				// grayman #2604
 	savefile->WriteInt(m_earlyThinkCounter);	// grayman #2654
 	savefile->WriteBool(m_bCanExtricate);		// grayman #2603
-	savefile->WriteBool( m_ignorePlayer );		// grayman #3063
+	savefile->WriteBool(m_ignorePlayer);		// grayman #3063
 	//savefile->WriteBounds(m_searchLimits);		// grayman #2422 // grayman #3857
-	
+
 	savefile->WriteFloat(thresh_1);
 	savefile->WriteFloat(thresh_2);
 	savefile->WriteFloat(thresh_3);
@@ -996,7 +1005,7 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt(m_headTurnMaxDuration);
 
 	savefile->WriteInt(static_cast<int>(backboneStates.size()));
-	for (BackboneStateMap::const_iterator i = backboneStates.begin(); i != backboneStates.end(); ++i)
+	for ( BackboneStateMap::const_iterator i = backboneStates.begin(); i != backboneStates.end(); ++i )
 	{
 		savefile->WriteInt(i->first);
 		savefile->WriteString(i->second);
@@ -1011,7 +1020,7 @@ void idAI::Save( idSaveGame *savefile ) const {
 
 	savefile->WriteString(m_barkName); // grayman #3857
 	savefile->WriteInt(m_barkEndTime); // grayman #3857
-	
+
 	savefile->WriteBool(m_bPushOffPlayer);
 
 	savefile->WriteBool(m_bCanBeFlatFooted);
@@ -1038,6 +1047,7 @@ void idAI::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool(m_LatchedSearch);	// grayman #2603
 	savefile->WriteBool(m_ReactingToPickedPocket); // grayman #3559
 	savefile->WriteBool(m_InConversation);	// grayman #3559
+	savefile->WriteInt(m_nextWarningTime);	// grayman #5164
 
 	// grayman #2603
 	savefile->WriteInt( m_dousedLightsSeen.Num() );
@@ -1313,7 +1323,7 @@ void idAI::Restore( idRestoreGame *savefile ) {
 	savefile->ReadFloat( headFocusRate );
 	savefile->ReadInt( focusAlignTime );
 	savefile->ReadObject(reinterpret_cast<idClass*&>(m_tactileEntity)); // grayman #2345
-	savefile->ReadObject(reinterpret_cast<idClass*&>(m_bloodMarker));	// grayman #3075
+	m_bloodMarker.Restore(savefile);	// grayman #3075
 	m_lastKilled.Restore(savefile); // grayman #2816
 	savefile->ReadBool(m_justKilledSomeone); // grayman #2816
 	savefile->ReadBool(m_canResolveBlock);	 // grayman #2345
@@ -1367,7 +1377,7 @@ void idAI::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt( m_AlertGraceCountLimit );
 
 	savefile->ReadInt(num);
-	m_Messages.Clear();
+	m_Messages.ClearFree();
 	for (int i = 0; i < num; i++)
 	{
 		ai::CommMessagePtr message(new ai::CommMessage);
@@ -1527,6 +1537,7 @@ void idAI::Restore( idRestoreGame *savefile ) {
 	savefile->ReadBool(m_LatchedSearch);	// grayman #2603
 	savefile->ReadBool(m_ReactingToPickedPocket); // grayman #3559
 	savefile->ReadBool(m_InConversation);	// grayman #3559
+	savefile->ReadInt(m_nextWarningTime);	// grayman #5164
 
 	// grayman #2603
 	m_dousedLightsSeen.Clear();
@@ -1565,7 +1576,7 @@ void idAI::Restore( idRestoreGame *savefile ) {
 		tactileIgnoreEntities.insert(tactEnt);
 	}
 	
-	savefile->ReadVec3( lastSearchedSpot); // grayman #4220
+	savefile->ReadVec3(lastSearchedSpot); // grayman #4220
 
 	mind = ai::MindPtr(new ai::Mind(this));
 	mind->Restore(savefile);
@@ -2100,6 +2111,7 @@ void idAI::Spawn( void )
 	m_DroppingTorch = false;	// grayman #2603
 	m_ReactingToPickedPocket = false; // grayman #3559
 	m_InConversation = false;	// grayman #3559
+	m_nextWarningTime = 0;		// grayman #5164
 
 	// =============== Set up KOing and FOV ==============
 	const char *HeadJointName = spawnArgs.GetString("head_jointname", "Head");
@@ -2306,6 +2318,7 @@ void idAI::DormantBegin( void ) {
 		// remove ourselves from the enemy's enemylist
 		enemyNode.Remove();
 	}
+
 	idActor::DormantBegin();
 }
 
@@ -2345,7 +2358,6 @@ void idAI::Think( void )
 		return; // Thinking is disabled.
 	}
 
-	// Interleaved thinking
 	if (!ThinkingIsAllowed())
 	{
 		return;
@@ -2358,6 +2370,18 @@ void idAI::Think( void )
 	if ( ( gameLocal.time <= m_getupEndTime ) &&
 		 ( idStr(WaitState()) == "wake_up") &&
 		 ((AI_SleepLocation == SLEEP_LOC_FLOOR) || (AI_SleepLocation == SLEEP_LOC_BED)))// grayman #3820
+	{
+		idVec3 origin = physicsObj.GetOrigin();
+		if ( origin.z < m_sleepFloorZ )
+		{
+			origin.z = m_sleepFloorZ;
+			physicsObj.SetOrigin(origin);
+		}
+	}
+
+	// grayman #3989 - don't let origin slip below the floor when lying down
+	if ((idStr(WaitState()) == "fall_asleep") &&
+		((AI_SleepLocation == SLEEP_LOC_FLOOR) || (AI_SleepLocation == SLEEP_LOC_BED)) )// grayman #3820
 	{
 		idVec3 origin = physicsObj.GetOrigin();
 		if ( origin.z < m_sleepFloorZ )
@@ -2401,8 +2425,8 @@ void idAI::Think( void )
 		bounds[0].y -= 16;
 		bounds[0].x += 16;
 		bounds[0].y += 16;
-		idEntity* ents[MAX_GENTITIES];
-		int num = gameLocal.clip.EntitiesTouchingBounds( bounds, CONTENTS_SOLID, ents, MAX_GENTITIES );
+		idClip_EntityList ents;
+		int num = gameLocal.clip.EntitiesTouchingBounds( bounds, CONTENTS_SOLID, ents );
 		if (num > 0)
 		{
 			for ( int i = 0; i < num; i++ )
@@ -2436,8 +2460,9 @@ void idAI::Think( void )
 					if ( foundImpassableDoor )
 					{
 						// add AAS area number of the door to forbidden areas
-						gameLocal.m_AreaManager.AddForbiddenArea(areaNum, this);
-						PostEventMS(&AI_ReEvaluateArea, doorRetryTime, areaNum);
+						if ( gameLocal.m_AreaManager.AddForbiddenArea(areaNum, this) ) {
+							PostEventMS(&AI_ReEvaluateArea, doorRetryTime, areaNum);
+						}
 						frobDoor->RegisterAI(this); // grayman #1145 - this AI is interested in this door
 					}
 					else
@@ -2986,7 +3011,6 @@ void idAI::KickObstacles( const idVec3 &dir, float force, idEntity *alwaysKick )
 	idBounds clipBounds;
 	idEntity *obEnt;
 	idClipModel *clipModel;
-	idClipModel *clipModelList[ MAX_GENTITIES ];
 	int clipmask;
 	idVec3 org;
 	idVec3 forceVec;
@@ -3002,7 +3026,8 @@ void idAI::KickObstacles( const idVec3 &dir, float force, idEntity *alwaysKick )
 	clipBounds.ExpandSelf( 8.0f );
 	clipBounds.AddPoint( org );
 	clipmask = physicsObj.GetClipMask();
-	numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, clipmask, clipModelList, MAX_GENTITIES );
+	idClip_ClipModelList clipModelList;
+	numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, clipmask, clipModelList );
 	for ( i = 0; i < numListedClipModels; i++ ) {
 		clipModel = clipModelList[i];
 		obEnt = clipModel->GetEntity();
@@ -3356,7 +3381,7 @@ float idAI::TravelDistance( const idVec3 &start, const idVec3 &end )
 		if ( ai_debugMove.GetBool() )
 		{
 			gameRenderWorld->DebugLine( colorBlue, start, end, USERCMD_MSEC, false );
-			gameRenderWorld->DrawText( va( "%d", ( int )dist ), ( start + end ) * 0.5f, 0.1f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3() );
+			gameRenderWorld->DebugText( va( "%d", ( int )dist ), ( start + end ) * 0.5f, 0.1f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3() );
 		}
 
 		return dist;
@@ -3380,7 +3405,7 @@ float idAI::TravelDistance( const idVec3 &start, const idVec3 &end )
 		if ( ai_debugMove.GetBool() )
 		{
 			gameRenderWorld->DebugLine( colorBlue, start, end, USERCMD_MSEC, false );
-			gameRenderWorld->DrawText( va( "%d", ( int )dist ), ( start + end ) * 0.5f, 0.1f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3() );
+			gameRenderWorld->DebugText( va( "%d", ( int )dist ), ( start + end ) * 0.5f, 0.1f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3() );
 		}
 
 		return dist;
@@ -3435,9 +3460,9 @@ void idAI::StopMove( moveStatus_t status )
 		{
 			idEntity	*hit;
 			idClipModel *cm;
-			idClipModel *clipModels[MAX_GENTITIES];
 
-			int num = gameLocal.clip.ClipModelsTouchingBounds(physicsObj.GetAbsBounds(), physicsObj.GetClipMask(), clipModels, MAX_GENTITIES);
+			idClip_ClipModelList clipModels;
+			int num = gameLocal.clip.ClipModelsTouchingBounds(physicsObj.GetAbsBounds(), physicsObj.GetClipMask(), clipModels);
 			for ( int i = 0; i < num; i++ )
 			{
 				cm = clipModels[i];
@@ -6047,6 +6072,7 @@ void idAI::SittingMove()
 	idVec3 oldorigin = physicsObj.GetOrigin();
 	idMat3 oldaxis = viewAxis;
 
+	// Interleaved thinking
 	AI_BLOCKED = false;
 
 	RunPhysics();
@@ -8899,16 +8925,14 @@ idAI::PushWithAF
 */
 void idAI::PushWithAF( void ) {
 	int i, j;
-	afTouch_t touchList[ MAX_GENTITIES ];
-	idEntity *pushed_ents[ MAX_GENTITIES ];
 	idEntity *ent;
 	idVec3 vel( vec3_origin ), vGravNorm( vec3_origin );
-	int num_pushed;
 
-	num_pushed = 0;
 	af.ChangePose( this, gameLocal.time );
+	idClip_afTouchList touchList;
 	int num = af.EntitiesTouchingAF( touchList );
 
+	idClip_EntityList pushed_ents;
 	for( i = 0; i < num; i++ ) {
 		if ( touchList[ i ].touchedEnt->IsType( idProjectile::Type ) ) {
 			// skip projectiles
@@ -8916,15 +8940,15 @@ void idAI::PushWithAF( void ) {
 		}
 
 		// make sure we haven't pushed this entity already.  this avoids causing double damage
-		for( j = 0; j < num_pushed; j++ ) {
+		for( j = 0; j < pushed_ents.Num(); j++ ) {
 			if ( pushed_ents[ j ] == touchList[ i ].touchedEnt ) {
 				break;
 			}
 		}
-		if ( j >= num_pushed )
+		if ( j >= pushed_ents.Num() )
 		{
 			ent = touchList[ i ].touchedEnt;
-			pushed_ents[num_pushed++] = ent;
+			pushed_ents.AddGrow(ent);
 			vel = ent->GetPhysics()->GetAbsBounds().GetCenter() - touchList[ i ].touchedByBody->GetWorldOrigin();
 
 			if ( ent->IsType(idPlayer::Type) && static_cast<idPlayer *>(ent)->noclip )
@@ -9116,9 +9140,9 @@ idAI::CanBecomeSolid
 ================
 */
 bool idAI::CanBecomeSolid( void ) {
-	idClipModel* clipModels[ MAX_GENTITIES ];
 
-	int num = gameLocal.clip.ClipModelsTouchingBounds( physicsObj.GetAbsBounds(), MASK_MONSTERSOLID, clipModels, MAX_GENTITIES );
+	idClip_ClipModelList clipModels;
+	int num = gameLocal.clip.ClipModelsTouchingBounds( physicsObj.GetAbsBounds(), MASK_MONSTERSOLID, clipModels );
 	for ( int i = 0; i < num; i++ ) {
 		idClipModel* cm = clipModels[ i ];
 
@@ -9687,7 +9711,7 @@ void idAI::HearSound(SSprParms *propParms, float noise, const idVec3& origin)
 	// alert to overwrite another alert this frame
 
 	// grayman #3424 - audio alerts shouldn't be allowed in the delays between
-	// methods like OnDeadPersonEncounter() and Post_OnDeadPersonEnvounter() because
+	// methods like OnDeadPersonEncounter() and Post_OnDeadPersonEncounter() because
 	// they can mess with what's happening in those methods.
 
 	if ( ( GetAcuity("aud") > 0 ) && ( psychLoud > m_AlertLevelThisFrame ) && m_allowAudioAlerts )
@@ -9867,7 +9891,7 @@ void idAI::HearSound(SSprParms *propParms, float noise, const idVec3& origin)
 
 		if ( cv_spr_show.GetBool() )
 		{
-			gameRenderWorld->DrawText( va("Alert: %.2f", psychLoud), 
+			gameRenderWorld->DebugText( va("Alert: %.2f", psychLoud), 
 				(GetEyePosition() - GetPhysics()->GetGravityNormal() * 55.0f), 0.25f, 
 				colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC * 30);
 		}
@@ -10588,7 +10612,7 @@ void idAI::PerformVisualScan(float timecheck)
 		if ( !canWalkToPlayer || ((m_LastSight - physicsObj.GetOrigin()).LengthFast()*s_DOOM_TO_METERS ) <= cv_ai_sight_combat_cutoff.GetFloat() )
 		{
 			SetEnemy(player);
-
+			
 			// set flag that tells UpDateEnemyPosition() to NOT count this instance of player
 			// visibility in the mission data
 			m_ignorePlayer = true; // grayman #3063 - don't count this instance for mission statistics (defer until Combat state begins)
@@ -10600,7 +10624,7 @@ void idAI::PerformVisualScan(float timecheck)
 		}
 	}
 
-	// If the alert amount is larger than everything else encountered this frame
+ 	// If the alert amount is larger than everything else encountered this frame
 	// ignore the previous alerts and remember this actor as enemy.
 	if ( alertInc > m_AlertLevelThisFrame )
 	{
@@ -10695,8 +10719,8 @@ void idAI::PerformVisualScan(float timecheck)
 
 	if (cv_ai_visdist_show.GetFloat() > 0) 
 	{
-		gameRenderWorld->DrawText("see you!", GetEyePosition() + idVec3(0,0,70), 0.2f, idVec4( 0.5f, 0.00f, 0.00f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 60 * USERCMD_MSEC);
-		gameRenderWorld->DrawText(va("Alert increase: %.2f", incAlert), GetEyePosition() + idVec3(0,0,60), 0.2f, idVec4( 0.5f, 0.00f, 0.00f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 60 * USERCMD_MSEC);
+		gameRenderWorld->DebugText("see you!", GetEyePosition() + idVec3(0,0,70), 0.2f, idVec4( 0.5f, 0.00f, 0.00f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 60 * USERCMD_MSEC);
+		gameRenderWorld->DebugText(va("Alert increase: %.2f", incAlert), GetEyePosition() + idVec3(0,0,60), 0.2f, idVec4( 0.5f, 0.00f, 0.00f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 60 * USERCMD_MSEC);
 	}
 
 	float newAlertLevel = AI_AlertLevel + incAlert;
@@ -10778,18 +10802,18 @@ float idAI::GetVisibility( idEntity *ent ) const
 	{
 		idStr alertText(clampVal);
 		alertText = "clampVal: "+ alertText;
-		gameRenderWorld->DrawText(alertText.c_str(), GetEyePosition() + idVec3(0,0,1), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText.c_str(), GetEyePosition() + idVec3(0,0,1), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		idStr alertText2(clampdist);
 		alertText2 = "clampdist: "+ alertText2;
-		gameRenderWorld->DrawText(alertText2.c_str(), GetEyePosition() + idVec3(0,0,10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText2.c_str(), GetEyePosition() + idVec3(0,0,10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		gameRenderWorld->DebugCircle(idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), GetPhysics()->GetOrigin(),idVec3(0,0,1), clampdist / s_DOOM_TO_METERS, 100, USERCMD_MSEC);
 		idStr alertText3(safedist);
 		alertText3 = "safedist: "+ alertText3;
-		gameRenderWorld->DrawText(alertText3.c_str(), GetEyePosition() + idVec3(0,0,20), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText3.c_str(), GetEyePosition() + idVec3(0,0,20), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		gameRenderWorld->DebugCircle(idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), GetPhysics()->GetOrigin(),idVec3(0,0,1), safedist / s_DOOM_TO_METERS, 100, USERCMD_MSEC);
 		idStr alertText4(dist);
 		alertText4 = "distance: "+ alertText4;
-		gameRenderWorld->DrawText(alertText4.c_str(), GetEyePosition() + idVec3(0,0,30), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText4.c_str(), GetEyePosition() + idVec3(0,0,30), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 	}
 
 	return clampVal;
@@ -10847,21 +10871,21 @@ float idAI::GetVisibility( idEntity *ent ) const
 	{
 		idStr alertText(clampVal);
 		alertText = "clampVal: "+ alertText;
-		gameRenderWorld->DrawText(alertText.c_str(), GetEyePosition() + idVec3(0,0,1), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText.c_str(), GetEyePosition() + idVec3(0,0,1), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		idStr alertText2(clampdist);
 		alertText2 = "clampdist: "+ alertText2;
-		gameRenderWorld->DrawText(alertText2.c_str(), GetEyePosition() + idVec3(0,0,10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText2.c_str(), GetEyePosition() + idVec3(0,0,10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		gameRenderWorld->DebugCircle(idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), GetPhysics()->GetOrigin(),idVec3(0,0,1), clampdist / s_DOOM_TO_METERS, 100, USERCMD_MSEC);
 		idStr alertText3(safedist);
 		alertText3 = "savedist: "+ alertText3;
-		gameRenderWorld->DrawText(alertText3.c_str(), GetEyePosition() + idVec3(0,0,20), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText3.c_str(), GetEyePosition() + idVec3(0,0,20), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		gameRenderWorld->DebugCircle(idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), GetPhysics()->GetOrigin(),idVec3(0,0,1), safedist / s_DOOM_TO_METERS, 100, USERCMD_MSEC);
 		idStr alertText4(returnval);
 		alertText4 = "returnval: "+ alertText4;
-		gameRenderWorld->DrawText(alertText4.c_str(), GetEyePosition() + idVec3(0,0,30), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText4.c_str(), GetEyePosition() + idVec3(0,0,30), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		idStr alertText5(dist);
 		alertText5 = "distance: "+ alertText5;
-		gameRenderWorld->DrawText(alertText5.c_str(), GetEyePosition() + idVec3(0,0,-10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText5.c_str(), GetEyePosition() + idVec3(0,0,-10), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 	}
 	
 	return returnval;
@@ -10878,12 +10902,12 @@ float idAI::GetCalibratedLightgemValue() const
 
 	float lgem = static_cast<float>(player->GetCurrentLightgemValue());
 
-	float term0 = -0.03f; // grayman #3063 - Wiki says -0.03f, and angua says this is what it's supposed to be
+	float term0 = -0.03f; // grayman #3063 - Wiki (http://wiki.thedarkmod.com/index.php?title=Visual_scan) says -0.03f, and angua says this is what it's supposed to be
 //	float term0 = -0.003f;
 	float term1 = 0.03f * lgem;
 	float term2 = 0.001f * idMath::Pow16(lgem, 2);
 	float term3 = 0.00013f * idMath::Pow16(lgem, 3);
-	float term4 = - 0.000011f * idMath::Pow16(lgem, 4);
+	float term4 = -0.000011f * idMath::Pow16(lgem, 4);
 	float term5 = 0.0000001892f * idMath::Pow16(lgem, 5);
 
 	float clampVal = term0 + term1 + term2 + term3 + term4 + term5;
@@ -10901,7 +10925,7 @@ float idAI::GetCalibratedLightgemValue() const
 	{
 		idStr alertText5(lgem);
 		alertText5 = "lgem: "+ alertText5;
-		gameRenderWorld->DrawText(alertText5.c_str(), GetEyePosition() + idVec3(0,0,40), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(alertText5.c_str(), GetEyePosition() + idVec3(0,0,40), 0.2f, idVec4( 0.15f, 0.15f, 0.15f, 1.00f ), gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 	}
 
 	return clampVal;
@@ -11397,7 +11421,7 @@ bool idAI::IsEntityHiddenByDarkness(idEntity* p_entity, const float sightThresho
 		float visFraction = GetCalibratedLightgemValue(); // returns values in [0..1]
 /*
 		// greebo: Debug output, comment me out
-		gameRenderWorld->DrawText(idStr(visFraction), GetEyePosition() + idVec3(0,0,1), 0.11f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(idStr(visFraction), GetEyePosition() + idVec3(0,0,1), 0.11f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 */
 		// Draw debug graphic
 		/*if (cv_ai_visdist_show.GetFloat() > 1.0)
@@ -11790,6 +11814,11 @@ bool idAI::TestKnockoutBlow( idEntity* attacker, const idVec3& dir, trace_t *tr,
 	const char* locationName = GetDamageGroup( location );
 
 	DM_LOG(LC_AI, LT_DEBUG)LOGSTRING("idAI::TestKnockoutBlow - %s hit with KO object in joint %d corresponding to damage group %s\r", name.c_str(), location, locationName);
+	if (cv_melee_debug.GetBool()) {
+		char buff[256];
+		idStr::snPrintf(buff, sizeof(buff), "AIHit:%s", locationName);
+		gameRenderWorld->DebugText(buff, tr->c.point, 0.1f, colorCyan, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 1000);
+	}
 
 	// check if we're hitting the right zone (usually the head)
 	if ( idStr::Cmp(locationName, m_KoZone) != 0 )
@@ -11925,6 +11954,10 @@ bool idAI::TestKnockoutBlow( idEntity* attacker, const idVec3& dir, trace_t *tr,
 	}
 
 	// Rule #6 - blow wasn't in the right place
+
+	if (cv_melee_debug.GetBool()) {
+		gameRenderWorld->DebugSphere( colorRed, idSphere(tr->c.point, 7.3f), 1000, false);
+	}
 
 	// Signal the failed KO to the current state
 	GetMind()->GetState()->OnFailedKnockoutBlow(attacker, dir, true);
@@ -12210,7 +12243,7 @@ void idAI::ClearMessages(int msgTag)
 {
 	if ( msgTag == 0)
 	{
-		m_Messages.Clear();
+		m_Messages.ClearFree();
 		return;
 	}
 
@@ -12223,6 +12256,7 @@ void idAI::ClearMessages(int msgTag)
 			m_Messages.RemoveIndex(i--);
 		}
 	}
+	m_Messages.Condense();
 }
 
 // grayman #3424 - Do I have an outgoing message of a certain type
@@ -12475,7 +12509,7 @@ bool idAI::MouthIsUnderwater( void )
 		color = colorGreen;
 	}
 	sprintf( healthLevel, " (%d)", health );
-	gameRenderWorld->DrawText((str + healthLevel).c_str(),(GetEyePosition() - GetPhysics()->GetGravityNormal()*60.0f), 
+	gameRenderWorld->DebugText((str + healthLevel).c_str(),(GetEyePosition() - GetPhysics()->GetGravityNormal()*60.0f), 
 		0.25f, color, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 150 * USERCMD_MSEC);
 #endif
 
@@ -12562,7 +12596,7 @@ int idAI::PlayAndLipSync(const char *soundName, const char *animName, int msgTag
 	/*
 	if (cv_ai_bark_show.GetBool())
 	{
-		gameRenderWorld->DrawText(va("%s", soundName), GetPhysics()->GetOrigin() + idVec3(0, 0, 90), 0.25f, colorWhite,
+		gameRenderWorld->DebugText(va("%s", soundName), GetPhysics()->GetOrigin() + idVec3(0, 0, 90), 0.25f, colorWhite,
 			gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, duration );
 	}
 	*/
@@ -13103,12 +13137,12 @@ void idAI::ShowDebugInfo()
 		if (GetSubsystem(ai::SubsysAction)->IsEnabled()) str += "Action: " + GetSubsystem(ai::SubsysAction)->GetDebugInfo() + "\n";
 		if (GetSubsystem(ai::SubsysSearch)->IsEnabled()) str += "Search: " + GetSubsystem(ai::SubsysSearch)->GetDebugInfo() + "\n"; // grayman #3857
 
-		gameRenderWorld->DrawText(str, (GetEyePosition() - physicsObj.GetGravityNormal()*-25.0f), 0.25f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(str, (GetEyePosition() - physicsObj.GetGravityNormal()*-25.0f), 0.25f, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 	}
 
 	if (cv_ai_alertlevel_show.GetBool() && (health > 0) && !IsKnockedOut())
 	{
-		gameRenderWorld->DrawText(va("Alert: %f; Index: %d", (float)AI_AlertLevel, (int)AI_AlertIndex), (GetEyePosition() - physicsObj.GetGravityNormal()*45.0f), 0.25f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(va("Alert: %f; Index: %d", (float)AI_AlertLevel, (int)AI_AlertIndex), (GetEyePosition() - physicsObj.GetGravityNormal()*45.0f), 0.25f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		// grayman #3857 - add debugging info for coordinated searches
 		if ((m_searchID > 0) && ((AI_AlertIndex == ai::ESearching) || (AI_AlertIndex == ai::EAgitatedSearching)))
 		{
@@ -13132,12 +13166,12 @@ void idAI::ShowDebugInfo()
 					role = "observer";
 				}
 			}
-			gameRenderWorld->DrawText(va("Event: %d; Search: %d; Role: %s", search->_eventID, search->_searchID, role.c_str()), (GetEyePosition() - physicsObj.GetGravityNormal()*20.0f), 0.25f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+			gameRenderWorld->DebugText(va("Event: %d; Search: %d; Role: %s", search->_eventID, search->_searchID, role.c_str()), (GetEyePosition() - physicsObj.GetGravityNormal()*20.0f), 0.25f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 		}
 
 		if (m_AlertGraceStart + m_AlertGraceTime - gameLocal.time > 0)
 		{
-			gameRenderWorld->DrawText(va("Grace time: %d; Alert count: %d / %d",
+			gameRenderWorld->DebugText(va("Grace time: %d; Alert count: %d / %d",
 				m_AlertGraceStart + m_AlertGraceTime - gameLocal.time,
 				m_AlertGraceCount, m_AlertGraceCountLimit),
 				GetEyePosition(), 0.25f, colorGreen, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
@@ -13164,7 +13198,7 @@ void idAI::ShowDebugInfo()
 		{
 			debugText += idStr("Waitstate: ") + WaitState();
 		}
-		gameRenderWorld->DrawText(debugText, (GetEyePosition() - physicsObj.GetGravityNormal()*-25), 0.20f, colorMagenta, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(debugText, (GetEyePosition() - physicsObj.GetGravityNormal()*-25), 0.20f, colorMagenta, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, USERCMD_MSEC);
 	}
 
 	if (cv_ai_aasarea_show.GetBool() && aas != NULL)
@@ -13177,7 +13211,7 @@ void idAI::ShowDebugInfo()
 
 		idMat3 playerViewMatrix(gameLocal.GetLocalPlayer()->viewAngles.ToMat3());
 
-		gameRenderWorld->DrawText(va("%d", areaNum), areaCenter, 0.2f, colorGreen, playerViewMatrix, 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(va("%d", areaNum), areaCenter, 0.2f, colorGreen, playerViewMatrix, 1, USERCMD_MSEC);
 		gameRenderWorld->DebugBox(colorGreen, idBox(areaBounds), USERCMD_MSEC);
 	}
 
@@ -13185,13 +13219,13 @@ void idAI::ShowDebugInfo()
 	{
 		idMat3 playerViewMatrix(gameLocal.GetLocalPlayer()->viewAngles.ToMat3());
 
-		gameRenderWorld->DrawText(m_HandlingElevator ? "Elevator" : "---", physicsObj.GetOrigin(), 0.2f, m_HandlingElevator ? colorRed : colorGreen, playerViewMatrix, 1, USERCMD_MSEC);
+		gameRenderWorld->DebugText(m_HandlingElevator ? "Elevator" : "---", physicsObj.GetOrigin(), 0.2f, m_HandlingElevator ? colorRed : colorGreen, playerViewMatrix, 1, USERCMD_MSEC);
 	}
 
 	// grayman #3857 - show barking info
 	if (cv_ai_bark_show.GetBool() && (gameLocal.time <= m_barkEndTime) && ((physicsObj.GetOrigin() - gameLocal.GetLocalPlayer()->GetPhysics()->GetOrigin()).LengthFast() < 1000))
 	{
-		gameRenderWorld->DrawText(va("%s", m_barkName.c_str()), physicsObj.GetOrigin() + idVec3(0, 0, 90), 0.25f, colorWhite,
+		gameRenderWorld->DebugText(va("%s", m_barkName.c_str()), physicsObj.GetOrigin() + idVec3(0, 0, 90), 0.25f, colorWhite,
 			gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 16);
 	}
 
@@ -13199,7 +13233,7 @@ void idAI::ShowDebugInfo()
 	if (cv_ai_name_show.GetBool() && ((physicsObj.GetOrigin() - gameLocal.GetLocalPlayer()->GetPhysics()->GetOrigin()).LengthSqr() < Square(1000)))
 	{
 		idVec4 colour = colorWhite;
-		gameRenderWorld->DrawText(va("%s", GetName()), physicsObj.GetOrigin() + idVec3(0, 0, 50), 0.25f, colour,
+		gameRenderWorld->DebugText(va("%s", GetName()), physicsObj.GetOrigin() + idVec3(0, 0, 50), 0.25f, colour,
 			gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 16);
 	}
 }
@@ -13256,7 +13290,7 @@ void idAI::SetBlood(idEntity *marker)
 
 idEntity* idAI::GetBlood(void) const
 {
-	return m_bloodMarker;
+	return m_bloodMarker.GetEntity();
 }
 
 // grayman #2816 - remember who you killed, for barking and tactile alert events
@@ -13394,15 +13428,12 @@ void idAI::FallAsleep()
 
 	// Tels: Sleepers are blind
 	m_oldVisualAcuity = GetBaseAcuity("vis"); // grayman #3552
-	//m_oldVisualAcuity = GetAcuity("vis");
 	SetAcuity("vis", 0);
 
 	// Reduce hearing and tactile acuity by 50%
 	// TODO: use spawnargs
 	SetAcuity("aud", GetBaseAcuity("aud") * 0.5); // grayman #3552
 	SetAcuity("tact", GetBaseAcuity("tact") * 0.5); // grayman #3552
-	//SetAcuity("aud", GetAcuity("aud") * 0.5);
-	//SetAcuity("tact", GetAcuity("tact") * 0.5);
 }
 
 float idAI::StealthDamageMult()
@@ -13743,8 +13774,8 @@ bool idAI::PointObstructed(idVec3 p)
 	// if an AI is already there, and it's not you, ignore this spot
 
 	idBounds b = idBounds(idVec3(p.x-16.0f, p.y-16.0f, p.z), idVec3(p.x+16.0f, p.y+16.0f, p.z+60.0f));
-	idClipModel *clipModelList[MAX_GENTITIES];
-	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( b, MASK_MONSTERSOLID, clipModelList, MAX_GENTITIES );
+	idClip_ClipModelList clipModelList;
+	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( b, MASK_MONSTERSOLID, clipModelList );
 	bool obstructed = false;
 	for ( int i = 0 ; i < numListedClipModels ; i++ )
 	{

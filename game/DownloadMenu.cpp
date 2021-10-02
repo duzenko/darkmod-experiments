@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "precompiled.h"
 #pragma hdrstop
@@ -68,6 +68,23 @@ void CDownloadMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 				}
 				break;
 
+				case CMissionManager::MALFORMED:
+				{
+					gui->HandleNamedEvent("onAvailableMissionsRefreshed"); // hide progress dialog
+
+					// Issue a failure message
+					gameLocal.Printf("Server response is incorrect\n");
+
+					GuiMessage msg;
+					msg.title = common->Translate( "#str_02147" );	// Malformed response
+					msg.message = common->Translate( "#str_02138" );	// The server returned wrong information.\nPlease report to maintainers.
+					msg.type = GuiMessage::MSG_OK;
+					msg.okCmd = "close_msg_box";
+
+					gameLocal.AddMainMenuMessage(msg);
+				}
+				break;
+
 				case CMissionManager::SUCCESSFUL:
 				{
 					gui->HandleNamedEvent("onAvailableMissionsRefreshed"); // hide progress dialog
@@ -90,6 +107,7 @@ void CDownloadMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 
 			switch (status)
 			{
+				case CMissionManager::MALFORMED:
 				case CMissionManager::FAILED:
 				{
 					gui->HandleNamedEvent("onDownloadableMissionDetailsDownloadFailed"); // hide progress dialog
@@ -128,6 +146,7 @@ void CDownloadMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 
 			switch (status)
 			{
+				case CMissionManager::MALFORMED:
 				case CMissionManager::FAILED:
 				{
 					gui->HandleNamedEvent("onFailedToDownloadScreenshot");
@@ -152,6 +171,9 @@ void CDownloadMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 					int nextScreenNum = gui->GetStateInt("av_mission_next_screenshot_num");
 
 					UpdateNextScreenshotData(gui, nextScreenNum);
+
+					const char* sNext = gui->GetStateString("av_mission_next_screenshot");
+					DM_LOG(LC_MAINMENU, LT_INFO)LOGSTRING("Download Finished, Fading: %s.", sNext);
 
 					// Ready to fade
 					gui->HandleNamedEvent("onStartFadeToNextScreenshot");
@@ -228,11 +250,21 @@ void CDownloadMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 
 		UpdateGUI(gui);
 	}
+	// #4492(Obsttorte)
+	else if (cmd == "onselectallmissionsfordownload")
+	{
+		for (int i = 0; i < gameLocal.m_MissionManager->GetDownloadableMods().Num(); i++)
+		{
+			_selectedMods.AddUnique(i);
+		}
+		gui->SetStateBool("av_mission_details_visible", false);
+		UpdateGUI(gui);
+	}
 	else if (cmd == "ondeselectmissionfordownload")
 	{
 		int index = gui->GetStateInt("downloadSelectedList_sel_0", "-1");
 
-    if (index < 0) return;
+		if (index < 0) return;
 
 		if (gui->GetStateBool("mission_download_in_progress") == 1){//Cancel a download in progress
 			if (gameLocal.m_DownloadManager->GetDownload(_downloads[_selectedMods[index]].missionDownloadId)->GetStatus() == CDownload::/*DownloadStatus::*/SUCCESS) // grayman - make linux compiler happy
@@ -367,8 +399,10 @@ void CDownloadMenu::PerformScreenshotStep(idUserInterface* gui, int step)
 		{
 			// Load data necessary to fade into the GUI
 			UpdateNextScreenshotData(gui, nextScreenNum);
-			
-			// There is a local file, this means we already downloaded that screenshot
+
+			const char* sNext = gui->GetStateString("av_mission_next_screenshot");
+			DM_LOG(LC_MAINMENU, LT_INFO)LOGSTRING("PerformScreenshotStep: %s.", sNext);
+
 			gui->HandleNamedEvent("onStartFadeToNextScreenshot");
 		}
 	}
@@ -406,6 +440,7 @@ void CDownloadMenu::StartDownload(idUserInterface* gui)
 		}
 
 		CDownloadPtr download(new CDownload(mod.missionUrls, missionPath, true));
+		download->VerifySha256Checksum(mod.missionSha256);
         // gnartsch: In case only the language pack needs to be downloaded, do not add the mission itself to the download list.
 		//           In that case we did not add any urls for the mission itself anyway.
         int id = -1;
@@ -431,6 +466,7 @@ void CDownloadMenu::StartDownload(idUserInterface* gui)
 			DM_LOG(LC_MAINMENU, LT_INFO)LOGSTRING("Will download the l10n pack to %s.", l10nPackPath.c_str());
 
 			CDownloadPtr l10nDownload(new CDownload(mod.l10nPackUrls, l10nPackPath, true));
+			l10nDownload->VerifySha256Checksum(mod.l10nPackSha256);
 
 			l10nId = gameLocal.m_DownloadManager->AddDownload(l10nDownload);
 
@@ -612,6 +648,8 @@ idStr CDownloadMenu::GetMissionDownloadProgressString(int modIndex)
 		return common->Translate( "#str_02180" );	// "queued "
 	case CDownload::FAILED:
 		return common->Translate( "#str_02181" );	// "failed "
+	case CDownload::MALFORMED:
+		return common->Translate( "#str_02518" );	// "malformed "
 	case CDownload::IN_PROGRESS:
 	{
 		double totalFraction = download->GetProgressFraction(); 
@@ -642,8 +680,9 @@ void CDownloadMenu::ShowDownloadResult(idUserInterface* gui)
 
 	int successfulDownloads = 0;
 	int failedDownloads = 0;
-
+	int malformedDownloads = 0;
 	int canceledDownloads = 0; //Agent Jones
+	bool updateCurrentFm = false;
 
 	const DownloadableModList& mods = gameLocal.m_MissionManager->GetDownloadableMods();
 
@@ -664,6 +703,9 @@ void CDownloadMenu::ShowDownloadResult(idUserInterface* gui)
 			break;
 		case CDownload::FAILED:
 			failedDownloads++;
+			break;
+		case CDownload::MALFORMED:
+			malformedDownloads++;
 			break;
 		case CDownload::CANCELED:
 			canceledDownloads++;//Agent Jones Test
@@ -713,14 +755,25 @@ void CDownloadMenu::ShowDownloadResult(idUserInterface* gui)
 			missionInfo->SetKeyValue("downloaded_version", idStr(mod.version).c_str());
 			// gnartsch: Mark l10n pack as present, so that the mission may disappear from the list of 'Available Downloads'
 			missionInfo->isL10NpackInstalled = l10nPackDownloaded;
+
+			// stgatilov #5661: check if we have downloaded update to the currently installed FM
+			if (mod.modName == gameLocal.m_MissionManager->GetCurrentModName())
+			{
+				updateCurrentFm = true;
+			}
 		}
 		break;
 		};
 	}
 
+	// stgatilov: save missions.tdminfo right now!
+	// otherwise the information about downloaded version will be lost
+	// if the game crashes before proper exit/restart
+	gameLocal.m_MissionManager->SaveDatabase();
+
 	gameLocal.Printf("Successful downloads: %d\nFailed downloads: %d\n", successfulDownloads, failedDownloads);
-		// Display the popup box
-		GuiMessage msg;
+	// Display the popup box
+	GuiMessage msg;
 	msg.type = GuiMessage::MSG_OK;
 	msg.okCmd = "close_msg_box;onDownloadCompleteConfirm";
 	msg.title = common->Translate("#str_02142"); // "Mission Download Result"
@@ -733,17 +786,37 @@ void CDownloadMenu::ShowDownloadResult(idUserInterface* gui)
 			GetPlural(successfulDownloads, common->Translate("#str_02144"), common->Translate("#str_02145")),
 			successfulDownloads);
 	}
-
 	if (failedDownloads > 0)
 	{
 		// "\n%d mission(s) couldn't be downloaded. Please check your disk space (or maybe some file is write protected) and try again."
 		msg.message += va(common->Translate("#str_02146"),
 			failedDownloads);
 	}
-	if (failedDownloads > 0 || successfulDownloads > 0)//Agent Jones Test
+	if (malformedDownloads > 0)
+	{
+		// "\n%d mission(s) are wrong on mirrors.\nPlease report to maintainers."
+		msg.message += va(common->Translate("#str_02693"), malformedDownloads);
+	}
+
+	if (failedDownloads > 0 || successfulDownloads > 0 || malformedDownloads > 0)
+	{
 		gameLocal.AddMainMenuMessage(msg);
-	else{
-		//AJ test
+
+		if (updateCurrentFm)
+		{
+			GuiMessage msgRestart;
+			// "Current mission was updated.\nGame restart is required!"
+			msgRestart.message = va(common->Translate("#str_menu_updatedcurrentfm"));
+			msgRestart.type = GuiMessage::MSG_CUSTOM;
+			msgRestart.positiveCmd = "close_msg_box;darkmodRestart";
+			msgRestart.negativeCmd = "close_msg_box;onDownloadCompleteConfirm";
+			msgRestart.positiveLabel = common->Translate("#str_menu_restart");			//"Restart";
+			msgRestart.negativeLabel = common->Translate("#str_menu_later");			//"Later"
+			gameLocal.AddMainMenuMessage(msgRestart);
+		}
+	}
+	else
+	{
 		UpdateGUI(gui);
 	}
 

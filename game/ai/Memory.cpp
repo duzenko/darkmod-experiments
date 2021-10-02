@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -39,6 +39,7 @@ Memory::Memory(idAI* owningAI) :
 	currentlyHeadTurning(false),
 	headTurnEndTime(0),
 	idlePosition(idMath::INFINITY, idMath::INFINITY, idMath::INFINITY),
+	returnSitPosition(idMath::INFINITY, idMath::INFINITY, idMath::INFINITY), // grayman #3989
 	idleYaw(0),
 	playIdleAnimations(true),
 	enemiesHaveBeenSeen(false),
@@ -114,6 +115,10 @@ Memory::Memory(idAI* owningAI) :
 	blockedDoorCount(0)		// grayman #3523; grayman #4830
 {
 	attacker = NULL; // grayman #3679 - who attacked me
+
+	lastPath = NULL;	// grayman #5164
+	currentPath = NULL;	// grayman #5164
+	nextPath = NULL;	// grayman #5164
 }
 
 // Save/Restore routines
@@ -137,6 +142,7 @@ void Memory::Save(idSaveGame* savefile) const
 	savefile->WriteBool(currentlyBarking); // grayman #3182
 	savefile->WriteInt(headTurnEndTime);
 	savefile->WriteVec3(idlePosition);
+	savefile->WriteVec3(returnSitPosition); // grayman #3989
 	savefile->WriteFloat(idleYaw);
 	savefile->WriteBool(playIdleAnimations);
 	savefile->WriteBool(enemiesHaveBeenSeen);
@@ -277,6 +283,7 @@ void Memory::Restore(idRestoreGame* savefile)
 	savefile->ReadBool(currentlyBarking); // grayman #3182
 	savefile->ReadInt(headTurnEndTime);
 	savefile->ReadVec3(idlePosition);
+	savefile->ReadVec3(returnSitPosition); // grayman #3989
 	savefile->ReadFloat(idleYaw);
 	savefile->ReadBool(playIdleAnimations);
 	savefile->ReadBool(enemiesHaveBeenSeen);

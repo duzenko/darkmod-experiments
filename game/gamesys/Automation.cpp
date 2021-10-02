@@ -1,20 +1,21 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
 #include "Automation_local.h"
+#include "../Missions/MissionManager.h"
 
 
 #ifdef _DEBUG
@@ -191,8 +192,9 @@ bool GameplayControlPlan::GetUsercmd(float nowTime, usercmd_t &cmd) {
 }
 
 int GameplayControlPlan::GetTimeNow() const {
+	static uint64_t astroTimeStart = Sys_GetTimeMicroseconds();
 	if (timeMode == tmAstronomical)
-		return Sys_GetTimeMicroseconds() / 1000;
+		return (Sys_GetTimeMicroseconds() - astroTimeStart) / 1000;
 	if (timeMode == tmGamePhysics)
 		return gameLocal.time;
 	assert(0);
@@ -299,6 +301,49 @@ void Automation::ParseAction(ParseIn &parseIn) {
 		return;
 	}
 
+	if (token == "guiscript") {
+		bool ok = false;
+		char name[256];
+		int scriptNum;
+		if (sscanf(rest, "%s%d", name, &scriptNum) == 2)
+			ok = session->RunGuiScript(name, scriptNum);
+		WriteResponse(parseIn.seqno, (ok ? "done" : "error"));
+	}
+
+	if (token == "installfm") {
+		int modsNum = gameLocal.m_MissionManager->GetNumMods();
+
+		char name[256];
+		int argsNum = sscanf(rest, "%s", name);
+		if (argsNum <= 0) {
+			idStr modList;
+			for (int i = 0; i < modsNum; i++) {
+				modList += gameLocal.m_MissionManager->GetModInfo(i)->modName;
+				modList += "\n";
+			}
+			WriteResponse(parseIn.seqno, modList.c_str());
+		}
+		else {
+			int idx = -1;
+			for (int i = 0; i < modsNum; i++)
+				if (gameLocal.m_MissionManager->GetModInfo(i)->modName == idStr(name))
+					idx = i;
+			bool ok = false;
+			if (idx >= 0) {
+				auto res = gameLocal.m_MissionManager->InstallMod(idx);
+				ok = (res == CMissionManager::INSTALLED_OK);
+				if (ok)
+					cmdSystem->SetupReloadEngine(idCmdArgs());
+			}
+			else if (idStr::Cmp(name, "0") == 0) {
+				gameLocal.m_MissionManager->UninstallMod();
+				ok = true;
+				cmdSystem->SetupReloadEngine(idCmdArgs());
+			}
+			WriteResponse(parseIn.seqno, (ok ? "done" : "error"));
+		}
+	}
+
 	if (token == "sysctrl") {
 		int key, value;
 		if (sscanf(rest, "%d%d", &key, &value) == 2)
@@ -399,6 +444,16 @@ void Automation::ParseAction(ParseIn &parseIn) {
 
 		return;
 	}
+
+	if (token == "reloadmap-diff") {
+		//on-the-fly HotReload from DarkRadiant
+		int begMarker = common->GetConsoleMarker();
+		gameLocal.HotReloadMap(rest);
+		int endMarker = common->GetConsoleMarker();
+		idStr consoleUpdates = common->GetConsoleContents(begMarker, endMarker);
+		WriteResponse(parseIn.seqno, consoleUpdates.c_str());
+		return;
+	}
 }
 
 void Automation::WriteGameControlResponse(const char *message) {
@@ -413,10 +468,70 @@ void Automation::ParseQuery(ParseIn &parseIn) {
 	parseIn.lexer.ExpectTokenString("query");
 	parseIn.lexer.ExpectTokenType(TT_STRING, 0, &token);
 
+	parseIn.lexer.ExpectTokenString("content");
+	parseIn.lexer.CheckTokenString(":");
+
+	int pos = parseIn.lexer.GetFileOffset();
+	const char *rest = strchr(parseIn.message + pos, '\n');
+
 	if (token == "fps") {
 		char buff[256];
 		sprintf(buff, "%d\n", showFPS_currentValue);
 		WriteResponse(parseIn.seqno, buff);
+	}
+
+	if (token == "console") {
+		int arg0, arg1;
+		int argsNum = sscanf(rest, "%d%d", &arg0, &arg1);
+		int consoleEnd = common->GetConsoleMarker();
+
+		if (argsNum <= 0) {
+			//return size of console in chars
+			char buff[256];
+			sprintf(buff, "%d\n", consoleEnd);
+			WriteResponse(parseIn.seqno, buff);
+		}
+		else if (argsNum == 2) {
+			auto decodePos = [consoleEnd](int x) -> int {	//python-style indexing
+				x = (x < 0 ? consoleEnd : 0) + x;
+				return idMath::ClampInt(0, consoleEnd, x);
+			};
+			//fetch console chars
+			int beg = decodePos(arg0);
+			int end = decodePos(arg1);
+			if (end < beg) end = beg;
+			idStr consoleUpdates = common->GetConsoleContents(beg, end);
+			WriteResponse(parseIn.seqno, consoleUpdates.c_str());
+		}
+		else 
+			WriteResponse(parseIn.seqno, "");
+	}
+
+	if (token == "status") {
+		CModInfoPtr mod = gameLocal.m_MissionManager->GetCurrentModInfo();
+		const char *modName = (mod ? mod->modName.c_str() : "0");
+		const char *mapName = gameLocal.GetMapName();
+		if (idStr::Cmpn(mapName, "maps/", 5) == 0)
+			mapName = mapName + 5;
+		const char *guiActiveName = "";
+		if (idUserInterface *guiActive = session->GetGui(idSession::gtActive)) {
+			if (guiActive == session->GetGui(idSession::gtMainMenu))
+				guiActiveName = "mainmenu";
+			else if (guiActive == session->GetGui(idSession::gtLoading))
+				guiActiveName = "loading";
+			else
+				guiActiveName = "?unknown?";
+		}
+
+		idStr text;
+		char buff[256];
+		sprintf(buff, "currentfm %s\n", modName);
+		text += buff;
+		sprintf(buff, "mapname %s\n", mapName);
+		text += buff;
+		sprintf(buff, "guiactive %s\n", guiActiveName);
+		text += buff;
+		WriteResponse(parseIn.seqno, text.c_str());
 	}
 }
 

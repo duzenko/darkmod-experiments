@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -137,11 +137,6 @@ void idEntityFx::Setup( const char *fx ) {
 
 	if ( started >= 0 ) {
 		return;					// already started
-	}
-
-	// early during MP Spawn() with no information. wait till we ReadFromSnapshot for more
-	if ( gameLocal.isClient && ( !fx || fx[0] == '\0' ) ) {
-		return;
 	}
 
 	systemName = fx;
@@ -453,25 +448,18 @@ void idEntityFx::Run( int time ) {
 			case FX_SHAKE: {
 				if ( !useAction->shakeStarted ) {
 					idDict args;
-					args.Clear();
 					args.SetFloat( "kick_time", fxaction.shakeTime );
 					args.SetFloat( "kick_amplitude", fxaction.shakeAmplitude );
 					for ( j = 0; j < gameLocal.numClients; j++ ) {
 						idPlayer *player = gameLocal.GetClientByNum( j );
 						if ( player && ( player->GetPhysics()->GetOrigin() - GetPhysics()->GetOrigin() ).LengthSqr() < Square( fxaction.shakeDistance ) ) {
-							if ( !gameLocal.isMultiplayer || !fxaction.shakeIgnoreMaster || GetBindMaster() != player ) {
+							{
 								player->playerView.DamageImpulse( fxaction.offset, &args );
 							}
 						}
 					}
 					if ( fxaction.shakeImpulse != 0.0f && fxaction.shakeDistance != 0.0f ) {
 						idEntity *ignore_ent = NULL;
-						if ( gameLocal.isMultiplayer ) {
-							ignore_ent = this;
-							if ( fxaction.shakeIgnoreMaster ) {
-								ignore_ent = GetBindMaster();
-							}
-						}
 						// lookup the ent we are bound to?
 						gameLocal.RadiusPush( GetPhysics()->GetOrigin(), fxaction.shakeDistance, fxaction.shakeImpulse, this, ignore_ent, 1.0f, true );
 					}
@@ -505,11 +493,6 @@ void idEntityFx::Run( int time ) {
 				break;
 			}
 			case FX_LAUNCH: {
-				if ( gameLocal.isClient ) {
-					// client never spawns entities outside of ClientReadSnapshot
-					useAction->launched = true;
-					break;
-				}
 				if ( !useAction->launched ) {
 					useAction->launched = true;
 					projectile = NULL;
@@ -541,7 +524,6 @@ idEntityFx::idEntityFx() {
 	fxEffect = NULL;
 	started = -1;
 	nextTriggerTime = -1;
-	fl.networkSync = true;
 }
 
 /*
@@ -712,9 +694,6 @@ idEntityFx::WriteToSnapshot
 void idEntityFx::WriteToSnapshot( idBitMsgDelta &msg ) const {
 	GetPhysics()->WriteToSnapshot( msg );
 	WriteBindToSnapshot( msg );
-#ifdef MULTIPLAYER
-	msg.WriteLong( (fxEffect != NULL) ? gameLocal.ServerRemapDecl( -1, DECL_FX, fxEffect->Index() ) : -1 );
-#endif
 	msg.WriteLong( started );
 }
 
@@ -726,31 +705,7 @@ idEntityFx::ReadFromSnapshot
 void idEntityFx::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 	GetPhysics()->ReadFromSnapshot( msg );
 	ReadBindFromSnapshot( msg );
-#ifdef MULTIPLAYER
-	int fx_index, start_time, max_lapse;
-
-	fx_index = gameLocal.ClientRemapDecl( DECL_FX, msg.ReadLong() );
-	start_time =
-#endif
 	msg.ReadLong();
-
-#ifdef MULTIPLAYER
-	if (fx_index != -1 && start_time > 0 && !fxEffect && started < 0) {
-		spawnArgs.GetInt( "effect_lapse", "1000", max_lapse );
-		if ( gameLocal.time - start_time > max_lapse ) {
-			// too late, skip the effect completely
-			started = 0;
-			return;
-		}
-		const idDeclFX *fx = static_cast<const idDeclFX *>( declManager->DeclByIndex( DECL_FX, fx_index ) );
-		if ( !fx ) {
-			gameLocal.Error( "FX at index %d not found", fx_index );
-		}
-		fxEffect = fx;
-		Setup( fx->GetName() );
-		Start( start_time );
-	}
-#endif
 }
 
 /*

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MATH_MATRIX_H__
@@ -119,12 +119,12 @@ ID_INLINE idMat2::idMat2( const float src[ 2 ][ 2 ] ) {
 	memcpy( mat, src, 2 * 2 * sizeof( float ) );
 }
 
-ID_INLINE const idVec2 &idMat2::operator[]( int index ) const {
+ID_FORCE_INLINE const idVec2 &idMat2::operator[]( int index ) const {
 	//assert( ( index >= 0 ) && ( index < 2 ) );
 	return mat[ index ];
 }
 
-ID_INLINE idVec2 &idMat2::operator[]( int index ) {
+ID_FORCE_INLINE idVec2 &idMat2::operator[]( int index ) {
 	//assert( ( index >= 0 ) && ( index < 2 ) );
 	return mat[ index ];
 }
@@ -313,15 +313,15 @@ ID_INLINE idMat2 idMat2::InverseFast( void ) const {
 	return invMat;
 }
 
-ID_INLINE int idMat2::GetDimension( void ) const {
+ID_FORCE_INLINE int idMat2::GetDimension( void ) const {
 	return 4;
 }
 
-ID_INLINE const float *idMat2::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idMat2::ToFloatPtr( void ) const {
 	return mat[0].ToFloatPtr();
 }
 
-ID_INLINE float *idMat2::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idMat2::ToFloatPtr( void ) {
 	return mat[0].ToFloatPtr();
 }
 
@@ -368,6 +368,7 @@ public:
 	bool			IsIdentity( const float epsilon = MATRIX_EPSILON ) const;
 	bool			IsSymmetric( const float epsilon = MATRIX_EPSILON ) const;
 	bool			IsDiagonal( const float epsilon = MATRIX_EPSILON ) const;
+	bool			IsOrthogonal( const float epsilon = MATRIX_EPSILON ) const;
 	bool			IsRotated( void ) const;
 
 	void			ProjectVector( const idVec3 &src, idVec3 &dst ) const;
@@ -437,12 +438,12 @@ ID_INLINE idMat3::idMat3( const float src[ 3 ][ 3 ] ) {
 	memcpy( mat, src, 3 * 3 * sizeof( float ) );
 }
 
-ID_INLINE const idVec3 &idMat3::operator[]( int index ) const {
+ID_FORCE_INLINE const idVec3 &idMat3::operator[]( int index ) const {
 	//assert( ( index >= 0 ) && ( index < 3 ) );
 	return mat[ index ];
 }
 
-ID_INLINE idVec3 &idMat3::operator[]( int index ) {
+ID_FORCE_INLINE idVec3 &idMat3::operator[]( int index ) {
 	//assert( ( index >= 0 ) && ( index < 3 ) );
 	return mat[ index ];
 }
@@ -627,6 +628,11 @@ ID_INLINE bool idMat3::IsDiagonal( const float epsilon ) const {
 	return true;
 }
 
+ID_INLINE bool idMat3::IsOrthogonal( const float epsilon ) const {
+	idMat3 gram = TransposeMultiply(*this);
+	return gram.IsIdentity(epsilon);
+}
+
 ID_INLINE bool idMat3::IsRotated( void ) const {
 	return !Compare( mat3_identity );
 }
@@ -760,15 +766,15 @@ ID_INLINE idMat3 SkewSymmetric( idVec3 const &src ) {
 	return idMat3( 0.0f, -src.z,  src.y, src.z,   0.0f, -src.x, -src.y,  src.x,   0.0f );
 }
 
-ID_INLINE int idMat3::GetDimension( void ) const {
+ID_FORCE_INLINE int idMat3::GetDimension( void ) const {
 	return 9;
 }
 
-ID_INLINE const float *idMat3::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idMat3::ToFloatPtr( void ) const {
 	return mat[0].ToFloatPtr();
 }
 
-ID_INLINE float *idMat3::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idMat3::ToFloatPtr( void ) {
 	return mat[0].ToFloatPtr();
 }
 
@@ -892,12 +898,12 @@ ID_INLINE idMat4::idMat4( const float src[ 4 ][ 4 ] ) {
 	memcpy( mat, src, 4 * 4 * sizeof( float ) );
 }
 
-ID_INLINE const idVec4 &idMat4::operator[]( int index ) const {
+ID_FORCE_INLINE const idVec4 &idMat4::operator[]( int index ) const {
 	//assert( ( index >= 0 ) && ( index < 4 ) );
 	return mat[ index ];
 }
 
-ID_INLINE idVec4 &idMat4::operator[]( int index ) {
+ID_FORCE_INLINE idVec4 &idMat4::operator[]( int index ) {
 	//assert( ( index >= 0 ) && ( index < 4 ) );
 	return mat[ index ];
 }
@@ -1160,15 +1166,15 @@ ID_INLINE idMat4 idMat3::ToMat4( void ) const {
 					0.0f,		0.0f,		0.0f,		1.0f );
 }
 
-ID_INLINE int idMat4::GetDimension( void ) const {
+ID_FORCE_INLINE int idMat4::GetDimension( void ) const {
 	return 16;
 }
 
-ID_INLINE const float *idMat4::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idMat4::ToFloatPtr( void ) const {
 	return mat[0].ToFloatPtr();
 }
 
-ID_INLINE float *idMat4::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idMat4::ToFloatPtr( void ) {
 	return mat[0].ToFloatPtr();
 }
 
@@ -1250,12 +1256,12 @@ ID_INLINE idMat5::idMat5( const idVec5 &v0, const idVec5 &v1, const idVec5 &v2, 
 	mat[4] = v4;
 }
 
-ID_INLINE const idVec5 &idMat5::operator[]( int index ) const {
+ID_FORCE_INLINE const idVec5 &idMat5::operator[]( int index ) const {
 	//assert( ( index >= 0 ) && ( index < 5 ) );
 	return mat[ index ];
 }
 
-ID_INLINE idVec5 &idMat5::operator[]( int index ) {
+ID_FORCE_INLINE idVec5 &idMat5::operator[]( int index ) {
 	//assert( ( index >= 0 ) && ( index < 5 ) );
 	return mat[ index ];
 }
@@ -1473,11 +1479,11 @@ ID_INLINE int idMat5::GetDimension( void ) const {
 	return 25;
 }
 
-ID_INLINE const float *idMat5::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idMat5::ToFloatPtr( void ) const {
 	return mat[0].ToFloatPtr();
 }
 
-ID_INLINE float *idMat5::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idMat5::ToFloatPtr( void ) {
 	return mat[0].ToFloatPtr();
 }
 
@@ -1571,12 +1577,12 @@ ID_INLINE idMat6::idMat6( const float src[ 6 ][ 6 ] ) {
 	memcpy( mat, src, 6 * 6 * sizeof( float ) );
 }
 
-ID_INLINE const idVec6 &idMat6::operator[]( int index ) const {
+ID_FORCE_INLINE const idVec6 &idMat6::operator[]( int index ) const {
 	//assert( ( index >= 0 ) && ( index < 6 ) );
 	return mat[ index ];
 }
 
-ID_INLINE idVec6 &idMat6::operator[]( int index ) {
+ID_FORCE_INLINE idVec6 &idMat6::operator[]( int index ) {
 	//assert( ( index >= 0 ) && ( index < 6 ) );
 	return mat[ index ];
 }
@@ -1808,15 +1814,15 @@ ID_INLINE idMat6 idMat6::InverseFast( void ) const {
 	return invMat;
 }
 
-ID_INLINE int idMat6::GetDimension( void ) const {
+ID_FORCE_INLINE int idMat6::GetDimension( void ) const {
 	return 36;
 }
 
-ID_INLINE const float *idMat6::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idMat6::ToFloatPtr( void ) const {
 	return mat[0].ToFloatPtr();
 }
 
-ID_INLINE float *idMat6::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idMat6::ToFloatPtr( void ) {
 	return mat[0].ToFloatPtr();
 }
 

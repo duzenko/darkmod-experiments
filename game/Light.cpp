@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -86,6 +86,9 @@ CLASS_DECLARATION( idEntity, idLight )
 	EVENT( EV_Light_GetShader,		idLight::Event_GetShader )		// SteveL  #3765
 END_CLASS
 
+const idStrList areaLockOptions {
+	"origin", "center"
+}; // not sure how to make it work with char*[]  
 
 /*
 ================
@@ -179,8 +182,13 @@ void idGameEdit::ParseSpawnArgsToRenderLight( const idDict *args, renderLight_t 
 	args->GetBool( "noshadows", "0", renderLight->noShadows );
 	args->GetBool( "nospecular", "0", renderLight->noSpecular );
 	args->GetBool( "parallel", "0", renderLight->parallel );
+	// stgatilov #5121: parallel light starting in all sky areas
+	args->GetBool( "parallelSky", "0", renderLight->parallelSky );
+	if (renderLight->parallelSky)
+		renderLight->parallel = true;
 
 	args->GetBool( "noFogBoundary", "0", renderLight->noFogBoundary ); // Stops fogs drawing and fogging their bounding boxes -- SteveL #3664
+	args->GetInt( "spectrum", "0", renderLight->spectrum );
 
 	args->GetString( "texture", "lights/squarelight1", &texture );
 	// allow this to be NULL
@@ -190,6 +198,10 @@ void idGameEdit::ParseSpawnArgsToRenderLight( const idDict *args, renderLight_t 
 	{
 		renderLight->suppressLightInViewID = VID_LIGHTGEM;
 	}
+
+	const char* areaLock;
+	if (args->GetString("areaLock", "", &areaLock))
+		renderLight->areaLock = (renderEntity_s::areaLock_t) (areaLockOptions.FindIndex(areaLock) + 1);
 }
 
 /*
@@ -201,14 +213,14 @@ void idLight::UpdateChangeableSpawnArgs( const idDict *source ) {
 
 	idEntity::UpdateChangeableSpawnArgs( source );
 
-	if ( source ) {
+	/*if ( source ) {
 		source->Print();
 	}
 	FreeSoundEmitter( true );
 	gameEdit->ParseSpawnArgsToRefSound( source ? source : &spawnArgs, &refSound );
 	if ( refSound.shader && !refSound.waitfortrigger ) {
 		StartSoundShader( refSound.shader, SND_CHANNEL_ANY, 0, false, NULL );
-	}
+	}*/
 
 	gameEdit->ParseSpawnArgsToRenderLight( source ? source : &spawnArgs, &renderLight );
 
@@ -251,8 +263,6 @@ idLight::idLight()
 	fadeEnd				= 0;
 	soundWasPlaying		= false;
 	m_MaxLightRadius	= 0.0f;
-	m_MaterialName = NULL;
-	m_LightMaterial		= NULL;
 	m_BlendlightTexture = NULL; // SteveL #3752
 
 	/*!
@@ -444,12 +454,6 @@ void idLight::Restore( idRestoreGame *savefile ) {
 	lightDefHandle = -1;
 
 	SetLightLevel();
-
-	m_MaterialName = NULL;
-	spawnArgs.GetString( "texture", "lights/squarelight1", &m_MaterialName);
-
-	// Re-acquire light material, now that the material name is known
-	m_LightMaterial = g_Global.GetMaterial(m_MaterialName);
 }
 
 /*
@@ -463,6 +467,8 @@ void idLight::Spawn( void )
 
 	// do the parsing the same way dmap and the editor do
 	gameEdit->ParseSpawnArgsToRenderLight( &spawnArgs, &renderLight );
+
+	renderLight.entityNum = entityNumber;
 
 	// we need the origin and axis relative to the physics origin/axis
 	localLightOrigin = ( renderLight.origin - GetPhysics()->GetOrigin() ) * GetPhysics()->GetAxis().Transpose();
@@ -543,13 +549,6 @@ void idLight::Spawn( void )
 		m_MaxLightRadius = max.Length();
 	}
 	DM_LOG(LC_LIGHT, LT_DEBUG)LOGSTRING("this: %08lX [%s] MaxLightRadius: %f\r", this, name.c_str(), m_MaxLightRadius);
-
-	m_MaterialName = NULL;
-	spawnArgs.GetString( "texture", "lights/squarelight1", &m_MaterialName);
-	if ( m_MaterialName != NULL )
-	{
-		DM_LOG(LC_LIGHT, LT_DEBUG)LOGSTRING("Light has a texture (m_MaterialName): %s\r", m_MaterialName);
-	}
 
 	idImage *pImage;
 	if ( ( renderLight.shader != NULL ) && ( (pImage = renderLight.shader->LightFalloffImage()) != NULL ) )
@@ -774,6 +773,17 @@ void idLight::GetRadius( idVec3 &out ) const {
     out.y = renderLight.lightRadius[1];
     out.z = renderLight.lightRadius[2];
 }
+
+void idLight::Hide( void ) {
+	idEntity::Hide();
+	Off();
+}
+
+void idLight::Show( void ) {
+	idEntity::Show();
+	On();
+}
+
 
 /*
 ================
@@ -1004,20 +1014,7 @@ idLight::BecomeBroken
 ================
 */
 void idLight::BecomeBroken( idEntity *activator ) {
-	const char *damageDefName;
-
 	idEntity::BecomeBroken ( activator );
-
-	if ( gameLocal.isServer ) {
-
-		ServerSendEvent( EVENT_BECOMEBROKEN, NULL, true, -1 );
-
-		if ( spawnArgs.GetString( "def_damage", "", &damageDefName ) ) {
-			idVec3 origin = renderEntity.origin + renderEntity.bounds.GetCenter() * renderEntity.axis;
-			gameLocal.RadiusDamage( origin, activator, activator, this, this, damageDefName );
-		}
-
-	}
 
 	ActivateTargets( activator );
 
@@ -1261,8 +1258,7 @@ void idLight::Think( void ) {
 		}
 	}
 	
-	RunPhysics();
-	Present();
+	idEntity::Think();
 }
 
 /*
@@ -1790,6 +1786,10 @@ float idLight::GetDistanceColor(float fDistance, float fx, float fy)
 	const unsigned char *img = NULL;
 	const unsigned char *fot = NULL;
 
+	//stgatilov #5665: this is dead code since earlier than 2.00 
+	//in reality, the pointers were always NULL here
+	//see https://forums.thedarkmod.com/index.php?/topic/21002-devil-and-images-infrastructure/&do=findComment&comment=462706
+#if 0
 	if (m_LightMaterial == NULL)
 	{
 		if ( (m_LightMaterial = g_Global.GetMaterial(m_MaterialName)) != NULL )
@@ -1804,6 +1804,7 @@ float idLight::GetDistanceColor(float fDistance, float fx, float fy)
 		fot = m_LightMaterial->GetFallOffTexture(fw, fh, fbpp);
 		img = m_LightMaterial->GetImage(iw, ih, ibpp);
 	}
+#endif
 
 	// baseColor gives the current color (intensity)
 
@@ -1862,14 +1863,9 @@ float idLight::GetDistanceColor(float fDistance, float fx, float fy)
 
 bool idLight::CastsShadow(void)
 {
-	if(m_LightMaterial == NULL)
-		m_LightMaterial = g_Global.GetMaterial(m_MaterialName);
-
-	if(m_LightMaterial != NULL)
-	{
-		if(m_LightMaterial->m_AmbientLight == true)
-			return false;
-	}
+	//stgatilov #5665: use idMaterial to check for ambient light
+	if (renderLight.shader && renderLight.shader->IsAmbientLight())
+		return false;
 
 	return !renderLight.noShadows; 
 }
@@ -1989,7 +1985,7 @@ void idLight::AddSwitch(idEntity* newSwitch)
 {
 	idEntityPtr<idEntity> switchPtr;
 	switchPtr = newSwitch;
-	switchList.Append(switchPtr);
+	switchList.AddUnique(switchPtr);
 }
 
 // grayman #2603 - If there are switches, return the closest one to the calling user

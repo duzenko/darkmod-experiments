@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __GAME_LIGHT_H__
@@ -46,6 +46,8 @@ public:
 	virtual void	FreeLightDef( void );
 	virtual bool	GetPhysicsToSoundTransform( idVec3 &origin, idMat3 &axis );
 	void			Present( void );
+	virtual void	Hide( void );
+	virtual void	Show( void );
 
 	void			SaveState( idDict *args );
 	virtual void	SetColor( const float red, const float green, const float blue );
@@ -335,20 +337,6 @@ private:
 	 */
 
 	void			Event_SetStartedOff();
-
-	/**
-	 * Texturename for the falloff image
-	 */
-	const char		*m_MaterialName;
-
-	/**
-	 * Pointer to the material that is used for this light. This pointer
-	 * is only loaded once. If the material needs to change dynamically
-	 * for a light, the m_FalloffImage must be set to the new material name
-	 * and m_LightMaterial must be set to NULL, to force the reload, next
-	 * time the light should use a new material.
-	 */
-	CLightMaterial	*m_LightMaterial;
 
 	/**
 	* SteveL #3752: Allow blend lights to be toggled by remembering the material for

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -32,6 +32,7 @@ idWaveFile::idWaveFile( void ) {
 	mdwSize		= 0;
 	mseekBase	= 0;
 	mbIsReadingFromMemory = false;
+	mfileTime = -1;
 	mpbData		= NULL;
 	ogg			= NULL;
 	isOgg		= false;
@@ -57,6 +58,7 @@ idWaveFile::~idWaveFile( void ) {
 //-----------------------------------------------------------------------------
 int idWaveFile::Open( const char* strFileName, waveformatex_t* pwfx ) {
 
+	mfileTime = -1;
 	mbIsReadingFromMemory = false;
 
 	mpbData     = NULL;
@@ -70,7 +72,7 @@ int idWaveFile::Open( const char* strFileName, waveformatex_t* pwfx ) {
 
 	// note: used to only check for .wav when making a build
 	name.SetFileExtension( ".ogg" );
-	if ( fileSystem->ReadFile( name, NULL, NULL ) != -1 ) {
+	if ( mhmmio = fileSystem->OpenFileRead( name ) ) {
 		return OpenOGG( name, pwfx );
 	}
 
@@ -123,6 +125,7 @@ int idWaveFile::OpenFromMemory( short* pbData, int ulDataSize, waveformatextensi
 	mdwSize		= ulDataSize / sizeof( short );
 	mMemSize	= ulDataSize;
 	mbIsReadingFromMemory = true;
+	mfileTime = -1;
 
 	return 0;
 }

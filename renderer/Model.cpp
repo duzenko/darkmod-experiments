@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -75,7 +75,7 @@ void idRenderModelStatic::Print() const {
 	for ( int i = 0 ; i < NumSurfaces() ; i++ ) {
 		const modelSurface_t *surf = Surface( i );
 		const srfTriangles_t *tri = surf->geometry;
-		const idMaterial *material = surf->shader;
+		const idMaterial *material = surf->material;
 		
 		if ( !tri ) {
 			common->Printf( "%2i: %s, NULL surface geometry\n", i, material->GetName() );
@@ -224,7 +224,7 @@ void idRenderModelStatic::MakeDefaultModel() {
 
 	srfTriangles_t *tri = R_AllocStaticTriSurf();
 
-	surf.shader = tr.defaultMaterial;
+	surf.material = tr.defaultMaterial;
 	surf.geometry = tri;
 
 	R_AllocStaticTriSurfVerts( tri, 24 );
@@ -295,6 +295,10 @@ void idRenderModelStatic::InitFromFile( const char *fileName ) {
 	} else if ( extension.Icmp( "ma" ) == 0 ) {
 		loaded		= LoadMA( name );
 		reloadable	= true;
+	} else if ( extension.Icmp( "proxy" ) == 0 ) {
+		//stgatilov #4970: proxy models substitute rotation hack
+		loaded		= LoadProxy( name );
+		reloadable  = true;
 	} else {
 		common->Warning( "idRenderModelStatic::InitFromFile: unknown type for model: \'%s\'", name.c_str() );
 		loaded		= false;
@@ -616,11 +620,11 @@ void idRenderModelStatic::FinishSurfaces() {
 	for ( i = 0 ; i < numOriginalSurfaces ; i++ ) {
 		const modelSurface_t	*surf = &surfaces[i];
 
-		if ( surf->geometry == NULL || surf->shader == NULL ) {
+		if ( surf->geometry == NULL || surf->material == NULL ) {
 			MakeDefaultModel();
 			common->Error( "Model %s, surface %i had NULL geometry", name.c_str(), i );
 		}
-		if ( surf->shader == NULL ) {
+		if ( surf->material == NULL ) {
 			MakeDefaultModel();
 			common->Error( "Model %s, surface %i had NULL shader", name.c_str(), i );
 		}
@@ -635,7 +639,7 @@ void idRenderModelStatic::FinishSurfaces() {
 	for ( i = 0 ; i < numOriginalSurfaces ; i++ ) {
 		const modelSurface_t	*surf = &surfaces[i];
 
-		if ( surf->shader->ShouldCreateBackSides() ) {
+		if ( surf->material->ShouldCreateBackSides() ) {
 			srfTriangles_t *newTri;
 
 			newTri = R_CopyStaticTriSurf( surf->geometry );
@@ -643,7 +647,7 @@ void idRenderModelStatic::FinishSurfaces() {
 
 			modelSurface_t	newSurf;
 
-			newSurf.shader = surf->shader;
+			newSurf.material = surf->material;
 			newSurf.geometry = newTri;
 
 			AddSurface( newSurf );
@@ -651,11 +655,12 @@ void idRenderModelStatic::FinishSurfaces() {
 	}
 
 	// clean the surfaces
+	const char *modelname = this->name.c_str();
 	for ( i = 0 ; i < surfaces.Num() ; i++ ) {
 		const modelSurface_t	*surf = &surfaces[i];
 
-		R_CleanupTriangles( surf->geometry, surf->geometry->generateNormals, true, surf->shader->UseUnsmoothedTangents() );
-		if ( surf->shader->SurfaceCastsShadow() ) {
+		R_CleanupTriangles( surf->geometry, surf->geometry->generateNormals, true, surf->material->UseUnsmoothedTangents() );
+		if ( surf->material->SurfaceCastsShadow() ) {
 			totalVerts += surf->geometry->numVerts;
 			totalIndexes += surf->geometry->numIndexes;
 		}
@@ -669,7 +674,7 @@ void idRenderModelStatic::FinishSurfaces() {
 		for ( int j = 0 ; j < tri->numIndexes ; j += 3 ) {
 			float	area = idWinding::TriangleArea( tri->verts[tri->indexes[j]].xyz,
 				 tri->verts[tri->indexes[j+1]].xyz,  tri->verts[tri->indexes[j+2]].xyz );
-			const_cast<idMaterial *>(surf->shader)->AddToSurfaceArea( area );
+			const_cast<idMaterial *>(surf->material)->AddToSurfaceArea( area );
 		}
 	}
 
@@ -687,21 +692,34 @@ void idRenderModelStatic::FinishSurfaces() {
 
 			// grayman #3278 - solution provided by Zbyl
 			// if the surface has a deformation, increase the bounds
-			switch ( surf->shader->Deform() )
+			switch ( surf->material->Deform() )
 			{
 			case DFRM_NONE:
 				break;
 			case DFRM_PARTICLE:
 			case DFRM_PARTICLE2:
-				{
-				// expand surface bounds to include any emitted particles
-				// Note that this is an approximation. True bounds could be
-				// calculated by simulating R_ParticleDeform().
+			{
+				// stgatilov: this is some interval math which computes provably correct bounds
 				srfTriangles_t *tri = surf->geometry;
-				const idDeclParticle *particleSystem = (idDeclParticle *)surf->shader->GetDeformDecl();
-				tri->bounds.AddBounds(particleSystem->bounds);
+				const idDeclParticle *particleSystem = (idDeclParticle *)surf->material->GetDeformDecl();
+
+				idBounds csysBounds[4];
+				idParticle_AnalyzeSurfaceEmitter(tri, csysBounds);
+
+				idBounds fullBounds;
+				fullBounds.Clear();
+				//the rest is done on per-stage basis
+				for (int i = 0; i < particleSystem->stages.Num(); i++) {
+					idParticleStage &stg = *particleSystem->stages[i];
+					idBounds bounds = idParticle_GetStageBoundsDeform(stg, stg.stdBounds, csysBounds);
+					assert(bounds.ContainsPoint(tri->bounds[0]) && bounds.ContainsPoint(tri->bounds[1]));
+					//unify bounding boxes of all stages
+					fullBounds.AddBounds(bounds);
 				}
+
+				tri->bounds = fullBounds;
 				break;
+			}
 			default:
 				{
 				// the amount here is somewhat arbitrary, designed to handle
@@ -803,7 +821,7 @@ bool idRenderModelStatic::ConvertASEToModelSurfaces( const struct aseModel_s *as
 	surf.geometry = NULL;
 	if ( ase->materials.Num() == 0 ) {
 		// if we don't have any materials, dump everything into a single surface
-		surf.shader = tr.defaultMaterial;
+		surf.material = tr.defaultMaterial;
 		surf.id = 0;
 		this->AddSurface( surf );
 		for ( i = 0 ; i < ase->objects.Num() ; i++ ) { 
@@ -815,7 +833,7 @@ bool idRenderModelStatic::ConvertASEToModelSurfaces( const struct aseModel_s *as
 			mergeTo[i] = i;
 			object = ase->objects[i];
 			material = ase->materials[object->materialRef];
-			surf.shader = declManager->FindMaterial( material->name );
+			surf.material = declManager->FindMaterial( material->name );
 			surf.id = this->NumSurfaces();
 			this->AddSurface( surf );
 		}
@@ -831,7 +849,7 @@ bool idRenderModelStatic::ConvertASEToModelSurfaces( const struct aseModel_s *as
 			} else {
 				for ( j = 0 ; j < this->NumSurfaces() ; j++ ) {
 					modelSurf = &this->surfaces[j];
-					im2 = modelSurf->shader;
+					im2 = modelSurf->material;
 					if ( im1 == im2 ) {
 						// merge this
 						mergeTo[i] = j;
@@ -842,7 +860,7 @@ bool idRenderModelStatic::ConvertASEToModelSurfaces( const struct aseModel_s *as
 			if ( j == this->NumSurfaces() ) {
 				// didn't merge
 				mergeTo[i] = j;
-				surf.shader = im1;
+				surf.material = im1;
 				surf.id = this->NumSurfaces();
 				this->AddSurface( surf );
 			}
@@ -1118,7 +1136,7 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 		// don't merge any
 		for ( lwoSurf = lwo->surf, i = 0; lwoSurf; lwoSurf = lwoSurf->next, i++ ) {
 			mergeTo[i] = i;
-			surf.shader = declManager->FindMaterial( lwoSurf->name );
+			surf.material = declManager->FindMaterial( lwoSurf->name );
 			surf.id = this->NumSurfaces();
 			this->AddSurface( surf );
 		}
@@ -1132,7 +1150,7 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 			} else {
 				for ( j = 0 ; j < this->NumSurfaces() ; j++ ) {
 					modelSurf = &this->surfaces[j];
-					im2 = modelSurf->shader;
+					im2 = modelSurf->material;
 					if ( im1 == im2 ) {
 						// merge this
 						mergeTo[i] = j;
@@ -1143,7 +1161,7 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 			if ( j == this->NumSurfaces() ) {
 				// didn't merge
 				mergeTo[i] = j;
-				surf.shader = im1;
+				surf.material = im1;
 				surf.id = this->NumSurfaces();
 				this->AddSurface( surf );
 			}
@@ -1247,6 +1265,9 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 		}
 	}
 
+	int totalPolysCount = 0;
+	int nontriPolysCount = 0;
+
 	// build the surfaces
 	for ( lwoSurf = lwo->surf, i = 0; lwoSurf; lwoSurf = lwoSurf->next, i++ ) {
 		im1 = declManager->FindMaterial( lwoSurf->name );
@@ -1289,8 +1310,9 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 				continue;
 			}
 
+			totalPolysCount++;
 			if ( poly->nverts != 3 ) {
-				common->Warning( "ConvertLWOToModelSurfaces: model \'%s\' has too many verts for a poly! Make sure you triplet it down", name.c_str() );
+				nontriPolysCount++;
 				continue;
 			}
 
@@ -1414,6 +1436,13 @@ bool idRenderModelStatic::ConvertLWOToModelSurfaces( const struct st_lwObject *l
 		}
 	}
 
+	if (nontriPolysCount > 0) {
+		common->Warning(
+			"ConvertLWOToModelSurfaces: model \'%s\' has %d/%d nontriangular polygons. Make sure you triplet it down",
+			name.c_str(), nontriPolysCount, totalPolysCount
+		);
+	}
+
 	R_StaticFree( tvRemap );
 	R_StaticFree( vRemap );
 	R_StaticFree( tvList );
@@ -1441,6 +1470,9 @@ struct aseModel_s *idRenderModelStatic::ConvertLWOToASE( const struct st_lwObjec
 	ase->objects.Resize( obj->nlayers, obj->nlayers );
 
 	int materialRef = 0;
+
+	int totalPolysCount = 0;
+	int nontriPolysCount = 0;
 
 	for ( lwSurface *surf = obj->surf; surf; surf = surf->next ) {
 
@@ -1518,8 +1550,9 @@ struct aseModel_s *idRenderModelStatic::ConvertLWOToASE( const struct st_lwObjec
 				continue;
 			}
 
+			totalPolysCount++;
 			if ( poly->nverts != 3 ) {
-				common->Warning( "ConvertLWOToASE: model \'%s\' has too many verts for a poly! Make sure you triplet it down", fileName );
+				nontriPolysCount++;
 				continue;
 			}
 	
@@ -1586,6 +1619,13 @@ struct aseModel_s *idRenderModelStatic::ConvertLWOToASE( const struct st_lwObjec
 		mesh->faces = newFaces;
 	}
 
+	if (nontriPolysCount > 0) {
+		common->Warning(
+			"ConvertLWOToASE: model \'%s\' has %d/%d nontriangular polygons. Make sure you triplet it down",
+			name.c_str(), nontriPolysCount, totalPolysCount
+		);
+	}
+
 	return ase;
 }
 
@@ -1636,7 +1676,7 @@ bool idRenderModelStatic::ConvertMAToModelSurfaces (const struct maModel_s *ma )
 	surf.geometry = NULL;
 	if ( ma->materials.Num() == 0 ) {
 		// if we don't have any materials, dump everything into a single surface
-		surf.shader = tr.defaultMaterial;
+		surf.material = tr.defaultMaterial;
 		surf.id = 0;
 		this->AddSurface( surf );
 		for ( i = 0 ; i < ma->objects.Num() ; i++ ) { 
@@ -1649,9 +1689,9 @@ bool idRenderModelStatic::ConvertMAToModelSurfaces (const struct maModel_s *ma )
 			object = ma->objects[i];
 			if(object->materialRef >= 0) {
 				material = ma->materials[object->materialRef];
-				surf.shader = declManager->FindMaterial( material->name );
+				surf.material = declManager->FindMaterial( material->name );
 			} else {
-				surf.shader = tr.defaultMaterial;
+				surf.material = tr.defaultMaterial;
 			}
 			surf.id = this->NumSurfaces();
 			this->AddSurface( surf );
@@ -1672,7 +1712,7 @@ bool idRenderModelStatic::ConvertMAToModelSurfaces (const struct maModel_s *ma )
 			} else {
 				for ( j = 0 ; j < this->NumSurfaces() ; j++ ) {
 					modelSurf = &this->surfaces[j];
-					im2 = modelSurf->shader;
+					im2 = modelSurf->material;
 					if ( im1 == im2 ) {
 						// merge this
 						mergeTo[i] = j;
@@ -1683,7 +1723,7 @@ bool idRenderModelStatic::ConvertMAToModelSurfaces (const struct maModel_s *ma )
 			if ( j == this->NumSurfaces() ) {
 				// didn't merge
 				mergeTo[i] = j;
-				surf.shader = im1;
+				surf.material = im1;
 				surf.id = this->NumSurfaces();
 				this->AddSurface( surf );
 			}
@@ -2134,10 +2174,61 @@ bool idRenderModelStatic::LoadFLT( const char *fileName ) {
 
 	surface.geometry = tri;
 	surface.id = 0;
-	surface.shader = tr.defaultMaterial; // declManager->FindMaterial( "shaderDemos/megaTexture" );
+	surface.material = tr.defaultMaterial; // declManager->FindMaterial( "shaderDemos/megaTexture" );
 
 	this->AddSurface( surface );
 
+	return true;
+}
+
+/*
+=================
+idRenderModelStatic::LoadProxy
+=================
+*/
+bool idRenderModelStatic::LoadProxy( const char *fileName ) {
+	idParser parser( LEXFL_ALLOWPATHNAMES | LEXFL_NOSTRINGESCAPECHARS );
+	if ( !parser.LoadFile( fileName ) ) {
+		return false;
+	}
+
+	idRenderModel *sourceModel = nullptr;
+	idMat3 rotation = mat3_identity;
+
+	idToken token;
+	while( parser.ReadToken( &token ) ) {
+		if ( !token.Icmp( "model" ) ) {
+			if ( parser.ReadToken( &token ) ) {
+				sourceModel = renderModelManager->CheckModel( token );
+				proxySourceName = token;
+			}
+		} else if ( !token.Icmp( "rotation" ) ) {
+			if ( parser.ReadToken( &token ) ) {
+				if (sscanf( token, "%f %f %f %f %f %f %f %f %f",
+					&rotation[0].x, &rotation[0].y, &rotation[0].z,
+					&rotation[1].x, &rotation[1].y, &rotation[1].z,
+					&rotation[2].x, &rotation[2].y, &rotation[2].z
+				) != 9) {
+					rotation.Identity();
+				}
+			}
+		} else {
+			parser.Warning( "Unknown parameter '%s'", token.c_str() );
+			return false;
+		}
+	}
+	if ( !sourceModel ) {
+		parser.Warning( "Source model not specified" );
+		return false;
+	}
+
+	auto sourceModelStatic = dynamic_cast<idRenderModelStatic*>( sourceModel );
+	if ( !sourceModelStatic ) {
+		common->Warning( "Proxy model implemented only for static models, cannot handle '%s'", sourceModel->Name() );
+		return false;
+	}
+
+	TransformModel( sourceModelStatic, rotation );
 	return true;
 }
 
@@ -2159,7 +2250,7 @@ void idRenderModelStatic::PurgeModel() {
 			R_FreeStaticTriSurf( surf->geometry );
 		}
 	}
-	surfaces.Clear();
+	surfaces.ClearFree();
 
 	purged = true;
 }
@@ -2205,7 +2296,7 @@ void idRenderModelStatic::ReadFromDemoFile( class idDemoFile *f ) {
 	for ( int i = 0 ; i < numSurfaces ; i++ ) {
 		modelSurface_t	surf;
 		
-		surf.shader = declManager->FindMaterial( f->ReadHashString() );
+		surf.material = declManager->FindMaterial( f->ReadHashString() );
 		
 		srfTriangles_t	*tri = R_AllocStaticTriSurf();
 		
@@ -2256,7 +2347,7 @@ void idRenderModelStatic::WriteToDemoFile( class idDemoFile *f ) {
 	for ( int i = 0 ; i < surfaces.Num() ; i++ ) {
 		const modelSurface_t	*surf = &surfaces[i];
 		
-		f->WriteHashString( surf->shader->GetName() );
+		f->WriteHashString( surf->material->GetName() );
 		
 		srfTriangles_t *tri = surf->geometry;
 		f->WriteInt( tri->numIndexes );
@@ -2315,7 +2406,7 @@ void idRenderModelStatic::TouchData( void ) {
 
 		// re-find the material to make sure it gets added to the
 		// level keep list
-		declManager->FindMaterial( surf->shader->GetName() );
+		declManager->FindMaterial( surf->material->GetName() );
 	}
 }
 
@@ -2363,4 +2454,30 @@ bool idRenderModelStatic::FindSurfaceWithId( int id, int &surfaceNum ) {
 		}
 	}
 	return false;
+}
+
+
+void idRenderModelStatic::TransformModel( const idRenderModelStatic *sourceModel, const idMat3 &rotation ) {
+	idMat3 normalRotation = rotation.Inverse().Transpose();
+
+	for (int s = 0; s < sourceModel->surfaces.Num(); s++) {
+		const modelSurface_t &surf = sourceModel->surfaces[s];
+		//clone data
+		modelSurface_t newSurf;
+		newSurf.id = surf.id;
+		newSurf.material = surf.material;
+		srfTriangles_t *newTri = R_CopyStaticTriSurf(surf.geometry);
+		newSurf.geometry = newTri;
+
+		for (int v = 0; v < newTri->numVerts; v++) {
+			idDrawVert &vert = newTri->verts[v];
+			vert.xyz = rotation * vert.xyz;
+			vert.normal = normalRotation * vert.normal;
+			vert.normal.Normalize();
+			vert.tangents[0] = rotation * vert.tangents[0];
+			vert.tangents[1] = rotation * vert.tangents[1];
+		}
+
+		AddSurface(newSurf);
+	}
 }

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __STATICLIST_H__
@@ -57,6 +57,7 @@ public:
 	int					FindNull( void ) const;								// find the index for the first NULL pointer in the list
 	int					IndexOf( const type *obj ) const;					// returns the index for the pointer to an element in the list
 	bool				RemoveIndex( int index );							// remove the element at the given index
+	bool				RemoveIndexFast( int index );						// remove the element at the given index
 	bool				Remove( const type & obj );							// remove the element
 	void				Swap( idStaticList<type,size> &other );				// swap the contents of the lists
 	void				DeleteContents( bool clear );						// delete the contents of the list
@@ -417,7 +418,7 @@ ID_INLINE type *idStaticList<type,size>::Find( type const & obj ) const {
 
 	i = FindIndex( obj );
 	if ( i >= 0 ) {
-		return &list[ i ];
+		return (type*)&list[ i ];
 	}
 
 	return NULL;
@@ -492,6 +493,35 @@ ID_INLINE bool idStaticList<type,size>::RemoveIndex( int index ) {
 	num--;
 	for( i = index; i < num; i++ ) {
 		list[ i ] = list[ i + 1 ];
+	}
+
+	return true;
+}
+
+/*
+========================
+idList<_type_,_tag_>::RemoveIndexFast
+
+Removes the element at the specified index and moves the last element into its spot, rather
+than moving the whole array down by one. Of course, this doesn't maintain the order of
+elements! The number of elements in the list is reduced by one.
+
+return:	bool	- false if the data is not found in the list.
+
+NOTE:	The element is not destroyed, so any memory used by it may not be freed until the
+		destruction of the list.
+========================
+*/
+template< typename _type_, int size >
+ID_INLINE bool idStaticList<_type_, size>::RemoveIndexFast( int index ) {
+
+	if ( ( index < 0 ) || ( index >= num ) ) {
+		return false;
+	}
+
+	num--;
+	if ( index != num ) {
+		list[index] = list[num];
 	}
 
 	return true;

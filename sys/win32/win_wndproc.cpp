@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -47,8 +47,8 @@ void WIN_Sizing(WORD side, RECT *rect)
 	height -= decoHeight;
 
 	// Clamp to a minimum size
-	int currentHeight = cvarSystem->GetCVarInteger("r_customHeight");
-	int currentWidth = cvarSystem->GetCVarInteger("r_customWidth");
+	int currentHeight = r_customHeight.GetInteger();
+	int currentWidth = r_customWidth.GetInteger();
 	int minWidth = 256;
 	int minHeight = minWidth * currentHeight / currentWidth;
 
@@ -238,11 +238,12 @@ LONG WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
 	int key;
 	switch( uMsg ) {
 		case WM_WINDOWPOSCHANGED:
-			if (glConfig.isInitialized) {
+			if ( glConfig.isInitialized || win32.win_maximized ) {
 				RECT rect;
 				if (::GetClientRect(win32.hWnd, &rect)) {
 					glConfig.vidWidth = rect.right - rect.left;
 					glConfig.vidHeight = rect.bottom - rect.top;
+					cvarSystem->Find( "r_fboResolution" )->SetModified();
 				}
 			}
 			break;
@@ -328,6 +329,10 @@ LONG WINAPI MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
 			break;
 		}
 		case WM_SYSCOMMAND:
+			if ( wParam == SC_MAXIMIZE || wParam == 0xf032 ) // Maximized
+				win32.win_maximized = true;
+			if ( wParam == SC_RESTORE || wParam == 0xf012 ) // Restored
+				win32.win_maximized = false;
 			if ( wParam == SC_SCREENSAVE || wParam == SC_KEYMENU ) {
 				return 0;
 			}

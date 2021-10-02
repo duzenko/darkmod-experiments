@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -1057,9 +1057,6 @@ idActor::SetupHead
 */
 void idActor::SetupHead()
 {
-	if(gameLocal.isClient)
-		return;
-
 	idStr headModelDefName = spawnArgs.GetString( "def_head", "" );
 
 	if (!headModelDefName.IsEmpty())
@@ -1117,6 +1114,29 @@ void idActor::SetupHead()
 		{
 			args.Set(kv->GetKey(), kv->GetValue());
 		}
+
+		for (const idKeyValue* kv_set = spawnArgs.MatchPrefix("set ", NULL); kv_set != NULL; kv_set = spawnArgs.MatchPrefix("set ", kv_set))
+		{
+			// "set FOO on HEAD"
+			idStr SpawnargName(kv_set->GetKey());
+
+			// check whether this spawnarg should apply to the head
+			if (SpawnargName.Right(4) == "head")
+			{
+				// "set FOO on HEAD" => "FOO on HEAD"
+				SpawnargName = SpawnargName.Right(kv_set->GetKey().Length() - 4);
+
+				// find position of first ' '	
+				int PosSpace = SpawnargName.Find(' ', 0, -1);
+
+				// "FOO on HEAD" => "FOO"
+				SpawnargName = SpawnargName.Left(PosSpace);
+
+				// add the spawnarg to the args list
+				args.Set(SpawnargName, kv_set->GetValue());
+			}
+		}
+
 
 		// Spawn the head entity
 		idEntity* ent = gameLocal.SpawnEntityType(idAFAttachment::Type, &args);
@@ -3379,10 +3399,6 @@ idActor::Gib
 ============
 */
 void idActor::Gib( const idVec3 &dir, const char *damageDefName ) {
-	// no gibbing in multiplayer - by self damage or by moving objects
-	if ( gameLocal.isMultiplayer ) {
-		return;
-	}
 	// only gib once
 	if ( gibbed ) {
 		return;
@@ -5426,7 +5442,6 @@ CrashLandResult idActor::CrashLand( const idPhysics_Actor& physicsObj, const idV
 
 	idVec3 curVelocity = physics.GetLinearVelocity();
 
-	// grayman #3699 - ragdolls and actors fall differently, so they require
 	// different math to determine whether they've landed, and how much
 	// damage they should accrue. So we'll differentiate between them in certain
 	// code sections. isRagDoll will be true if the AI is a ragdoll using ragdoll physics.
@@ -5723,14 +5738,14 @@ CrashLandResult idActor::CrashLand( const idPhysics_Actor& physicsObj, const idV
 	delta = delta*delta*delta;
 	int damage = static_cast<int>(1.4E-16 * delta - 3);
 
-	// gameRenderWorld->DrawText(idStr(damage), GetPhysics()->GetOrigin(), 0.15, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 16);
+	// gameRenderWorld->DebugText(idStr(damage), GetPhysics()->GetOrigin(), 0.15, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 16);
 
 	// Check if the damage is above our threshold, ignore otherwise
 	if (damage >= m_damage_thresh_min)
 	{
-		//gameRenderWorld->DrawText(idStr(deltaVert), GetPhysics()->GetOrigin(), 0.15, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 50000);
+		//gameRenderWorld->DebugText(idStr(deltaVert), GetPhysics()->GetOrigin(), 0.15, colorWhite, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 50000);
 
-		//gameRenderWorld->DrawText(idStr(damage), GetPhysics()->GetOrigin(), 0.15, colorRed, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 5000);
+		//gameRenderWorld->DebugText(idStr(damage), GetPhysics()->GetOrigin(), 0.15, colorRed, gameLocal.GetLocalPlayer()->viewAngles.ToMat3(), 1, 5000);
 
 		// grayman - print data re: being damaged
 		gameLocal.Printf("'%s' dealt %d landing damage at [%s]\n", GetName(),damage,GetPhysics()->GetOrigin().ToString());

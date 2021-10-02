@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // As stated below, the trick of defining "private" and "protected" is pure evil.
@@ -1042,7 +1042,6 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 		Write( varName, varType, scope, prefix, ".neverDormant", flags->neverDormant ? "true" : "false", NULL, 0 );
 		Write( varName, varType, scope, prefix, ".isDormant", flags->isDormant ? "true" : "false", NULL, 0 );
 		Write( varName, varType, scope, prefix, ".hasAwakened", flags->hasAwakened ? "true" : "false", NULL, 0 );
-		Write( varName, varType, scope, prefix, ".networkSync", flags->networkSync ? "true" : "false", NULL, 0 );
 		Write( varName, varType, scope, prefix, ".invisible", flags->invisible ? "true" : "false", NULL, 0 ); // grayman #3857
 		Write( varName, varType, scope, prefix, ".inaudible", flags->inaudible ? "true" : "false", NULL, 0 ); // grayman #3857
 		typeSize = sizeof( idEntity::entityFlags_s );

@@ -1,37 +1,52 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
 #pragma hdrstop
 
 #include "Session_local.h"
+#include "Common.h"
 #include "../renderer/tr_local.h"
 #include "../renderer/FrameBuffer.h"
+#include "../game/gamesys/SysCvar.h"
 #include "../game/Missions/MissionManager.h"
 
 idCVar	idSessionLocal::com_showAngles( "com_showAngles", "0", CVAR_SYSTEM | CVAR_BOOL, "" );
-idCVar	idSessionLocal::com_minTics( "com_minTics", "1", CVAR_SYSTEM, "" );
+idCVar	idSessionLocal::com_minTics( "com_minTics", "0", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_showTics( "com_showTics", "0", CVAR_SYSTEM | CVAR_BOOL, "" );
-idCVar	idSessionLocal::com_fixedTic("com_fixedTic", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "", 0, 10);
+idCVar	idSessionLocal::com_fixedTic("com_fixedTic", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER,
+	" 0 -- game tics have fixed duration of 16 ms (stable physics but 60 FPS limit)\n"
+	" 1 -- game tics can have shorter duration (removes 60 FPS limit)",
+0, 1);
+idCVar	idSessionLocal::com_maxTicTimestep("com_maxTicTimestep", "17", CVAR_SYSTEM | CVAR_INTEGER,
+	"Timestep of a game tic must not exceed this number of milliseconds. "
+	"If frame takes more time, then its duration is split into several game tics.\n"
+	"Note: takes effect only when FPS is uncapped.",
+1, 1000);
+idCVar	idSessionLocal::com_maxTicsPerFrame("com_maxTicsPerFrame", "10", CVAR_SYSTEM | CVAR_INTEGER,
+	"Never do more than this number of game tics per one frame. "
+	"When frames take too much time, allow game time to run slower than astronomical time.",
+1, 1000);
+idCVar	idSessionLocal::com_maxFPS( "com_maxFPS", "166", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "define the maximum FPS cap", 2, 1000 );
 idCVar	idSessionLocal::com_showDemo("com_showDemo", "0", CVAR_SYSTEM | CVAR_BOOL, "");
 idCVar	idSessionLocal::com_skipGameDraw( "com_skipGameDraw", "0", CVAR_SYSTEM | CVAR_BOOL, "" );
 idCVar	idSessionLocal::com_aviDemoSamples( "com_aviDemoSamples", "16", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_aviDemoWidth( "com_aviDemoWidth", "256", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_aviDemoHeight( "com_aviDemoHeight", "256", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_aviDemoTics( "com_aviDemoTics", "2", CVAR_SYSTEM | CVAR_INTEGER, "", 1, 60 );
-idCVar	idSessionLocal::com_wipeSeconds( "com_wipeSeconds", "1", CVAR_SYSTEM, "" );
+idCVar	idSessionLocal::com_wipeSeconds( "com_wipeSeconds", "0.1", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_guid( "com_guid", "", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_ROM, "" );
 
 //Obsttorte
@@ -84,11 +99,6 @@ Session_RescanSI_f
 */
 void Session_RescanSI_f( const idCmdArgs &args ) {
 	sessLocal.mapSpawnData.serverInfo = *cvarSystem->MoveCVarsToDict( CVAR_SERVERINFO );
-#ifdef MULTIPLAYER
-	if (game && idAsyncNetwork::server.IsActive()) {
-		game->SetServerInfo( sessLocal.mapSpawnData.serverInfo );
-	}
-#endif
 }
 
 /*
@@ -234,8 +244,6 @@ void idSessionLocal::Clear() {
 	insideUpdateScreen = false;
 	insideExecuteMapChange = false;
 
-	loadingSaveGame = false;
-	savegameFile = NULL;
 	savegameVersion = 0;
 
 	currentMapName.Clear();
@@ -255,6 +263,7 @@ void idSessionLocal::Clear() {
 
 	syncNextGameFrame = false;
 	mapSpawned = false;
+	mainMenuStartState = MMSS_MAINMENU;
 	guiActive = NULL;
 	aviCaptureMode = false;
 	timeDemo = TD_NO;
@@ -285,7 +294,7 @@ idSessionLocal::idSessionLocal
 ===============
 */
 idSessionLocal::idSessionLocal() {
-	guiInGame = guiMainMenu = guiRestartMenu = guiLoading = guiActive = guiTest = guiMsg = guiMsgRestore = NULL;	
+	guiInGame = guiMainMenu = guiLoading = guiActive = guiTest = guiMsg = guiMsgRestore = NULL;	
 
 	menuSoundWorld = NULL;
 	
@@ -313,14 +322,6 @@ void idSessionLocal::Stop() {
 	// clear mapSpawned and demo playing flags
 	UnloadMap();
 
-#ifdef MULTIPLAYER
-	// disconnect async client
-	idAsyncNetwork::client.DisconnectFromServer();
-
-	// kill async server
-	idAsyncNetwork::server.Kill();
-#endif
-
 	if ( sw ) {
 		sw->StopAllSounds();
 	}
@@ -333,6 +334,7 @@ void idSessionLocal::Stop() {
 }
 
 void idSessionLocal::TerminateFrontendThread() {
+#if 0
 	if (frontendThread.joinable()) {
 		{  // lock scope
 			std::lock_guard<std::mutex> lock( signalMutex );
@@ -341,6 +343,14 @@ void idSessionLocal::TerminateFrontendThread() {
 		}
 		frontendThread.join();
 	}
+#else
+	{
+		std::lock_guard<std::mutex> lock( signalMutex );
+		shutdownFrontend = true;
+		signalFrontendThread.notify_one();
+	}
+	Sys_DestroyThread( frontendThread );
+#endif
 }
 
 /*
@@ -379,11 +389,11 @@ void idSessionLocal::Shutdown() {
 		menuSoundWorld = NULL;
 	}
 		
-	mapSpawnData.serverInfo.Clear();
-	mapSpawnData.syncedCVars.Clear();
+	mapSpawnData.serverInfo.ClearFree();
+	mapSpawnData.syncedCVars.ClearFree();
 	for ( i = 0; i < MAX_ASYNC_CLIENTS; i++ ) {
-		mapSpawnData.userInfo[i].Clear();
-		mapSpawnData.persistentPlayerInfo[i].Clear();
+		mapSpawnData.userInfo[i].ClearFree();
+		mapSpawnData.persistentPlayerInfo[i].ClearFree();
 	}
 
 	if ( guiMainMenu_MapList != NULL ) {
@@ -394,17 +404,6 @@ void idSessionLocal::Shutdown() {
 
 	Clear();
 }
-
-#ifdef MULTIPLAYER
-/*
-===============
-idSessionLocal::IsMultiplayer
-===============
-*/
-bool	idSessionLocal::IsMultiplayer() {
-	return idAsyncNetwork::IsActive();
-}
-#endif
 
 /*
 ================
@@ -1080,20 +1079,6 @@ idSessionLocal::StartNewGame
 ===============
 */
 void idSessionLocal::StartNewGame( const char *mapName, bool devmap ) {
-#ifdef	ID_DEDICATED
-	common->Printf( "Dedicated servers cannot start singleplayer games.\n" );
-	return;
-#else
-#ifdef MULTIPLAYER
-	if (idAsyncNetwork::server.IsActive()) {
-		common->Printf("Server running, use si_map / serverMapRestart\n");
-		return;
-	}
-	if ( idAsyncNetwork::client.IsActive() ) {
-		common->Printf("Client running, disconnect from server first\n");
-		return;
-	}
-#endif
 	// clear the userInfo so the player starts out with the defaults
 	mapSpawnData.userInfo[0].Clear();
 	mapSpawnData.persistentPlayerInfo[0].Clear();
@@ -1113,7 +1098,6 @@ void idSessionLocal::StartNewGame( const char *mapName, bool devmap ) {
 	mapSpawnData.syncedCVars = *cvarSystem->MoveCVarsToDict( CVAR_NETWORKSYNC );
 
 	MoveToNewMap( mapName );
-#endif
 }
 
 /*
@@ -1198,6 +1182,9 @@ void idSessionLocal::WriteCmdDemo( const char *demoName, bool save ) {
 		common->Printf( "idSessionLocal::WriteCmdDemo: no name specified\n" );
 		return;
 	}
+	if (com_fixedTic.GetInteger()) {
+		common->Error( "Cmd demo is not compatible with uncapped FPS" );
+	}
 
 	idStr statsName;
 	if (save) {
@@ -1246,6 +1233,9 @@ idSessionLocal::StartPlayingCmdDemo
 ===============
 */
 void idSessionLocal::StartPlayingCmdDemo(const char *demoName) {
+	if (com_fixedTic.GetInteger()) {
+		common->Error( "Cmd demo is not compatible with uncapped FPS" );
+	}
 	// exit any current game
 	Stop();
 
@@ -1273,7 +1263,7 @@ void idSessionLocal::StartPlayingCmdDemo(const char *demoName) {
 	LoadCmdDemoFromFile(cmdDemoFile);
 
 	// run one frame to get the view angles correct
-	RunGameTic();
+	RunGameTic(USERCMD_MSEC);
 }
 
 /*
@@ -1295,7 +1285,7 @@ void idSessionLocal::TimeCmdDemo( const char *demoName ) {
 	minuteStart = startTime;
 
 	while( cmdDemoFile ) {
-		RunGameTic();
+		RunGameTic(USERCMD_MSEC);
 		count++;
 
 		if ( count / 3600 != ( count - 1 ) / 3600 ) {
@@ -1384,6 +1374,8 @@ void idSessionLocal::LoadLoadingGui( const char *mapName ) {
 		case 4:
 			guiLoading->HandleNamedEvent("loadBackground_16x9tv");
 			break;
+		case 5:
+			guiLoading->HandleNamedEvent("loadBackground_21x9");
 		}
 	}
 
@@ -1429,20 +1421,35 @@ create a game at all.
 Exits with mapSpawned = true
 ===============
 */
-void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
+bool idSessionLocal::ExecuteMapChange(idFile* savegameFile, bool noFadeWipe ) {
 	int		i;
 	bool	reloadingSameMap;
+
+	// extract the map name from serverinfo
+	idStr mapString = mapSpawnData.serverInfo.GetString( "si_map" );
+
+	idStr fullMapName = "maps/";
+	fullMapName += mapString;
+	fullMapName.StripFileExtension();
+
+	// don't do the deferred caching if we are reloading the same map
+	if ( fullMapName == currentMapName ) {
+		reloadingSameMap = true;
+	} else {
+		reloadingSameMap = false;
+		currentMapName = fullMapName;
+	}
+
+	idStr traceText = va("map %s", mapString.c_str());
+	if (savegameFile)
+		traceText += va("\nload %s", savegameFile->GetName());
+	if (reloadingSameMap)
+		traceText += "\n(samemap)";
+	TRACE_CPU_SCOPE_STR("idSessionLocal::ExecuteMapChange", traceText);
 
 	// close console and remove any prints from the notify lines
 	console->Close();
 
-#ifdef MULTIPLAYER
-	if ( IsMultiplayer() ) {
-		// make sure the mp GUI isn't up, or when players get back in the
-		// map, mpGame's menu and the gui will be out of sync.
-		SetGUI( NULL, NULL );
-	}
-#endif
 	// mute sound
 	soundSystem->SetMute( true );
 
@@ -1464,25 +1471,11 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 		CompleteWipe();
 	}
 
-	// extract the map name from serverinfo
-	idStr mapString = mapSpawnData.serverInfo.GetString( "si_map" );
-
-	idStr fullMapName = "maps/";
-	fullMapName += mapString;
-	fullMapName.StripFileExtension();
-
 	// shut down the existing game if it is running
 	UnloadMap();
 
 	R_ToggleSmpFrame(); // duzenko 4848: FIXME find a better place to clear the "next frame" data
-
-	// don't do the deferred caching if we are reloading the same map
-	if ( fullMapName == currentMapName ) {
-		reloadingSameMap = true;
-	} else {
-		reloadingSameMap = false;
-		currentMapName = fullMapName;
-	}
+	R_ToggleSmpFrame();	// duzenko 5065: apparently R_ToggleSmpFrame does not like being called once
 
 	// note which media we are going to need to load
 	if ( !reloadingSameMap ) {
@@ -1524,10 +1517,6 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	// before we do this potentially long operation
 	Sys_GrabMouseCursor( false );
 
-	// if net play, we get the number of clients during mapSpawnInfo processing
-#ifdef MULTIPLAYER
-	if (!idAsyncNetwork::IsActive()) 
-#endif
 	{
 		numClients = 1;
 	} 
@@ -1549,49 +1538,29 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 
 	// set the user info
 	for ( i = 0; i < numClients; i++ ) {
-		game->SetUserInfo( i, mapSpawnData.userInfo[i], 
-#ifdef MULTIPLAYER
-			idAsyncNetwork::client.IsActive()
-#else
-			false
-#endif
-			, false );
+		game->SetUserInfo( i, mapSpawnData.userInfo[i], false, false );
 		game->SetPersistentPlayerInfo( i, mapSpawnData.persistentPlayerInfo[i] );
 	}
 
 	// load and spawn all other entities ( from a savegame possibly )
-	if ( loadingSaveGame && savegameFile ) {
+	if ( savegameFile ) {
 		if ( game->InitFromSaveGame( fullMapName + ".map", rw, sw, savegameFile ) == false ) {
-			// If the loadgame failed, restart the map with the player persistent data
-			loadingSaveGame = false;
-			fileSystem->CloseFile( savegameFile );
-			savegameFile = NULL;
-
+			
+			// Loadgame failed
+			// STiFU #4531: We used to do an initialized load of the map at this point. 
+			// This is now controlled from the outside, however.
+			return false;
+			
+			/*		
 			game->SetServerInfo( mapSpawnData.serverInfo );
-			game->InitFromNewMap( fullMapName + ".map", rw, sw, 
-#ifdef MULTIPLAYER
-				idAsyncNetwork::server.IsActive(), idAsyncNetwork::client.IsActive(), 
-#else
-				false, false,
-#endif
-				Sys_Milliseconds() );
+			game->InitFromNewMap( fullMapName + ".map", rw, sw, false, false, Sys_Milliseconds() );*/
 		}
 	} else {
 		game->SetServerInfo( mapSpawnData.serverInfo );
-		game->InitFromNewMap( fullMapName + ".map", rw, sw, 
-#ifdef MULTIPLAYER
-			idAsyncNetwork::server.IsActive(), idAsyncNetwork::client.IsActive(), 
-#else
-			false, false,
-#endif
-			Sys_Milliseconds() );
+		game->InitFromNewMap( fullMapName + ".map", rw, sw, false, false, Sys_Milliseconds() );
 	}
 
-	if ( 
-#ifdef MULTIPLAYER
-		!idAsyncNetwork::IsActive() && 
-#endif
-		!loadingSaveGame) {
+	if ( !savegameFile) {
 		// spawn players
 		for ( i = 0; i < numClients; i++ ) {
 			game->SpawnPlayer( i );
@@ -1607,11 +1576,7 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	}
 	uiManager->EndLevelLoad();
 
-	if ( 
-#ifdef MULTIPLAYER
-		!idAsyncNetwork::IsActive() && 
-#endif
-		!loadingSaveGame) {
+	if (!savegameFile) {
 		// run a few frames to allow everything to settle
 		for ( i = 0; i < 10; i++ ) {
 			game->RunFrame( mapSpawnData.mapSpawnUsercmd );
@@ -1678,6 +1643,8 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	// we are valid for game draws now
 	mapSpawned = true;
 	Sys_ClearEvents();
+
+	return true;
 }
 
 /*
@@ -1693,8 +1660,6 @@ const idStr GetNextQuicksaveFilename()
 	// Get the list of existing save games
 	idStrList fileList;
 	idList<fileTIME_T> fileTimes;
-	fileList.Clear();
-	fileTimes.Clear();
 	sessLocal.GetSaveGameList( fileList, fileTimes ); // fileTimes is sorted, most recent first
 
 	// Count the number of quicksaves and remember the oldest one we saw
@@ -1736,8 +1701,6 @@ const idStr GetMostRecentQuicksaveFilename()
 	// Get the list of existing save games
 	idStrList fileList;
 	idList<fileTIME_T> fileTimes;
-	fileList.Clear();
-	fileTimes.Clear();
 	sessLocal.GetSaveGameList( fileList, fileTimes ); 
 
 	// fileTimes is sorted, most recent first. Find the first quick save
@@ -1799,6 +1762,7 @@ void SaveGame_f( const idCmdArgs &args ) {
 			common->Printf( "Saved %s\n", args.Argv(1) );
 		}
 	}
+	qglFinish();
 }
 
 /*
@@ -1823,6 +1787,15 @@ void Session_Hitch_f( const idCmdArgs &args ) {
 		sw->UnPause();
 		soundSystem->SetMute(false);
 	}
+}
+
+/*
+====================
+SimulateEscape_f
+====================
+*/
+void SimulateEscape_f( const idCmdArgs & ) {
+	Sys_QueEvent( 0, SE_KEY, K_ESCAPE, 1, 0, nullptr );
 }
 
 /*
@@ -1858,16 +1831,13 @@ void idSessionLocal::ScrubSaveGameFileName( idStr &saveFileName ) const {
 	}
 }
 
+
 /*
 ===============
 idSessionLocal::SaveGame
 ===============
 */
 bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipCheck ) {
-#ifdef	ID_DEDICATED
-	common->Printf( "Dedicated servers cannot save games.\n" );
-	return false;
-#else
 	int i;
 	idStr gameFile, previewFile, descriptionFile, mapName;
 
@@ -1878,12 +1848,6 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 		return false;
 	}
 
-#ifdef MULTIPLAYER
-	if ( IsMultiplayer() ) {
-		common->Printf( "Can't save during net play.\n" );
-		return false;
-	}
-#endif
 	if ( game->GetPersistentPlayerInfo( 0 ).GetInt( "health" ) <= 0 ) {
 		// "Must be alive" and "Unable to save"
 		MessageBox( MSG_OK, common->Translate ( "#str_02012" ), common->Translate ( "#str_02013" ), true );
@@ -1927,16 +1891,6 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 		soundSystem->SetPlayingSoundWorld( NULL );
 	}
 
-	//stgatilov: choose preview image format
-	idStr previewExtension = com_savegame_preview_format.GetString();
-	Image::Format previewFormat = Image::GetFormatFromString( previewExtension.c_str() );
-	//note: only tga and jpg are currently supported
-	if ( previewFormat != Image::JPG && previewFormat != Image::TGA ) {
-		common->Warning( "Unknown preview image extension %s, falling back to default.", previewExtension.c_str() );
-		previewFormat = Image::TGA;
-		previewExtension = "tga";
-	}
-
 	// setup up paths
 	
 	ScrubSaveGameFileName( gameFile );
@@ -1944,6 +1898,11 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 	gameFile = "savegames/" + gameFile;
 	gameFile.SetFileExtension( ".save" );
 
+	idStr previewExtension = com_savegame_preview_format.GetString();
+	if ( !(previewExtension == "jpg" || previewExtension == "tga") ) {
+		common->Warning( "Unknown preview image extension %s, falling back to default.", previewExtension.c_str() );
+		previewExtension = "tga";
+	}
 	previewFile = gameFile;
 	previewFile.SetFileExtension( previewExtension.c_str() );
 
@@ -1960,10 +1919,6 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 		}
 		return false;
 	}
-
-	// Obsttorte increment the savegame counter
-	
-	game->incrementSaveCount();
 
 	// Write SaveGame Header: 
 	// Game Name / Version / Map Name / Persistant Player Info
@@ -2008,21 +1963,27 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 		// need to make the changes to the vertex cache accessible to the backend
 		vertexCache.EndFrame();
 
-		//stgatilov: render image to buffer and save via devIL
-		Image image;
+		//stgatilov: render image to buffer
 		int width, height, bpp = 3;
 		renderSystem->GetCurrentRenderCropSize(width, height);
-		if ( r_useFbo.GetBool() ) { // 4676
+		/*if ( r_useFbo.GetBool() ) { // 4676
 			width /= r_fboResolution.GetFloat();
 			height /= r_fboResolution.GetFloat();
-		}
+		}*/
 		width = (width + 3) & ~3; //opengl wants width padded to 4x
-		image.Init(width, height, bpp);
-		renderSystem->CaptureRenderToBuffer( image.GetImageData() );
-		idStr previewPath = fileSystem->RelativePathToOSPath(previewFile.c_str(), "fs_modSavePath");
-		image.SaveImageToFile(previewPath.c_str(), previewFormat);
+		byte *imgData = (byte*)Mem_Alloc(height * width * bpp);
+		renderSystem->CaptureRenderToBuffer( imgData );
+
+		//save image to file
+		idImageWriter wr;
+		wr.Source(imgData, width, height, bpp);
+		wr.Dest(fileSystem->OpenFileWrite(previewFile.c_str(), "fs_modSavePath"));
+		wr.Flip();
+		wr.WriteExtension(previewExtension.c_str());
+		Mem_Free(imgData);
 
 		renderSystem->UnCrop();
+		R_ClearCommandChain( frameData );
 		qglFinish();
 	}
 
@@ -2067,123 +2028,259 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave, bool skipChe
 	}
 
 	syncNextGameFrame = true;
+	qglFinish();
 
 
 	return true;
-#endif
+}
+
+
+bool idSessionLocal::LoadGame(const char *saveName, eSaveConflictHandling conflictHandling)
+{
+	if (strlen(saveName) == 0)
+		saveName = lastSaveName;
+	else
+		lastSaveName = saveName;
+
+	bool error = false;
+
+	const bool checkVersion = conflictHandling == eSaveConflictHandling_QueryUser;
+	if (checkVersion)
+	{
+		int savegameRevision = 0;
+		const SavegameValidity val = IsSavegameValid(saveName, &savegameRevision);
+		if (val == savegame_invalid)
+			error = true;
+		else if (val == savegame_versionMismatch)
+		{
+			// Version conflict. Ask what to do.
+
+			// If not yet active, open the main menu		
+			if (!guiActive)
+			{
+				console->Close();
+				StartMenu();
+			}
+
+			GuiMessage msg;
+			msg.type = GuiMessage::MSG_CUSTOM;
+			msg.title = common->Translate("#str_10180"); // "Savegame Version Mismatch"
+
+			msg.positiveCmd = "close_msg_box;LoadGameInitialized;";
+			msg.positiveLabel = common->Translate("#str_10183"); // "Mapstart";
+
+			msg.negativeCmd = "close_msg_box;";
+			msg.negativeLabel = common->Translate("#str_07203"); // "Cancel";
+
+			// Check for mixed revisions
+			RevisionTracker& RevTracker = RevisionTracker::Instance();
+			idStr gameRevision;
+			gameRevision = va("%d", RevTracker.GetHighestRevision());
+
+			if (cv_force_savegame_load.GetBool())
+			{
+				msg.message = va(
+					common->Translate("#str_10182"), // "You are running TDM revision %s, but this savegame has been created with TDM revision %d. You can cancel loading (highly recommended!), try to force load (crash to desktop likely) or load to mapstart (issues likely to occur)."
+					gameRevision.c_str(), savegameRevision
+				);
+
+				// Add third button for force-load
+				msg.okCmd = "close_msg_box;LoadGameForced;";
+				msg.okLabel = common->Translate("#str_10184"); // "Force-Load";
+			}
+			else
+			{
+				msg.message = va(
+					common->Translate("#str_10181"), // "You are running TDM revision %s, but this savegame has been created with TDM revision %d. You can cancel loading (highly recommended!) or load to mapstart (issues likely to occur)."
+					gameRevision.c_str(), savegameRevision
+				);
+			}
+
+			gameLocal.AddMainMenuMessage(msg);
+
+			return false;
+		}
+	}
+
+	if (!error)
+	{
+		// Savegame is valid, so load it
+		const bool doInitializedLoad = conflictHandling == eSaveConflictHandling_LoadMapStart;
+		if (!DoLoadGame(saveName, doInitializedLoad))
+		{
+			error = true;
+		}
+	}
+
+	if (error)
+	{
+		// If not yet active, open the main menu		
+		if (!guiActive)
+		{
+			console->Close();
+			StartMenu();
+		}
+
+		// Show error message
+		GuiMessage msg;
+		msg.type = GuiMessage::MSG_OK;
+		msg.title = common->Translate("#str_02000"); //  "Error";
+		msg.message = common->Translate("#str_10185"); // "Failed to load savegame.";
+		msg.okCmd = "close_msg_box;";
+
+		gameLocal.AddMainMenuMessage(msg);
+		return false;
+	}
+
+	return true;
 }
 
 /*
 ===============
-idSessionLocal::LoadGame
+idSessionLocal::DoLoadGame
 ===============
 */
-bool idSessionLocal::LoadGame( const char *saveName ) { 
-#ifdef	ID_DEDICATED
-	common->Printf( "Dedicated servers cannot load games.\n" );
-	return false;
-#else
-	int i;
-	idStr in, loadFile, saveMap, gamename;
-
-#ifdef MULTIPLAYER
-	if ( IsMultiplayer() ) {
-		common->Printf( "Can't load during net play.\n" );
-		return false;
-	}
-#endif
+bool idSessionLocal::DoLoadGame( const char *saveName, const bool initializedLoad) {
 	//Hide the dialog box if it is up.
 	StopBox();
 
+	idFile* savegameFile = NULL;
+	idStr saveMap;
+	if (!ParseSavegamePreamble(saveName, &savegameFile, &saveMap))
+	{
+		fileSystem->CloseFile(savegameFile);
+		savegameFile = NULL;
+
+		return false;
+	}
+
+	if (initializedLoad)
+	{
+		fileSystem->CloseFile(savegameFile);
+		savegameFile = NULL;
+		common->DPrintf("Doing initialized load instead of loading a v%d savegame\n", savegameVersion);
+	}
+	else
+	{
+		common->DPrintf("loading a v%d savegame\n", savegameVersion);
+	}
+
+	// Start loading map
+	mapSpawnData.serverInfo.Clear();
+
+	mapSpawnData.serverInfo = *cvarSystem->MoveCVarsToDict( CVAR_SERVERINFO );
+	mapSpawnData.serverInfo.Set( "si_gameType", "singleplayer" );
+
+	mapSpawnData.serverInfo.Set( "si_map", saveMap );
+
+	mapSpawnData.syncedCVars.Clear();
+	mapSpawnData.syncedCVars = *cvarSystem->MoveCVarsToDict( CVAR_NETWORKSYNC );
+
+	mapSpawnData.mapSpawnUsercmd[0] = usercmdGen->TicCmd( latchedTicNumber );
+	// make sure no buttons are pressed
+	mapSpawnData.mapSpawnUsercmd[0].buttons = 0;
+
+	bool success = ExecuteMapChange(savegameFile);
+	if (success)
+		SetGUI( NULL, NULL );
+
+	if (savegameFile) {
+		fileSystem->CloseFile( savegameFile );
+		savegameFile = NULL;
+	}
+
+	return success;
+}
+
+// STiFU #4531: TDM savegame version check
+idSessionLocal::SavegameValidity idSessionLocal::IsSavegameValid(const char *saveName, int* savegameRevision)
+{
+	if (!saveName)
+		return savegame_invalid;
+
+	SavegameValidity retVal = savegame_valid;
+	idStr saveMap;
+	idFile* savegameFile = NULL;
+	if (!ParseSavegamePreamble(saveName, &savegameFile, &saveMap))
+	{
+		retVal = savegame_invalid;
+		if (savegameRevision)
+			*savegameRevision = -1;
+	}
+
+	if (retVal == savegame_valid)
+	{
+		idRestoreGame savegame(savegameFile);
+		savegame.ReadHeader();
+		if (savegameRevision)
+			*savegameRevision = savegame.GetCodeRevision();
+
+		RevisionTracker& RevTracker = RevisionTracker::Instance();
+
+		if (savegameVersion != SAVEGAME_VERSION || savegame.GetCodeRevision() != RevTracker.GetSavegameRevision())
+		{
+			common->Warning("Savegame Version mismatch!");
+			retVal = savegame_versionMismatch;
+		}
+	}
+
+	if (savegameFile)
+	{
+		fileSystem->CloseFile(savegameFile);
+		savegameFile = NULL;
+	}
+
+	return retVal;
+}
+
+bool idSessionLocal::ParseSavegamePreamble(const char * saveName, idFile** savegameFile, idStr* pSaveMap)
+{
+	if (!saveName || !pSaveMap || !savegameFile)
+		return false;
+
+	idStr in, loadFile, gamename;
+
 	loadFile = saveName;
-	ScrubSaveGameFileName( loadFile );
-	loadFile.SetFileExtension( ".save" );
+	ScrubSaveGameFileName(loadFile);
+	loadFile.SetFileExtension(".save");
 
 	in = "savegames/";
 	in += loadFile;
 
 	// Open savegame file
 	// only allow loads from the game directory because we don't want a base game to load
-	idStr game = cvarSystem->GetCVarString( "fs_currentfm" );
-    savegameFile = fileSystem->OpenFileRead( in, game.Length() ? game : NULL );
+	idStr game = cvarSystem->GetCVarString("fs_currentfm");
+	*savegameFile = fileSystem->OpenFileRead(in, game.Length() ? game : NULL);
 
-	if ( savegameFile == NULL ) {
-		common->Warning( "Couldn't open savegame file %s", in.c_str() );
+	if (*savegameFile == NULL) {
+		common->Warning("Couldn't open savegame file %s", in.c_str());
 		return false;
 	}
-
-	loadingSaveGame = true;
 
 	// Read in save game header
 	// Game Name / Version / Map Name / Persistant Player Info
 
 	// game
-	savegameFile->ReadString( gamename );
+	(*savegameFile)->ReadString(gamename);
 
 	// if this isn't a savegame for the correct game, abort loadgame
-	if ( gamename != GAME_NAME ) {
-		common->Warning( "Attempted to load an invalid savegame: %s", in.c_str() );
-
-		loadingSaveGame = false;
-		fileSystem->CloseFile( savegameFile );
-		savegameFile = NULL;
+	if (gamename != GAME_NAME) {
+		common->Warning("Attempted to load an invalid savegame: %s", in.c_str());
 		return false;
 	}
 
 	// version
-	savegameFile->ReadInt( savegameVersion );
+	(*savegameFile)->ReadInt(savegameVersion);
 
 	// map
-	savegameFile->ReadString( saveMap );
+	(*savegameFile)->ReadString(*pSaveMap);
 
 	// persistent player info
-	for ( i = 0; i < MAX_ASYNC_CLIENTS; i++ ) {
-		mapSpawnData.persistentPlayerInfo[i].ReadFromFileHandle( savegameFile );
+	for (int i = 0; i < MAX_ASYNC_CLIENTS; i++) {
+		mapSpawnData.persistentPlayerInfo[i].ReadFromFileHandle(*savegameFile);
 	}
 
-	// check the version, if it doesn't match, cancel the loadgame,
-	// but still load the map with the persistant playerInfo from the header
-	// so that the player doesn't lose too much progress.
-	if ( savegameVersion != SAVEGAME_VERSION &&
-		 !( savegameVersion == 16 && SAVEGAME_VERSION == 17 ) ) {	// handle savegame v16 in v17
-		common->Warning( "Savegame Version mismatch: aborting loadgame and starting level with persistent data" );
-		loadingSaveGame = false;
-		fileSystem->CloseFile( savegameFile );
-		savegameFile = NULL;
-	}
-
-	common->DPrintf( "loading a v%d savegame\n", savegameVersion );
-
-	if ( saveMap.Length() > 0 ) {
-
-		// Start loading map
-		mapSpawnData.serverInfo.Clear();
-
-		mapSpawnData.serverInfo = *cvarSystem->MoveCVarsToDict( CVAR_SERVERINFO );
-		mapSpawnData.serverInfo.Set( "si_gameType", "singleplayer" );
-
-		mapSpawnData.serverInfo.Set( "si_map", saveMap );
-
-		mapSpawnData.syncedCVars.Clear();
-		mapSpawnData.syncedCVars = *cvarSystem->MoveCVarsToDict( CVAR_NETWORKSYNC );
-
-		mapSpawnData.mapSpawnUsercmd[0] = usercmdGen->TicCmd( latchedTicNumber );
-		// make sure no buttons are pressed
-		mapSpawnData.mapSpawnUsercmd[0].buttons = 0;
-
-		ExecuteMapChange();
-
-		SetGUI( NULL, NULL );
-	}
-
-	if ( loadingSaveGame ) {
-		fileSystem->CloseFile( savegameFile );
-		loadingSaveGame = false;
-		savegameFile = NULL;
-	}
-
-	return true;
-#endif
+	return pSaveMap->Length() > 0;
 }
 
 /*
@@ -2429,7 +2526,6 @@ void idSessionLocal::PacifierUpdate(loadkey_t key, int count) // grayman #3763
 		{
 		case LOAD_KEY_START: // Start loading map
 			pct = LOAD_KEY_START_PROGRESS;
-			loadDoneTime = 0;
 			break;
 		case LOAD_KEY_COLLISION_START: // Start loading collision data
 			pct = LOAD_KEY_COLLISION_START_PROGRESS;
@@ -2439,7 +2535,7 @@ void idSessionLocal::PacifierUpdate(loadkey_t key, int count) // grayman #3763
 			break;
 		case LOAD_KEY_SPAWN_ENTITIES_START: // Player spawned, start spawning entities
 			pct = LOAD_KEY_SPAWN_ENTITIES_START_PROGRESS;
-			pct_delta = (LOAD_KEY_ROUTING_START_PROGRESS - LOAD_KEY_SPAWN_ENTITIES_START_PROGRESS)/(float)count;
+			pct_delta = (LOAD_KEY_ROUTING_START_PROGRESS - LOAD_KEY_SPAWN_ENTITIES_START_PROGRESS) / idMath::Fmax(count, 1.0f);
 			break;
 		case LOAD_KEY_SPAWN_ENTITIES_INTERIM: // spawning entities (finer granularity)
 			pct += pct_delta;
@@ -2450,7 +2546,7 @@ void idSessionLocal::PacifierUpdate(loadkey_t key, int count) // grayman #3763
 			break;
 		case LOAD_KEY_ROUTING_START: // entities spawned, start compiling routing data
 			pct = LOAD_KEY_ROUTING_START_PROGRESS;
-			pct_delta = (LOAD_KEY_ROUTING_DONE_PROGRESS - LOAD_KEY_ROUTING_START_PROGRESS)/(float)count;
+			pct_delta = (LOAD_KEY_ROUTING_DONE_PROGRESS - LOAD_KEY_ROUTING_START_PROGRESS) / idMath::Fmax(count, 1.0f);
 			break;
 		case LOAD_KEY_ROUTING_INTERIM: // compiling routing data (finer granularity)
 			pct += pct_delta;
@@ -2468,15 +2564,10 @@ void idSessionLocal::PacifierUpdate(loadkey_t key, int count) // grayman #3763
 			// the -35 below guarantees there will be
 			// some time between the loading bar
 			// hitting 100% and the "Mission Loaded / Press Attack" screen
-			pct_delta = (LOAD_KEY_DONE_PROGRESS - LOAD_KEY_IMAGES_START_PROGRESS)/(float)(count-35);
+			pct_delta = (LOAD_KEY_DONE_PROGRESS - LOAD_KEY_IMAGES_START_PROGRESS) / idMath::Fmax(idMath::Fmax(count - 35, count/2.0f), 1.0f);
 			break;
 		case LOAD_KEY_IMAGES_INTERIM: // loading textures (finer granularity)
 			pct += pct_delta;
-			if ( (pct >= 1.00f) && (loadDoneTime == 0))
-			{
-				// 5s delay between load bar at 100% and Mission Start gui display
-				loadDoneTime = Sys_Milliseconds() + 5000;
-			}
 			if ( time - lastPacifierTime < 500 )
 			{
 				return;
@@ -2507,11 +2598,6 @@ void idSessionLocal::PacifierUpdate(loadkey_t key, int count) // grayman #3763
 	Sys_GenerateEvents();
 
 	UpdateScreen();
-
-#ifdef MULTIPLAYER
-	idAsyncNetwork::client.PacifierUpdate();
-	idAsyncNetwork::server.PacifierUpdate();
-#endif
 }
 
 /*
@@ -2542,7 +2628,8 @@ void idSessionLocal::Draw() {
 		if ( guiActive == guiMsg && guiMsgRestore ) {
 			guiMsgRestore->Redraw( com_frameTime );
 		}
-		
+
+		guiActive->UpdateSubtitles();	//stgatilov #2454
 		guiActive->Redraw( com_frameTime );
 	} else if ( readDemo ) {
 		rw->RenderScene( currentDemoRenderView );
@@ -2676,22 +2763,17 @@ void idSessionLocal::Frame() {
 	}
 	
 	//nbohr1more: disable SMP for debug render tools
-	if (r_showSurfaceInfo.GetBool() || 
-	r_showSilhouette.GetBool() || 
-	r_showViewEntitys.GetBool() || 
-	r_showEdges.GetBool() || 
-	r_showPortals.GetBool() ||
-	r_showViewEntitys.GetBool() ||
-	r_showShadowCount.GetBool() ||
-	r_showLightCount.GetBool() ||
-	r_showDepth.GetBool() ||
-	r_showTris.GetInteger() > 0 ||
-	r_showLights.GetInteger() > 0 ) {
-	no_smp = true;
+	if (
+		r_showSurfaceInfo.GetBool() ||
+		r_showDepth.GetBool() ||
+		r_showViewEntitys.GetBool() || // frontend may invalidate viewEntity pointers, e.g. when LOD model changes
+		r_materialOverride.GetString()[0] != '\0'
+	) {
+		no_smp = true;
 	} else {
-	no_smp = false;
+		no_smp = false;
 	}
-   
+
 	// save the screenshot and audio from the last draw if needed
 	if ( aviCaptureMode ) {
 		idStr	name;
@@ -2717,60 +2799,50 @@ void idSessionLocal::Frame() {
 		renderSystem->TakeScreenshot( com_aviDemoWidth.GetInteger(), com_aviDemoHeight.GetInteger(), name, com_aviDemoSamples.GetInteger(), NULL );
 	}
 
-	/*if ( com_smp.GetBool() && com_fixedTic.GetInteger() > 0 ) {
+	// at startup, we may be backwards
+	if (latchedTicNumber > com_ticNumber) {
 		latchedTicNumber = com_ticNumber;
-	} else */{ 
-		// at startup, we may be backwards
-		if (latchedTicNumber > com_ticNumber) {
-			latchedTicNumber = com_ticNumber;
-		}
+	}
 
-		// see how many tics we should have before continuing
-		int	minTic = latchedTicNumber + 1;
-		if (com_minTics.GetInteger() > 1) {
-			minTic = lastGameTic + com_minTics.GetInteger();
-		}
+	// see which async tic should happen before continuing
+	int	minTic;
+	if ( com_fixedTic.GetInteger() ) {
+		// stgatilov: don't wait for async tics, just model & render as fast as we can
+		minTic = latchedTicNumber;
+	}
+	else {
+		// stgatilov: don't do anything until at least one async tic has passed
+		// that's because we tie game ticks to async tics
+		minTic = latchedTicNumber + 1;
+	}
 
-		if (readDemo) {
-			if (!timeDemo && numDemoFrames != 1) {
-				minTic = lastDemoTic + USERCMD_PER_DEMO_FRAME;
-			} else {
-				// timedemos and demoshots will run as fast as they can, other demos
-				// will not run more than 30 hz
-				minTic = latchedTicNumber;
-			}
-		} else if (writeDemo) {
-			minTic = lastGameTic + USERCMD_PER_DEMO_FRAME;		// demos are recorded at 30 hz
-		}
-		// fixedTic lets us run a forced number of usercmd each frame without timing
-		if (com_fixedTic.GetInteger()) {
+	if (com_minTics.GetInteger() > 1) {
+		// stgatilov: looks like some rarely used debug setting
+		minTic = lastGameTic + com_minTics.GetInteger();
+	}
+
+	if (readDemo) {
+		if (!timeDemo && numDemoFrames != 1) {
+			minTic = lastDemoTic + USERCMD_PER_DEMO_FRAME;
+		} else {
+			// timedemos and demoshots will run as fast as they can, other demos
+			// will not run more than 30 hz
 			minTic = latchedTicNumber;
 		}
+	} else if (writeDemo) {
+		minTic = lastGameTic + USERCMD_PER_DEMO_FRAME;		// demos are recorded at 30 hz
+	}
 
-		// FIXME: deserves a cleanup and abstraction
-#if defined( _WIN32 )
-		// Spin in place if needed.  The game should yield the cpu if
-		// it is running over 60 hz, because there is fundamentally
-		// nothing useful for it to do.
-		static uint64_t prevMicroSecs = Sys_GetTimeMicroseconds();
-		while (true) {
-			latchedTicNumber = com_ticNumber;
-			if (latchedTicNumber >= minTic)
-				if (com_fixedTic.GetInteger() == 0 || Sys_GetTimeMicroseconds() - prevMicroSecs >= 6000)
-					break;
-			Sys_Sleep( 1 );
+	// Spin in place if needed when frame cap is active. 
+	// The game should yield the cpu if it is running over 60 hz, 
+	// because there is fundamentally nothing useful for it to do.
+	while (true) {
+		latchedTicNumber = com_ticNumber;
+		if (latchedTicNumber >= minTic) {
+			break;
 		}
-		prevMicroSecs = Sys_GetTimeMicroseconds();
-#else
-		while( 1 ) {
-			latchedTicNumber = com_ticNumber;
-			if ( latchedTicNumber >= minTic ) {
-				break;
-			}
-			Sys_WaitForEvent( TRIGGER_EVENT_ONE );
-		}
-#endif
-	 }
+		Sys_WaitForEvent( TRIGGER_EVENT_ONE );	//wait for event from async thread
+	}
 
 	// send frame and mouse events to active guis
 	GuiFrameEvents();
@@ -2785,14 +2857,12 @@ void idSessionLocal::Frame() {
 
 	gameTicsToRun = 0;
 	
-	if (!mapSpawned || guiActive) {
+	if ( !mapSpawned || guiActive ) {
 		if ( !com_asyncInput.GetBool() ) {
 			// early exit, won't do RunGameTic .. but still need to update mouse position for GUIs
 			usercmdGen->GetDirectUsercmd();
 		}
-		r_swapIntervalTemp.SetInteger( 1 );
-	} else
-		r_swapIntervalTemp.SetInteger( r_swapInterval.GetInteger() );
+	}
 
 	if ( !mapSpawned ) {
 		return;
@@ -2802,14 +2872,6 @@ void idSessionLocal::Frame() {
 		lastGameTic = latchedTicNumber;
 		return;
 	}
-
-	// in message box / GUIFrame, idSessionLocal::Frame is used for GUI interactivity
-	// but we early exit to avoid running game frames
-#ifdef MULTIPLAYER
-	if (idAsyncNetwork::IsActive()) {
-		return;
-	}
-#endif
 
 	// check for user info changes
 	if ( cvarSystem->GetModifiedFlags() & CVAR_USERINFO ) {
@@ -2830,8 +2892,8 @@ void idSessionLocal::Frame() {
 	}
 
 	// don't get too far behind after a hitch
-	if ( numCmdsToRun > 10 ) {
-		lastGameTic = latchedTicNumber - 10;
+	if ( numCmdsToRun > com_maxTicsPerFrame.GetInteger() ) {
+		lastGameTic = latchedTicNumber - com_maxTicsPerFrame.GetInteger();
 	}
 
 	// never use more than USERCMD_PER_DEMO_FRAME,
@@ -2844,7 +2906,7 @@ void idSessionLocal::Frame() {
 		}
 		// we may need to dump older commands
 		lastGameTic = latchedTicNumber - fixedTic;
-	} else if ( com_fixedTic.GetInteger() > 0 ) {
+	} else if ( (com_fixedTic.GetInteger() > 0) && com_timescale.GetFloat() == 1 ) {
 		// this may cause commands run in a previous frame to
 		// be run again if we are going at above the real time rate
 		lastGameTic = latchedTicNumber - com_fixedTic.GetInteger();
@@ -2860,7 +2922,24 @@ void idSessionLocal::Frame() {
 		syncNextGameFrame = false;
 	}
 
-	gameTicsToRun = latchedTicNumber - lastGameTic;
+	if (com_fixedTic.GetInteger() > 0) {
+		gameTimestepTotal = com_frameDelta;
+		//stgatilov #4924: if too much time passed since last frame,
+		//then split this game tic into many short tics
+		//long tics easily make physics unstable, so game tic duration should be under control
+		gameTicsToRun = (gameTimestepTotal - 1) / com_maxTicTimestep.GetInteger() + 1;	//divide by 17 ms, rounding up
+		if (gameTicsToRun > com_maxTicsPerFrame.GetInteger()) {
+			//if everything is too bad, slow game down instead of modeling insane number of ticks per frame
+			gameTicsToRun = com_maxTicsPerFrame.GetInteger();
+			gameTimestepTotal = USERCMD_MSEC * gameTicsToRun;
+		}
+		lastGameTic = latchedTicNumber - gameTicsToRun;
+	}
+	else {
+		gameTicsToRun = latchedTicNumber - lastGameTic;
+		gameTimestepTotal = USERCMD_MSEC * gameTicsToRun;
+	}
+
 	// create client commands, which will be sent directly
 	// to the game
 	if ( com_showTics.GetBool() ) {
@@ -2873,9 +2952,11 @@ void idSessionLocal::Frame() {
 idSessionLocal::RunGameTic
 ================
 */
-void idSessionLocal::RunGameTic() {
+void idSessionLocal::RunGameTic(int timestepMs) {
 	logCmd_t	logCmd;
 	usercmd_t	cmd;
+
+	TRACE_CPU_SCOPE( "RunGameTic" )
 
 	// if we are doing a command demo, read or write from the file
 	if ( cmdDemoFile ) {
@@ -2905,21 +2986,14 @@ void idSessionLocal::RunGameTic() {
 		} else {
 			cmd = usercmdGen->GetDirectUsercmd();
 		}
-		lastGameTic++;
 	}
+	lastGameTic++;
 
 	// stgatilov: allow automation to intercept gameplay controls
 	if (com_automation.GetBool()) {
 		bool automationRules = Auto_GetUsercmd(cmd);
 	}
 
-	// grayman #3763 - allow "Mission Start" gui if the mission uses it
-	if ( ( loadDoneTime > 0 ) && ( Sys_Milliseconds() > loadDoneTime ) )
-	{
-		game->SetTime2Start();
-		loadDoneTime = 0;
-	}
-	
 	// Obsttorte - check if we should save the game
 
 	idStr saveGameName = game->triggeredSave();
@@ -2933,14 +3007,13 @@ void idSessionLocal::RunGameTic() {
 		}
 		else
 		{
-			SaveGame(saveGameName.c_str(), false, true);
+			SaveGame(saveGameName.c_str(), true, true);
 		}
 	}
 
 	// run the game logic every player move
 	int	start = Sys_Milliseconds();
-	gameReturn_t	ret = game->RunFrame( &cmd );
-
+	gameReturn_t	ret = game->RunFrame( &cmd, timestepMs );
 	int end = Sys_Milliseconds();
 	time_gameFrame += end - start;	// note time used for com_speeds
 
@@ -2971,45 +3044,19 @@ void idSessionLocal::RunGameTic() {
 	syncNextGameFrame = ret.syncNextGameFrame;
 
 	if ( ret.sessionCommand[0] ) {
-		idCmdArgs args;
-
-		args.TokenizeString( ret.sessionCommand, false );
-
-		if ( !idStr::Icmp( args.Argv(0), "map" ) ) {
-			// get current player states
-			for ( int i = 0 ; i < numClients ; i++ ) {
-				mapSpawnData.persistentPlayerInfo[i] = game->GetPersistentPlayerInfo( i );
-			}
-			// clear the devmap key on serverinfo, so player spawns
-			// won't get the map testing items
-			mapSpawnData.serverInfo.Delete( "devmap" );
-
-			// go to the next map
-			MoveToNewMap( args.Argv(1) );
-		} else if ( !idStr::Icmp( args.Argv(0), "devmap" ) ) {
-			mapSpawnData.serverInfo.Set( "devmap", "1" );
-			MoveToNewMap( args.Argv(1) );
-		} else if ( !idStr::Icmp( args.Argv(0), "died" ) ) {
-			// restart on the same map
-			UnloadMap();
-			SetGUI(guiRestartMenu, NULL);
-		} else if ( !idStr::Icmp( args.Argv(0), "disconnect" ) ) {
-			cmdSystem->BufferCommandText( CMD_EXEC_INSERT, "stoprecording ; disconnect" );
-			// Check for final save trigger - the player PVS is freed at this point, so we can go ahead and save the game
-			if( gameLocal.m_TriggerFinalSave ) {
-				gameLocal.m_TriggerFinalSave = false;
-
-				idStr savegameName = va( "Mission %d Final Save", gameLocal.m_MissionManager->GetCurrentMissionIndex() + 1 );
-				cmdSystem->BufferCommandText( CMD_EXEC_INSERT, va( "savegame '%s'", savegameName.c_str() ) );
-			}
-		}
+		// execute commands from backend, most importantly map change
+		ExecuteFrameCommand(ret.sessionCommand, true);
 	}
 }
 
 void idSessionLocal::RunGameTics() {
 	// run game tics
 	for (int i = 0; i < gameTicsToRun; ++i) {
-		RunGameTic();
+		int deltaMs = gameTimestepTotal * (i+1) / gameTicsToRun - gameTimestepTotal * i / gameTicsToRun;
+		if (com_fixedTic.GetInteger() == 0) 
+			assert(deltaMs == USERCMD_MSEC);
+
+		RunGameTic(deltaMs);
 		if (!mapSpawned || syncNextGameFrame) {
 			break;
 		}
@@ -3040,9 +3087,15 @@ Runs game tics and draw call creation in a background thread.
 ===============
 */
 void idSessionLocal::FrontendThreadFunction() {
+	// stgatilov #4550: set FPU props (FTZ + DAZ, etc.)
+	sys->ThreadStartup();
+
 	while( true ) {
-		double beginLoop = Sys_GetClockTicks();
+		// stgatilov #4550: update FPU props (e.g. NaN exceptions)
+		sys->ThreadHeartbeat();
+
 		{ // lock scope
+			TRACE_CPU_SCOPE_COLOR( "Frontend::Wait", TRACE_COLOR_IDLE )
 			std::unique_lock< std::mutex > lock( signalMutex );
 			// wait for render thread
 			while( !frontendActive && !shutdownFrontend ) {
@@ -3052,14 +3105,9 @@ void idSessionLocal::FrontendThreadFunction() {
 				return;
 			}
 		}
-		double endWaitForRenderThread = Sys_GetClockTicks();
-		double endGameTics = 0, endDraw = 0;
 		try {
 			RunGameTics();
-			endGameTics = Sys_GetClockTicks();
-
 			DrawFrame();
-			endDraw = Sys_GetClockTicks();
 		} catch( std::shared_ptr< ErrorReportedException > e ) {
 			frontendException = e;
 		} 
@@ -3069,25 +3117,19 @@ void idSessionLocal::FrontendThreadFunction() {
 			frontendActive = false;
 			signalMainThread.notify_one();
 		}
-		double endSignalRenderThread = Sys_GetClockTicks();
-
-		if( r_logSmpTimings.GetBool() ) {
-			const double TO_MICROS = 1000000 / Sys_ClockTicksPerSecond();
-			frontendTimeWaiting = (endWaitForRenderThread - beginLoop) * TO_MICROS;
-			frontendTimeGameTics = (endGameTics - endWaitForRenderThread) * TO_MICROS;
-			frontendTimeDrawing = (endDraw - endGameTics) * TO_MICROS;
-			frontendTimeSignal = (endSignalRenderThread - endDraw) * TO_MICROS;
-		}
 	}
 }
 
 bool idSessionLocal::IsFrontend() const {
+#if 0	
 	return std::this_thread::get_id() == frontendThread.get_id();
-}
-
-void idSessionLocal::LogFrontendTimings( idFile &logFile ) const {
-	logFile.Printf( "  Frontend: wait for signal %.2f us - gametics %.2f us - drawing %.2f us - signal backend %.2f us\n", 
-		frontendTimeWaiting, frontendTimeGameTics, frontendTimeDrawing, frontendTimeSignal );
+#else
+#if WIN32
+	return Sys_GetCurrentThreadID() == GetThreadId( (HANDLE)frontendThread );
+#else
+	return Sys_GetCurrentThreadID() == frontendThread;
+#endif
+#endif
 }
 
 /*
@@ -3120,6 +3162,7 @@ Waits for the frontend to finish preparing the next frame.
 */
 void idSessionLocal::WaitForFrontendCompletion() {
 	if( com_smp.GetBool() ) {
+		TRACE_CPU_SCOPE_COLOR( "WaitForFrontend", TRACE_COLOR_IDLE );
 		std::unique_lock<std::mutex> lock( signalMutex );
 		if( r_showSmp.GetBool() )
 			backEnd.pc.waitedFor = frontendActive ? 'F' : '.';
@@ -3137,7 +3180,72 @@ void idSessionLocal::WaitForFrontendCompletion() {
 
 void idSessionLocal::StartFrontendThread() {
 	frontendActive = shutdownFrontend = false;
-	frontendThread = std::thread( &idSessionLocal::FrontendThreadFunction, this );
+	auto func = []( void *x ) -> unsigned int {
+		idSessionLocal* s = (idSessionLocal*)x;
+		TRACE_THREAD_NAME( "Frontend" )
+		s->FrontendThreadFunction();
+		return 0; 
+	};
+	frontendThread = Sys_CreateThread( (xthread_t)func, this, THREAD_NORMAL, "Frontend" );
+}
+
+
+void idSessionLocal::ExecuteFrameCommand(const char *command, bool delayed) {
+	if (delayed) {
+		delayedFrameCommands.Append(command);
+		return;
+	}
+
+	idCmdArgs args;
+	args.TokenizeString( command, false );
+
+	if ( !idStr::Icmp( args.Argv(0), "map" ) ) {
+		// get current player states
+		for ( int i = 0 ; i < numClients ; i++ ) {
+			mapSpawnData.persistentPlayerInfo[i] = game->GetPersistentPlayerInfo( i );
+		}
+		// clear the devmap key on serverinfo, so player spawns
+		// won't get the map testing items
+		mapSpawnData.serverInfo.Delete( "devmap" );
+
+		// go to the next map
+		MoveToNewMap( args.Argv(1) );
+
+		// do not process any additional game tics this frame
+		syncNextGameFrame = true;
+	} else if ( !idStr::Icmp( args.Argv(0), "devmap" ) ) {
+		mapSpawnData.serverInfo.Set( "devmap", "1" );
+		MoveToNewMap( args.Argv(1) );
+
+		// do not process any additional game tics this frame
+		syncNextGameFrame = true;
+	} else if ( !idStr::Icmp( args.Argv(0), "died" ) ) {
+		// restart on the same map
+		mainMenuStartState = MMSS_FAILURE;
+		UnloadMap();
+		StartMenu();
+
+		// do not process any additional game tics this frame
+		syncNextGameFrame = true;
+	} else if ( !idStr::Icmp( args.Argv(0), "disconnect" ) ) {
+		mainMenuStartState = MMSS_SUCCESS;
+		cmdSystem->BufferCommandText( CMD_EXEC_INSERT, "stoprecording ; disconnect" );
+		// Check for final save trigger - the player PVS is freed at this point, so we can go ahead and save the game
+		if( gameLocal.m_TriggerFinalSave ) {
+			gameLocal.m_TriggerFinalSave = false;
+
+			idStr savegameName = va( "Mission %d Final Save", gameLocal.m_MissionManager->GetCurrentMissionIndex() + 1 );
+			cmdSystem->BufferCommandText( CMD_EXEC_INSERT, va( "savegame '%s'", savegameName.c_str() ) );
+		}
+	}
+}
+
+void idSessionLocal::ExecuteDelayedFrameCommands() {
+	if (delayedFrameCommands.Num() == 0)
+		return;
+	for (int i = 0; i < delayedFrameCommands.Num(); i++)
+		ExecuteFrameCommand(delayedFrameCommands[i], false);
+	delayedFrameCommands.SetNum(0);
 }
 
 /*
@@ -3154,7 +3262,6 @@ void idSessionLocal::Init() {
 
 	cmdSystem->AddCommand( "writePrecache", Sess_WritePrecache_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "writes precache commands" );
 
-#ifndef	ID_DEDICATED
 	cmdSystem->AddCommand( "map", Session_Map_f, CMD_FL_SYSTEM, "loads a map", idCmdSystem::ArgCompletion_MapName );
 	cmdSystem->AddCommand( "devmap", Session_DevMap_f, CMD_FL_SYSTEM, "loads a map in developer mode", idCmdSystem::ArgCompletion_MapName );
 	cmdSystem->AddCommand( "testmap", Session_TestMap_f, CMD_FL_SYSTEM, "tests a map", idCmdSystem::ArgCompletion_MapName );
@@ -3173,21 +3280,20 @@ void idSessionLocal::Init() {
 	cmdSystem->AddCommand( "timeDemoQuit", Session_TimeDemoQuit_f, CMD_FL_SYSTEM, "times a demo and quits", idCmdSystem::ArgCompletion_DemoName );
 	cmdSystem->AddCommand( "aviDemo", Session_AVIDemo_f, CMD_FL_SYSTEM, "writes AVIs for a demo", idCmdSystem::ArgCompletion_DemoName );
 	cmdSystem->AddCommand( "compressDemo", Session_CompressDemo_f, CMD_FL_SYSTEM, "compresses a demo file", idCmdSystem::ArgCompletion_DemoName );
-#endif
 
 	cmdSystem->AddCommand( "disconnect", Session_Disconnect_f, CMD_FL_SYSTEM, "disconnects from a game" );
 
 	cmdSystem->AddCommand( "demoShot", Session_DemoShot_f, CMD_FL_SYSTEM, "writes a screenshot for a demo" );
 	cmdSystem->AddCommand( "testGUI", Session_TestGUI_f, CMD_FL_SYSTEM, "tests a gui" );
 
-#ifndef	ID_DEDICATED
 	cmdSystem->AddCommand( "saveGame", SaveGame_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "saves a game" );
 	cmdSystem->AddCommand( "loadGame", LoadGame_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "loads a game", idCmdSystem::ArgCompletion_SaveGame );
-#endif
 
 	cmdSystem->AddCommand( "rescanSI", Session_RescanSI_f, CMD_FL_SYSTEM, "internal - rescan serverinfo cvars and tell game" );
 
 	cmdSystem->AddCommand( "hitch", Session_Hitch_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "hitches the game" );
+
+	cmdSystem->AddCommand( "escape", SimulateEscape_f, CMD_FL_GAME, "simulate a press of the ESC key" );
 
 	// the same idRenderWorld will be used for all games
 	// and demos, insuring that level specific models
@@ -3198,13 +3304,9 @@ void idSessionLocal::Init() {
 	menuSoundWorld = soundSystem->AllocSoundWorld( rw );
 
 	// we have a single instance of the main menu
-	guiMainMenu = uiManager->FindGui( "guis/mainmenu.gui", true, false, true );
+	ResetMainMenu();
 	guiMainMenu_MapList = uiManager->AllocListGUI();
 	guiMainMenu_MapList->Config( guiMainMenu, "mapList" );
-#ifdef MULTIPLAYER
-	idAsyncNetwork::client.serverList.GUIConfig( guiMainMenu, "serverList" );
-#endif
-	guiRestartMenu = uiManager->FindGui( "guis/restart.gui", true, false, true );
 	guiMsg = uiManager->FindGui( "guis/msg.gui", true, false, true );
 
 	whiteMaterial = declManager->FindMaterial( "_white" );
@@ -3227,20 +3329,7 @@ idSessionLocal::GetLocalClientNum
 ===============
 */
 int idSessionLocal::GetLocalClientNum() {
-#ifdef MULTIPLAYER
-	if (idAsyncNetwork::client.IsActive()) {
-		return idAsyncNetwork::client.GetLocalClientNum();
-	} else if ( idAsyncNetwork::server.IsActive() ) {
-		if ( idAsyncNetwork::serverDedicated.GetInteger() == 0 ) {
-			return 0;
-		} else if ( idAsyncNetwork::server.IsClientInGame( idAsyncNetwork::serverDrawClient.GetInteger() ) ) {
-			return idAsyncNetwork::serverDrawClient.GetInteger();
-		} else {
-			return -1;
-		}
-	} else 
-#endif
-		return 0;
+	return 0;
 }
 
 /*
@@ -3283,5 +3372,6 @@ idSessionLocal::GetSaveGameVersion
 ===============
 */
 int idSessionLocal::GetSaveGameVersion( void ) {
+	// TODO STiFU: Possibly refactor to use proper TDM revision instead of old id savegameVersion
 	return savegameVersion;
 }

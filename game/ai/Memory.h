@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __AI_MEMORY_H__
@@ -220,8 +220,11 @@ const char* const AlertStateNames[EAlertStateNum] =
 #define HIDING_OBJECT_HEIGHT 0.35f
 #define MAX_SPOTS_PER_SEARCH_CALL 100
 
-// The maximum time the AI is able to follow the enemy although it's invisible (ms)
+// The maximum time the AI is able to follow the enemy during combat, although it's invisible (ms)
 #define MAX_BLIND_CHASE_TIME 3000
+
+// The maximum time the AI is able to follow the enemy when it's unreachable, although it's invisible (ms)
+#define MAX_BLIND_UNREACHABLE_TIME 5000 // grayman #4343 (was 3000)
 
 // grayman #2603 - how long to wait until barking again about a light that's out (ms)
 #define REBARK_DELAY 15000
@@ -247,7 +250,7 @@ public:
 	// Our next path entity
 	idEntityPtr<idPathCorner> nextPath;
 
-	// Our last path entity
+	// Our last path_corner entity
 	idEntityPtr<idPathCorner> lastPath;
 
 	// The game time, the AlertLevel was last increased.
@@ -296,6 +299,7 @@ public:
 	int headTurnEndTime;
 
 	idVec3 idlePosition;
+	idVec3 returnSitPosition; // grayman #3989
 	float idleYaw;
 
 	// angua: whether the AI should play idle animations

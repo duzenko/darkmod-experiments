@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -460,6 +460,7 @@ void Sys_Status(const char *psz, int part )
 	g_pParentWnd->SetStatusText(part, psz);
 }
 
+#if 0	//note: this hack was needed only with dynamic linkage of MFC
 //=========================================================
 //stgatilov: Dirty hack to fix MFC states destruction.
 // Used only in Sys_Quit, when the game is exited.
@@ -486,3 +487,7 @@ CRadiantApp::~CRadiantApp() {
 	AfxSetModuleState(m_pModuleState);
 }
 //=========================================================
+#else
+void Sys_MfcHack() {}
+CRadiantApp::~CRadiantApp() {}
+#endif

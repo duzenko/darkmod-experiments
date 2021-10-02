@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -78,7 +78,7 @@ idCVar cv_ai_show_conversationstate("tdm_ai_show_conversationstate", "0",		CVAR_
 idCVar cv_ai_acuity_L3	(			"tdm_ai_acuity_L3",			"1.1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the amount by which the acuities of an AI are multiplied if the AI is at alert level 3 but not yet 4");
 idCVar cv_ai_acuity_L4	(			"tdm_ai_acuity_L4",			"1.3",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the amount by which the acuities of an AI are multiplied if the AI is at alert level 4 but not yet 5");
 idCVar cv_ai_acuity_L5	(			"tdm_ai_acuity_L5",			"1.5",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the amount by which the acuities of an AI are multiplied if the AI is at alert level 5");
-idCVar cv_ai_acuity_susp(			"tdm_ai_acuity_susp",		"1.2",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the amount by which the acuities of an AI are multiplied if the AI is suspicious due to evidence. It is in addition to the other modifiers.");
+//idCVar cv_ai_acuity_susp(			"tdm_ai_acuity_susp",		"1.2",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the amount by which the acuities of an AI are multiplied if the AI is suspicious due to evidence. It is in addition to the other modifiers.");
 
 idCVar cv_sndprop_disable(			"tdm_sndprop_disable",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL,  "If set to true, sound propagation will not be calculated." );
 idCVar cv_spr_debug(				"tdm_spr_debug",			"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL,  "If set to true, sound propagation debugging information will be sent to the console, and the log information will become more detailed." );
@@ -116,10 +116,14 @@ idCVar cv_show_health (							"tdm_show_health",					"0",            CVAR_ARCHIV
 
 idCVar cv_ai_show_aasfuncobstacle_state(		"tdm_ai_show_aasfuncobstacle_state",	"0",		CVAR_ARCHIVE | CVAR_GAME | CVAR_BOOL, "If true (nonzero), idFuncAASObstacles will show their state at spawn time and during changes." );
 
+idCVar r_customWidth( "r_customWidth", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "video resolution, horizontal" );
+idCVar r_customHeight( "r_customHeight", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "video resolution, vertical" );
+idCVar r_aspectRatio("r_aspectRatio", "0", CVAR_INTEGER | CVAR_ARCHIVE, "Aspect ratio of view:\n0 = 4:3\n1 = 16:9\n2 = 16:10\n3 = 5:4\n4 = 16:9 TV\n5 = 21:9", 0, 5 );
 idCVar cv_tdm_widescreenmode("tdm_wideScreenMode",	"0", CVAR_ARCHIVE | CVAR_INTEGER, "The widescreen mode selected in the main menu (for internal use)." );
 idCVar cv_tdm_menu_music("tdm_menu_music",	"1", CVAR_ARCHIVE | CVAR_BOOL, "Whether to play background music in the main menu (for internal use)." );
 
 idCVar cv_tdm_show_trainer_messages("tdm_show_trainer_messages", "1", CVAR_BOOL | CVAR_ARCHIVE, "Whether TDM trainer maps should display pop-ups with helpful gameplay information." );
+idCVar cv_tdm_show_menu_tooltips("tdm_show_menu_tooltips", "1", CVAR_BOOL | CVAR_ARCHIVE, "Whether mouse-over tooltips should be displayed in the menu."); // Obsttorte #2626
 
 idCVar cv_tdm_default_relations_def( "tdm_default_relations_def", "atdm:team_relations_default", CVAR_GAME | CVAR_ARCHIVE, "The name of the entityDef holding the TDM default team relationships." );
 
@@ -166,7 +170,7 @@ idCVar cv_sr_show(					"tdm_show_stimresponse",    "0",           CVAR_GAME | CV
 idCVar cv_debug_mainmenu(			"tdm_debug_mainmenu",      "0",            CVAR_BOOL, "Set to 1 to enable main menu GUI debugging in the console." );
 idCVar cv_mainmenu_confirmquit(		"tdm_mainmenu_confirmquit",      "1", CVAR_ARCHIVE | CVAR_BOOL, "Set to 0 to disable the 'Quit Game' confirmation dialog when exiting the game." );
 
-idCVar cv_force_savegame_load(		"tdm_force_savegame_load", "0",   CVAR_BOOL|CVAR_ARCHIVE, "Set to 1 to skip code revision check on savegame load." );
+idCVar cv_force_savegame_load(		"tdm_force_savegame_load", "0",   CVAR_BOOL|CVAR_ARCHIVE, "Set to 1 to enable force loading of save games in case of version mismatch." );
 idCVar cv_savegame_compress(		"tdm_savegame_compress", "1",   CVAR_BOOL|CVAR_ARCHIVE, "Set to 0 to disable savegame file compression." );
 
 /**
@@ -176,14 +180,23 @@ idCVar cv_savegame_compress(		"tdm_savegame_compress", "1",   CVAR_BOOL|CVAR_ARC
 idCVar cv_pm_runmod(				"pm_runmod",			"2.12",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The multiplier used to obtain run speed from pm_walkspeed." );
 idCVar cv_pm_run_backmod(			"pm_run_backmod",		"0.7",			CVAR_GAME | CVAR_FLOAT				,	"The multiplier applied to existing run speed when the player is running backwards." );
 idCVar cv_pm_creepmod(				"pm_creepmod",			"0.44",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The multiplier used to obtain creep speed from pm_walkspeed." );
+idCVar cv_pm_running_creepmod(		"pm_running_creepmod",	"0.22",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The multiplier used to obtain creep speed from pm_walkspeed but when Always Run is enabled, allowing players to go from full run to creep.");
 idCVar cv_pm_crouchmod(				"pm_crouchmod",			"0.54",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The multiplier used to obtain crouch speed from walk speed." );
 idCVar cv_pm_max_swimspeed_mod(		"pm_max_swimspeed_mod",	"1.4",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Maximum speed of the player when moving in >= waist deep water, relative to player walkspeed." );
+idCVar cv_pm_swimspeed_variation(	"pm_swimspeed_variation","0.6",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The swimspeed periodically decreases and increases by this amount.", 0.0f, 1.0f);
+idCVar cv_pm_swimspeed_frequency(	"pm_swimspeed_frequency","0.8",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The swimspeed periodically decreases and increases by this frequency.", 0.0f, 10.0f);
 idCVar cv_pm_pushmod(				"pm_pushmod",			"0.15",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Alters the impulse applied when the player runs into an object. Fractional modifier that multiplies the default D3 impulse. ONLY APPLIES TO OBJECTS BEING KICKED. Default is 0.15" );
 idCVar cv_pm_push_maximpulse(		"pm_push_maximpulse",	"300",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the maximum impulse that is allowed to be propagated by the player to moveables just by kicking them. Only applies for 'lightweight' moveables below playermass*pm_push_heavy_threshold. Default is 300 units*kg per second." );
 idCVar cv_pm_push_start_delay(		"pm_push_start_delay",	"1000",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Defines the delay in msecs before heavy things get pushed by the player. Default is 1000 msecs." );
 idCVar cv_pm_push_accel_time(		"pm_push_accel_time",	"1000",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Defines the acceleration time in msecs when the player is starting to push things. After this time has passed, the pushed object has reached its maximum possible velocity. Default is 1000 msecs." );
 idCVar cv_pm_push_heavy_threshold(	"pm_push_heavy_threshold",	"0.15",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Defines the fraction of the player mass, above which pushable things are considered as 'heavy'. Default is 0.75." );
 idCVar cv_pm_push_max_mass(			"pm_push_max_mass",		"200",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Defines the maximum mass in kg a moveable can have to be pushable at all. Default is 200 kg.");
+
+// STiFU #1932: Soft-hinderances: Effectiveness of hinderances on certain walk speed modifiers
+idCVar cv_pm_softhinderance_active(	"pm_softhinderance_active",		"1",	CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL,		"If true, hinderances will be applied to all player speed modifiers and not just to max speed.", 0, 1);
+idCVar cv_pm_softhinderance_creep(	"pm_softhinderance_creep",	"0.2",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,		"How strong hinderances affect creeping speed.", 0.0f, 1.0f);
+idCVar cv_pm_softhinderance_walk(	"pm_softhinderance_walk",	"0.5",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,		"How strong hinderances affect walking speed.", 0.0f, 1.0f);
+idCVar cv_pm_softhinderance_run(	"pm_softhinderance_run",	"1.0",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,		"How strong hinderances affect running speed.", 0.0f, 1.0f);
 
 idCVar cv_pm_weightmod(				"pm_weightmod",			"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Gets multiplied to the force applied to objects below the player model. Defaults to 1." );
 
@@ -194,10 +207,20 @@ idCVar cv_pm_mantle_minflatness(	"pm_mantle_minflatness",		"0.707",			CVAR_GAME 
 idCVar cv_pm_mantle_jump_hold_trigger(	"pm_mantle_jump_hold_trigger",		"100",			CVAR_GAME | CVAR_INTEGER , "Default length of time for holding down jump key to start mantling." );
 idCVar cv_pm_mantle_min_velocity_for_damage(	"pm_mantle_min_velocity_for_damage",		"15",			CVAR_GAME | CVAR_FLOAT , "Default damage scale for mantling at high velocities." );
 idCVar cv_pm_mantle_damage_per_velocity_over_minimum(	"pm_mantle_damage_per_velocity_over_minimum",		"0.5",			CVAR_GAME | CVAR_FLOAT , "The meters per second of relative velocity beyond which the player takes damage when trying to mantle a target." );
-idCVar cv_pm_mantle_hang_msecs(	"pm_mantle_hang_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time that player hangs if mantle begins with the player's feet of the ground." );
-idCVar cv_pm_mantle_pull_msecs(	"pm_mantle_pull_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to pull themselves up to shoulder level with the mantle surface." );
-idCVar cv_pm_mantle_shift_hands_msecs(	"pm_mantle_shift_hands_msecs",		"500",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to shift their hands from pulling to pushing." );
-idCVar cv_pm_mantle_push_msecs(	"pm_mantle_push_msecs",		"800",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to push themselves up onto the mantle surface." );
+idCVar cv_pm_mantle_hang_msecs(	"pm_mantle_hang_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time that player hangs if mantle begins with the player's feet of the ground.", 0, 10000);
+idCVar cv_pm_mantle_pull_msecs(	"pm_mantle_pull_msecs",		"750",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to pull themselves up to shoulder level with the mantle surface.", 0, 10000);
+idCVar cv_pm_mantle_shift_hands_msecs(	"pm_mantle_shift_hands_msecs",		"500",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to shift their hands from pulling to pushing.", 0, 10000);
+idCVar cv_pm_mantle_push_msecs(	"pm_mantle_push_msecs",		"800",			CVAR_GAME | CVAR_INTEGER , "Milliseconds of time it takes for the player to push themselves up onto the mantle surface.", 0, 10000);
+idCVar cv_pm_mantle_pushNonCrouched_msecs("pm_mantle_pushNonCrouched_msecs","550", CVAR_GAME | CVAR_INTEGER, "Milliseconds of time it takes for the player to push themselves up onto the mantle surface without crouching.",0,100000);
+idCVar cv_pm_mantle_pushNonCrouched_playgrunt_speedthreshold("pm_mantle_pushNonCrouched_playgrunt_speedthreshold", "120.0", CVAR_GAME | CVAR_FLOAT, "If the player speed exceeds this threshold, a grund sound is played when performing the mantle.", 0.0f, 100000.0f);
+idCVar cv_pm_mantle_fastLowObstaces("pm_mantle_fastLowObstacles", "1", CVAR_GAME | CVAR_BOOL, "If true, a faster mantle will be performed for low obstacles.", 0, 1);
+idCVar cv_pm_mantle_maxLowObstacleHeight("pm_mantle_maxLowObstacleHeight", "36.0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE, "The maximum height of obstacles over which a fast mantle can be performed", 0.0f, 60.0f);
+idCVar cv_pm_mantle_fastMediumObstaclesCrouched("pm_mantle_fastMediumObstaclesCrouched", "1", CVAR_GAME | CVAR_BOOL, "If true, a faster mantle will be performed for medium-high obstacles in crouched state", 0, 1);
+idCVar cv_pm_mantle_pullFast_msecs("pm_mantle_pullFast_msecs", "450.0", CVAR_GAME | CVAR_INTEGER |CVAR_ARCHIVE, "The duration it takes for a fast pull.", 0, 10000);
+idCVar cv_pm_mantle_fallingFast_speedthreshold("pm_mantle_fallingFast_speedthreshold", "360.0", CVAR_GAME | CVAR_FLOAT, "If falling faster than this threshold, no fast mantles will be performed.", 0.0f, 100000.0f);
+idCVar cv_pm_mantle_cancel_speed("pm_mantle_cancel_speed", "150.0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE, "The cancel mantling animation is performed at a certain speed.", 1.0f, 10000.0f);
+
+idCVar cv_pm_ladderSlide_speedLimit("pm_ladderSlide_speedLimit", "400.0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE, "Speed when sliding down a ladder is limited to this amount.", 0, 100000.0f);
 
 /**
 * Dark Mod Jumping 
@@ -219,6 +242,17 @@ idCVar cv_tdm_reattach_delay(			"tdm_reattach_delay",			"100",			CVAR_GAME | CVA
 
 // nbohr1more: #558 Toggle Creep
 idCVar cv_tdm_creep_toggle(			    "tdm_toggle_creep",			"0",			CVAR_GAME | CVAR_BOOL, "Set to 1 to make creep toggleable." );
+
+// stifu #3607: Shouldering animation
+idCVar cv_pm_shoulderAnim_msecs(        "pm_shoulderAnim_msecs",        "700.0",        CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"Duration of the shouldering animation in msecs. Set to 0 to disable shouldering animation.", 0.0f, 5000.0f);
+idCVar cv_pm_shoulderAnim_dip_duration(	"pm_shoulderAnim_dip_duration", "0.5",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"Duration of the dip during the shouldering animation relative to pm_shoulderAnim_msecs.", 0.0f, 1.0f);
+idCVar cv_pm_shoulderAnim_rockDist(     "pm_shoulderAnim_rockDist",     "3.0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"The animation distance.", 0.0f, 50.0f);
+idCVar cv_pm_shoulderAnim_dip_dist(		"pm_shoulderAnim_dip_dist",		"5.0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"The animation distance of the vertical dip.", 0.0f, 50.0f);
+idCVar cv_pm_shoulderAnim_delay_msecs(	"pm_shoulderAnim_delay_msecs",  "0.0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"If the shouldered body is low, player will crouch and wait this delay before playing the shoulder animation. Set to negative value to disable crouching.", -1.0f, 500.0f);
+
+// stifu #4107: Try multiple drop positions for shouldered bodies
+idCVar cv_pm_shoulderDrop_maxAngle(		 "pm_shoulderDrop_maxAngle",		"91.0",		CVAR_GAME |CVAR_ARCHIVE | CVAR_FLOAT,		"When testing if an entity can be droped, the drop point candidates are rotated around the player by pm_shoulderDrop_maxAngle in increments of pm_shoulderDrop_angleIncrement.", 0.0f, 180.0f);
+idCVar cv_pm_shoulderDrop_angleIncrement("pm_shoulderDrop_angleIncrement",	"22.5",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,  "When testing if an entity can be droped, the drop point candidates are rotated around the player by pm_shoulderDrop_maxAngle in increments of pm_shoulderDrop_angleIncrement.", 1.0f, 179.0f);
 
 /**
 * Dark Mod Leaning
@@ -248,6 +282,14 @@ idCVar cv_frob_debug_bounds(		"tdm_frob_debug_bounds", "0",		CVAR_GAME | CVAR_BO
 idCVar cv_frob_weapon_selects_weapon(	"tdm_frob_weapon_selects_weapon", "0",		CVAR_GAME | CVAR_BOOL,	"Set to 1 to have weapons automatically selected when the respective item is picked up." );
 idCVar cv_frob_debug_hud(	"tdm_frob_debug_hud", "0",		CVAR_GAME | CVAR_BOOL,	"Set to 1 to show some frobbing info." );
 
+idCVar cv_frobhelper_active(			"tdm_frobhelper_active",			"0",	CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL | CVAR_NOCHEAT,	"Set to 1 to activate the FrobHelper cursor.", 0.0f, 1.0f);
+idCVar cv_frobhelper_alwaysVisible(     "tdm_frobhelper_alwaysVisible",     "0",    CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL | CVAR_NOCHEAT,    "Set to 1 to always display the frobhelper like a crosshair.", 0, 1); // stifu #4990
+idCVar cv_frobhelper_alpha(				"tdm_frobhelper_alpha",				"1.0",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT | CVAR_NOCHEAT,	"Alpha value of FrobHelper cursor.", 0.0f, 1.0f);
+idCVar cv_frobhelper_fadein_delay(		"tdm_frobhelper_fadein_delay",		"500",	CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER | CVAR_NOCHEAT, "The FrobHelper cursor fade-in is delayed by this amount specified in ms.", 0.0f, 1000.0f);
+idCVar cv_frobhelper_fadein_duration(	"tdm_frobhelper_fadein_duration",	"1500", CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER | CVAR_NOCHEAT, "The FrobHelper cursor is faded in for this duration specified in ms.", 0.0f, 5000.0f);
+idCVar cv_frobhelper_fadeout_duration(	"tdm_frobhelper_fadeout_duration",	"500",	CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER | CVAR_NOCHEAT, "The FrobHelper cursor is faded out for this duration specified in ms.", 0.0f, 5000.0f);
+idCVar cv_frobhelper_ignore_size(		"tdm_frobhelper_ignore_size",		"40.0",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT | CVAR_NOCHEAT,	"The FrobHelper is not activated for entites that are bigger than this ignore size along one dimension. Set to 0, to disable ignoring entities.", 0.0f, 10000.0f);
+
 /**
 * Dark Mod Misc. Control Options
 **/
@@ -258,19 +300,60 @@ idCVar cv_weapon_next_on_empty(		"tdm_weapon_next_on_empty",	"0",	CVAR_GAME | CV
 **/
 idCVar cv_collision_damage_scale_vert(	"tdm_collision_damage_scale_vert", "1",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This globally scales the damage AI take from vertical collisions/decelerations. This multiplies delta-velocity squared." );
 idCVar cv_collision_damage_scale_horiz(	"tdm_collision_damage_scale_horiz", "0.5",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This globally scales the damage AI take from horizontal collisions/decelerations. This multiplies delta-velocity squared." );
-idCVar cv_drag_limit_force(				"tdm_drag_limit_force", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Cheat: Set to 0 to disable finite acceleration while grabbing objects." );
-idCVar cv_drag_force_max(				"tdm_drag_force_max", "100000", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Maximum force the player can apply to a dragged object [kg * doom units / second^2]" );
-idCVar cv_drag_stuck_dist(				"tdm_drag_stuck_dist", "38.0", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Distance from the grab point at which object is determined to be 'stuck' and possibly auto-dropped." );
-idCVar cv_drag_damping(					"tdm_drag_damping", "0.0", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Damping applied to objects being grabbed by the player" );
-idCVar cv_drag_damping_AF(				"tdm_drag_damping_af", "0.4", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Damping applied to ragdolls being grabbed by the player" );
-idCVar cv_drag_AF_ground_timer(			"tdm_drag_af_ground_timer", "800", CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "Time in milliseconds that it takes to ramp up to full vertical velocity after a ground-restricted body has come back to ground contact." );
-idCVar cv_drag_AF_free(					"tdm_drag_af_free", "0", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "This is a cheat that allows lifting all AI bodies completely off the ground when dragging them.  Useful for mappers who want to set up ragdolls ingame." );
+idCVar cv_dragged_item_highlight(		"tdm_dragged_item_highlight", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Set this to 1 (=TRUE) if the grabbed item should always be highlighted." );
 idCVar cv_drag_jump_masslimit(			"tdm_drag_jump_masslimit", "20", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "When the player is holding something above this mass, jumping becomes impossible." );
 idCVar cv_drag_encumber_minmass(		"tdm_drag_encumber_minmass", "10", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Minimum carried mass that starts to effect movement speed." );
 idCVar cv_drag_encumber_maxmass(		"tdm_drag_encumber_maxmass", "55", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Carried mass at which movement speed clamps to the lowest value." );
 idCVar cv_drag_encumber_max(			"tdm_drag_encumber_max", "0.4", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Maximum encumbrance when carrying heavy things (expressed as a fraction of maximum unencumbered movement speed)." );
-idCVar cv_dragged_item_highlight(		"tdm_dragged_item_highlight", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Set this to 1 (=TRUE) if the grabbed item should always be highlighted." );
-idCVar cv_drag_debug(					"tdm_drag_debug", "0", CVAR_GAME | CVAR_BOOL, "Shows debug arrows for desired velocity and contact plane normals when moving objects with the grabber." );
+idCVar cv_drag_stuck_dist(				"tdm_drag_stuck_dist", "38.0", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Distance from the grab point at which object is determined to be 'stuck' and possibly auto-dropped." );
+idCVar cv_drag_force_max(				"tdm_drag_force_max", "100000", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Maximum force the player can apply to a dragged object [kg * doom units / second^2]." );
+idCVar cv_drag_new(						"tdm_drag_new", "1", CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE, "If set to 1, then the new grabber code is used (starting from TDM 2.10).");
+//stgatilov #5599: cvars in this section only affect the old grabber:
+idCVar cv_drag_limit_force(				"tdm_drag1_limit_force", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Cheat: Set to 0 to disable finite acceleration while grabbing objects." );
+idCVar cv_drag_damping(					"tdm_drag1_damping", "0.0", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Damping applied to objects being grabbed by the player" );
+idCVar cv_drag_damping_AF(				"tdm_drag1_damping_af", "0.4", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Damping applied to ragdolls being grabbed by the player" );
+idCVar cv_drag_AF_ground_timer(			"tdm_drag1_af_ground_timer", "800", CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "Time in milliseconds that it takes to ramp up to full vertical velocity after a ground-restricted body has come back to ground contact." );
+idCVar cv_drag_AF_free(					"tdm_drag1_af_free", "0", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "This is a cheat that allows lifting all AI bodies completely off the ground when dragging them.  Useful for mappers who want to set up ragdolls ingame." );
+idCVar cv_drag_debug(					"tdm_drag1_debug", "0", CVAR_GAME | CVAR_BOOL, "Shows debug arrows for desired velocity and contact plane normals when moving objects with the grabber." );
+//stgatilov #5599: cvars in this section only affect the new grabber:
+idCVar cv_drag_targetpos_averaging_time(
+	"tdm_drag2_targetpos_averaging_time", "0.1", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE,
+	"The effective drag target position is averaged over last T seconds for smoother movements. ",
+	0.0f, 10.0f
+);
+idCVar cv_drag_rigid_silentmode(
+	"tdm_drag2_rigid_silentmode", "1", CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE,
+	"When to use 'silent mode' for rigid objects manipulation (no sounds/impulses):\n"
+	"  0 --- never\n"
+	"  1 --- when creep button is pressed\n"
+	"  2 --- when run button is NOT pressed\n"
+	"  3 --- always",
+	0, 3
+);
+idCVar cv_drag_rigid_distance_halfing_time(
+	"tdm_drag2_rigid_distance_halfing_time", "0.1", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE,
+	"It normally takes T seconds for dragged rigid object to reduce its distance to target in 2.71 times. ",
+	0.01f, 10.0f
+);
+idCVar cv_drag_rigid_acceleration_radius(
+	"tdm_drag2_rigid_acceleration_radius", "1.0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE,
+	"When distance from dragged rigid object to target is smaller than R, the dragging is significantly accelerated. "
+	"Set to 0 to disable acceleration completely. ",
+	0.0f, 100.0f
+);
+idCVar cv_drag_af_weight_ratio(
+	"tdm_drag2_af_weight_ratio", "0.8", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE,
+	"Force applied when dragging articulated figure is K * total weight of AF. "
+	"Note that value 1.0 or greater will allow holding bodies completely in-air, "
+	"while value lower than 0.5 will not allow to drag body due to friction. ",
+	0.0f, 10.0f
+);
+idCVar cv_drag_af_reduceforce_radius(
+	"tdm_drag2_af_reduceforce_radius", "10.0", CVAR_GAME | CVAR_FLOAT | CVAR_ARCHIVE,
+	"When distance from dragged articulated figure to target is lower than R, the applied force is reduced. "
+	"It helps to avoid oscillatory movements when you e.g. pull ragdoll's arm. ",
+	0.0f, 100.0f
+);
 
 idCVar cv_melee_debug(					"tdm_melee_debug", "0", CVAR_GAME | CVAR_BOOL, "Enable to show debug melee combat graphics." );
 idCVar cv_melee_state_debug(			"tdm_melee_debug_state", "0", CVAR_GAME | CVAR_BOOL, "Enable to display debug text representing AI melee status." );
@@ -288,10 +371,15 @@ idCVar cv_melee_difficulty(				"tdm_melee_difficulty", "normal", CVAR_GAME | CVA
 
 // grayman #3492 - AI Vision
 idCVar cv_ai_vision(					"tdm_ai_vision", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "AI Vision as set by the menu");
-idCVar cv_ai_vision_nearly_blind(		"tdm_ai_vision_nearly_blind", "0.2", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Nearly Blind', set by the menu");
-idCVar cv_ai_vision_forgiving(			"tdm_ai_vision_forgiving", "0.6", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Forgiving', set by the menu");
-idCVar cv_ai_vision_challenging(		"tdm_ai_vision_challenging", "1.2", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Challenging', set by the menu");
-idCVar cv_ai_vision_hardcore(			"tdm_ai_vision_hardcore", "1.5", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Hardcore', set by the menu");
+//idCVar cv_ai_vision_nearly_blind(		"tdm_ai_vision_nearly_blind", "0.2", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Nearly Blind', set by the menu");
+//idCVar cv_ai_vision_forgiving(			"tdm_ai_vision_forgiving", "0.6", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Forgiving', set by the menu");
+//idCVar cv_ai_vision_challenging(		"tdm_ai_vision_challenging", "1.2", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Challenging', set by the menu");
+//idCVar cv_ai_vision_hardcore(			"tdm_ai_vision_hardcore", "1.5", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Hardcore', set by the menu");
+// grayman #5019
+idCVar cv_ai_vision_nearly_blind("tdm_ai_vision_nearly_blind", "0.134", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Nearly Blind', set by the menu");
+idCVar cv_ai_vision_forgiving("tdm_ai_vision_forgiving", "0.402", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Forgiving', set by the menu");
+idCVar cv_ai_vision_challenging("tdm_ai_vision_challenging", "0.804", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Challenging', set by the menu");
+idCVar cv_ai_vision_hardcore("tdm_ai_vision_hardcore", "1.005", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "AI Vision 'Hardcore', set by the menu");
 
 // grayman #3682 - AI Hearing
 idCVar cv_ai_hearing(					"tdm_ai_hearing", "2", CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "AI Hearing as set by the menu");
@@ -306,10 +394,11 @@ idCVar cv_phys_show_momentum(			"tdm_phys_show_momentum", "0", CVAR_GAME | CVAR_
 * DarkMod Item Manipulation
 * Throw_min and throw_max are the min and max impulses applied to items thrown
 **/
-idCVar cv_throw_min(				"tdm_throw_min",			"600",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Minimum impulse applied to a thrown object." );
-idCVar cv_throw_max(				"tdm_throw_max",			"3500",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Maximum impulse applied to a thrown object." );
+idCVar cv_throw_impulse_min(		"tdm_throw_impulse_min",	"1200",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Impulse applied to a thrown object without holding throw button." );
+idCVar cv_throw_impulse_max(		"tdm_throw_impulse_max",	"3500",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Impulse applied to a thrown object after throw button held for full time." );
+idCVar cv_throw_vellimit_min(		"tdm_throw_vellimit_min",	"300",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Velocity upper limit for thrown object without holding throw button." );
+idCVar cv_throw_vellimit_max(		"tdm_throw_vellimit_max",	"900",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Velocity upper limit for thrown object after throw button held for full time." );
 idCVar cv_throw_time(				"tdm_throw_time",			"1200",			CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "When throwing an object, time it takes to charge up to the max throw force in milliseconds." );
-idCVar cv_throw_max_vel(			"tdm_throw_max_vel",		"900",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "Velocity of thrown objects is clamped to this value (in doomunits / second).  Needed to balance throwing of very light objects." );
 
 idCVar cv_bounce_sound_max_vel(		"tdm_bounce_sound_max_vel",	"400",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "At this velocity moveable collision sounds reach their maximum volume." );
 idCVar cv_bounce_sound_min_vel(		"tdm_bounce_sound_min_vel",	"80",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "This is the minimum velocity at which moveable collision sounds can be heard at all." );
@@ -324,8 +413,9 @@ idCVar cv_tdm_inv_gui_file(	"tdm_inv_hud_file", "guis/tdm_inv.gui",	CVAR_GAME, "
 idCVar cv_tdm_inv_loot_item_def("tdm_inv_loot_item_def", "atdm:inv_loot_info_item", CVAR_GAME, "The name of the entityDef that defines the player's inventory loot item.");
 
 idCVar cv_tdm_obj_gui_file(	"tdm_obj_hud_file", "guis/tdm_objectives.gui",	CVAR_GAME, "The name of the gui file that defines the in-game objectives.");
-idCVar cv_tdm_waituntilready_gui_file(	"tdm_waituntilready_gui_file", "guis/tdm_waituntilready.gui",	CVAR_GAME, "The name of the gui file that is displayed after loading a map and before starting the gameplay action.");
-idCVar cv_tdm_invgrid_gui_file(  "tdm_invgrid_hud_file", "guis/tdm_invgrid.gui",  CVAR_GAME, "The name of the gui file that defines the in-game inventory grid.");
+idCVar cv_tdm_waituntilready_gui_file( "tdm_waituntilready_gui_file", "guis/tdm_waituntilready.gui",	CVAR_GAME, "The name of the gui file that is displayed after loading a map and before starting the gameplay action.");
+idCVar cv_tdm_invgrid_gui_file( "tdm_invgrid_hud_file", "guis/tdm_invgrid_parchment.gui",  CVAR_GAME | CVAR_ARCHIVE, "The name of the gui file that defines the in-game inventory grid.");
+idCVar cv_tdm_subtitles_gui_file( "tdm_subtitles_gui_file", "guis/tdm_subtitles.gui",  CVAR_GAME, "The name of the gui file for in-game subtitles overlay");
 
 idCVar cv_tdm_hud_opacity(	"tdm_hud_opacity", "0.7",	CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,	"The opacity of the HUD GUIs. [0..1]", 0, 1 );
 idCVar cv_tdm_hud_hide_lightgem(	"tdm_hud_hide_lightgem", "0",	CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL,	"If set to 1, the lightgem will be hidden." );
@@ -335,6 +425,15 @@ idCVar cv_tdm_inv_use_on_frob("tdm_inv_use_on_frob", "1",	CVAR_GAME | CVAR_ARCHI
 idCVar cv_tdm_door_control("tdm_door_control", "0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Acivates experimental door control.  When active, hold down frob and move mouse to fine-control a door.");
 idCVar cv_tdm_door_control_sensitivity( "tdm_door_control_sensitivity", "0.01", CVAR_GAME | CVAR_FLOAT, "Sets fine door control mouse sensitivity." );
 idCVar cv_tdm_inv_use_visual_feedback("tdm_inv_use_visual_feedback", "1",	CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "When set to '1' the HUD is giving visual feedback when the currently selected item is used on the highlighted one.");
+idCVar cv_tdm_subtitles(
+	"tdm_subtitles", "1",  CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER,
+	"Which subtitles to display?\n"
+	"  0 --- hide all\n"
+	"  1 --- show only story-relevant\n"
+	"  2 --- show all speech\n"
+	"  3 --- show everything",
+	0, 3
+);
 
 //Obsttorte: cvars to allow altering the gui size
 
@@ -362,8 +461,9 @@ idCVar cv_pm_stepvol_crouch_creep(	"pm_stepvol_crouch_creep",	"-7",		CVAR_GAME |
 idCVar cv_pm_min_stepsound_interval("pm_min_stepsound_interval",	"200",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "The minimum time in msec which has to pass before the next player footstep sound is allowed to be played." );
 idCVar cv_pm_rope_snd_rep_dist(		"pm_rope_snd_rep_dist",		"32",		CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "When climbing a rope, this sets the vertical distance in doomunits between repeats of the rope climbing sound (default 32 [du])." );
 idCVar cv_pm_rope_velocity_letgo(	"pm_rope_velocity_letgo",	"100",		CVAR_GAME | CVAR_FLOAT, "Maximum allowed velocity of the rope before the player lets go." );
-idCVar cv_pm_rope_swing_impulse(	"pm_rope_swing_impulse",	"360000",	CVAR_GAME | CVAR_FLOAT, "Impulse applied to rope when the player 'kicks their legs' to swing on the rope. (Warning: Setting too high can damage player)" );
-idCVar cv_pm_rope_swing_reptime(	"pm_rope_swing_reptime",	"500",		CVAR_GAME | CVAR_INTEGER, "How often you can kick to swing on the rope, in milliseconds." );
+idCVar cv_pm_rope_swing_impulse(	"pm_rope_swing_impulse",	"10000",	CVAR_GAME | CVAR_FLOAT, "Total impulse applied to rope when the player 'kicks their legs' to swing on the rope." );
+idCVar cv_pm_rope_swing_duration(	"pm_rope_swing_duration",	"500",	CVAR_GAME | CVAR_FLOAT, "The period of time after kick when the force is applied to the rope" );
+idCVar cv_pm_rope_swing_reptime(	"pm_rope_swing_reptime",	"1500",		CVAR_GAME | CVAR_INTEGER, "How often you can kick to swing on the rope, in milliseconds." );
 idCVar cv_pm_rope_swing_kickdist(	"pm_rope_swing_kickdist",	"36",		CVAR_GAME | CVAR_FLOAT, "When kicking on a rope, check this far ahead of the player's anchor point in the kick direction, to see if they are kicking off of something." );
 idCVar cv_pm_water_downwards_velocity(	"pm_water_downwards_velocity",	"-4",		CVAR_GAME | CVAR_FLOAT, "The factor which the gravity vector gets scaled with to calculate the standard downwards velocity in water volumes. Negative values will let the player float upwards." );
 idCVar cv_pm_water_z_friction(	"pm_water_z_friction",	"0.995",		CVAR_GAME | CVAR_FLOAT , "When the player is underwater and has really small z-velocities, this factor gets applied each frame, so that the player stops floating upwards when reaching the surface." );
@@ -415,13 +515,10 @@ idCVar cv_lp_debug_hud("tdm_lp_debug_hud",	"0",	CVAR_GAME | CVAR_BOOL | CVAR_ARC
 idCVar cv_bow_aimer("tdm_bow_aimer",	"0",	CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE, "Whether the bow has an aimer. 0 = False, 1 = True." );
 
 idCVar cv_door_auto_open_on_unlock("tdm_door_auto_open_on_unlock",	"1",	CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE, "If set to 1 doors and chests will start to open after being unlocked." );
+idCVar cv_door_ignore_locks("tdm_door_ignore_lock",	"0",	CVAR_GAME | CVAR_BOOL, "If set to 1 doors and chests will open as if unlocked." );
 
 idCVar cv_dm_distance("tdm_distance",		"",	CVAR_GAME,	"Shows the distance from the player to the entity" );
 
-/**
- * Ambient light method variable
- */
-idCVar cv_ambient_method("tdm_ambient_method", "0",    CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE, "Method used for ambient light rendering.\n\n0 = Enhanced, ambient light method (uses the ambient light for the ambient brightness)\n1 = Texture Brightness method (uses texture brightness instead of light. This is faster but looks worse)", 0, 1 );
 /**
  * Volume of speakers with s_music set
  */
@@ -450,9 +547,6 @@ idCVar si_name(						"si_name",					"DOOM Server",	CVAR_GAME | CVAR_SERVERINFO |
 idCVar si_gameType(					"si_gameType",		si_gameTypeArgs[ 0 ],	CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE, "game type - singleplayer, deathmatch, Tourney, Team DM or Last Man", si_gameTypeArgs, idCmdSystem::ArgCompletion_String<si_gameTypeArgs> );
 idCVar si_map(						"si_map",					"game/mp/d3dm1",CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE, "map to be played next on server", idCmdSystem::ArgCompletion_MapName );
 idCVar si_maxPlayers(				"si_maxPlayers",			"4",			CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_INTEGER, "max number of players allowed on the server", 1, 4 );
-#ifdef MULTIPLAYER
-idCVar si_fragLimit( "si_fragLimit", "10", CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_INTEGER, "frag limit", 1, MP_PLAYER_MAXFRAGS );
-#endif
 idCVar si_timeLimit(				"si_timeLimit",				"10",			CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_INTEGER, "time limit in minutes", 0, 60 );
 idCVar si_teamDamage(				"si_teamDamage",			"0",			CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_BOOL, "enable team damage" );
 idCVar si_warmup(					"si_warmup",				"0",			CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_BOOL, "do pre-game warmup" );
@@ -469,14 +563,10 @@ idCVar ui_autoSwitch(				"ui_autoSwitch",			"1",			CVAR_GAME | CVAR_USERINFO | C
 idCVar ui_showGun(					"ui_showGun",				"1",			CVAR_GAME | CVAR_USERINFO | CVAR_ARCHIVE | CVAR_BOOL, "show gun" );
 idCVar ui_ready(					"ui_ready",				si_readyArgs[ 0 ],	CVAR_GAME | CVAR_USERINFO, "player is ready to start playing", idCmdSystem::ArgCompletion_String<si_readyArgs> );
 idCVar ui_spectate(					"ui_spectate",		si_spectateArgs[ 0 ],	CVAR_GAME | CVAR_USERINFO, "play or spectate", idCmdSystem::ArgCompletion_String<si_spectateArgs> );
-idCVar ui_chat(						"ui_chat",					"0",			CVAR_GAME | CVAR_USERINFO | CVAR_BOOL | CVAR_ROM | CVAR_CHEAT, "player is chatting" );
+idCVar ui_chat(						"ui_chat",					"0",			CVAR_GAME | CVAR_USERINFO | CVAR_BOOL | CVAR_ROM , "player is chatting" );
 
 // change anytime vars
 idCVar developer(					"developer",				"0",			CVAR_GAME | CVAR_BOOL, "" );
-
-idCVar r_aspectRatio( 				"r_aspectRatio",			"0",			CVAR_RENDERER | CVAR_INTEGER | CVAR_ARCHIVE, "Aspect ratio of view, determines the ratio between FOV for x and y. Only used if r_fovRatio is 0:\n0 = 4:3\n1 = 16:9\n2 = 16:10\n3 = 5:4\n4 = 16:9 TV", 0, 4 );
-
-idCVar cv_r_fovRatio( 				"r_fovRatio",			"0",			CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "Aspect ratio of view, if set to greater than 0, determines the ratio between FOV for x and y directly, and r_aspectRatio is ignored. The value should closely match r_customWidth / r_customHeight." );
 
 idCVar cv_gui_Width( 				"gui_Width",			"1.0",			CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "Size of the GUI as factor of the screen width. Default is 1.0 and stretches the GUI over the entire screen." );
 idCVar cv_gui_Height( 				"gui_Height",			"1.0",			CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "Size of the GUI as factor of the screen height. Default is 1.0 and stretches the GUI over the entire screen." );
@@ -533,7 +623,7 @@ idCVar g_timeModifier(				"g_timeModifier",			"1",			CVAR_GAME | CVAR_FLOAT, "Us
 idCVar g_timeentities(				"g_timeEntities",			"0",			CVAR_GAME | CVAR_FLOAT, "when non-zero, shows entities whose think functions exceeded the # of milliseconds specified" );
 
 
-idCVar g_enablePortalSky(			"g_enablePortalSky",		"2",			CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE, "enables the portal sky: 1 - old method, 2 - new method, -1 - debug tool" );
+idCVar g_enablePortalSky(			"g_enablePortalSky",		"2",			CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE, "enables the portal sky: 1 - old method, 2 - new method" );
 
 	
 idCVar ai_debugScript(				"ai_debugScript",			"-1",			CVAR_GAME | CVAR_INTEGER, "displays script calls for the specified monster entity number" );
@@ -632,47 +722,48 @@ idCVar rb_showBuoyancy(             "rb_showBuoyancy",          "0",            
 
 
 // The default values for player movement cvars are set in def/player.def
-idCVar pm_jumpheight(				"pm_jumpheight",			"48",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "approximate hieght the player can jump" );
-idCVar pm_stepsize(					"pm_stepsize",				"16",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "maximum height the player can step up without jumping" );
+idCVar pm_jumpheight(				"pm_jumpheight",			"48",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "approximate hieght the player can jump" );
+idCVar pm_stepsize(					"pm_stepsize",				"16",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "maximum height the player can step up without jumping" );
 // replaced by crouch multiplier
 //idCVar pm_crouchspeed(				"pm_crouchspeed",			"80",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "speed the player can move while crouched" );
-idCVar pm_walkspeed(				"pm_walkspeed",				"70",			CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT, "speed the player can move while walking" );
+idCVar pm_walkspeed(				"pm_walkspeed",				"70",			CVAR_GAME | CVAR_ARCHIVE | CVAR_ARCHIVE | CVAR_FLOAT, "speed the player can move while walking" );
 // also replaced by multiplier
 //idCVar pm_runspeed(					"pm_runspeed",				"220",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "speed the player can move while running" );
-idCVar pm_noclipspeed(				"pm_noclipspeed",			"200",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "speed the player can move while in noclip" );
+idCVar pm_noclipspeed(				"pm_noclipspeed",			"200",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "speed the player can move while in noclip" );
 idCVar pm_spectatespeed(			"pm_spectatespeed",			"450",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "speed the player can move while spectating" );
 idCVar pm_spectatebbox(				"pm_spectatebbox",			"32",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "size of the spectator bounding box" );
 idCVar pm_usecylinder(				"pm_usecylinder",			"1",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_BOOL, "use a cylinder approximation instead of a bounding box for player collision detection" );
-idCVar pm_minviewpitch(				"pm_minviewpitch",			"-89",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "amount player's view can look up (negative values are up)" );
-idCVar pm_maxviewpitch(				"pm_maxviewpitch",			"89",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "amount player's view can look down" );
+idCVar pm_minviewpitch(				"pm_minviewpitch",			"-89",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "amount player's view can look up (negative values are up)" );
+idCVar pm_maxviewpitch(				"pm_maxviewpitch",			"89",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "amount player's view can look down" );
 // Commented out by Dram. Not needed as TDM does not use stamina
 //idCVar pm_stamina(				"pm_stamina",				"24",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "length of time player can run" );
 //idCVar pm_staminathreshold(			"pm_staminathreshold",		"45",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "when stamina drops below this value, player gradually slows to a walk" );
 //idCVar pm_staminarate(				"pm_staminarate",			"0.75",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "rate that player regains stamina. divide pm_stamina by this value to determine how long it takes to fully recharge." );
-idCVar pm_crouchheight(				"pm_crouchheight",			"38",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while crouched" );
-idCVar pm_crouchviewheight(			"pm_crouchviewheight",		"34",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while crouched" );
-idCVar pm_normalheight(				"pm_normalheight",			"74",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while standing" );
-idCVar pm_normalviewheight(			"pm_normalviewheight",		"68",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while standing" );
-idCVar pm_deadheight(				"pm_deadheight",			"20",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's bounding box while dead" );
-idCVar pm_deadviewheight(			"pm_deadviewheight",		"10",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of player's view while dead" );
-idCVar pm_crouchrate(				"pm_crouchrate",			"0.87",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "time it takes for player's view to change from standing to crouching" );
-idCVar pm_bboxwidth(				"pm_bboxwidth",				"32",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "x/y size of player's bounding box" );
-idCVar pm_crouchbob(				"pm_crouchbob",				"0.2",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "bob much faster when crouched" );
-idCVar pm_walkbob(					"pm_walkbob",				"0.3",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "bob slowly when walking" );
-idCVar pm_runbob(					"pm_runbob",				"0.35",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "bob faster when running" );
-idCVar pm_runpitch(					"pm_runpitch",				"0.001",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "" );
-idCVar pm_runroll(					"pm_runroll",				"0.003",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "" );
-idCVar pm_bobup(					"pm_bobup",					"0.035",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "" );
-idCVar pm_bobpitch(					"pm_bobpitch",				"0.001",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "" );
-idCVar pm_bobroll(					"pm_bobroll",				"0.0015",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "" );
-idCVar pm_thirdPersonRange(			"pm_thirdPersonRange",		"80",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "camera distance from player in 3rd person" );
-idCVar pm_thirdPersonHeight(		"pm_thirdPersonHeight",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "height of camera from normal view height in 3rd person" );
-idCVar pm_thirdPersonAngle(			"pm_thirdPersonAngle",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_FLOAT, "direction of camera from player in 3rd person in degrees (0 = behind player, 180 = in front)" );
-idCVar pm_thirdPersonClip(			"pm_thirdPersonClip",		"1",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_BOOL, "clip third person view into world space" );
-idCVar pm_thirdPerson(				"pm_thirdPerson",			"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_BOOL, "enables third person view" );
-idCVar pm_thirdPersonDeath(			"pm_thirdPersonDeath",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_BOOL, "enables third person view when player dies" );
-idCVar pm_modelView(				"pm_modelView",				"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "draws camera from POV of player model (1 = always, 2 = when dead)", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
-idCVar pm_airTics(					"pm_air",					"1800",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_INTEGER, "how long in milliseconds the player can go without air before he starts taking damage" );
+idCVar pm_crouchheight(				"pm_crouchheight",			"38",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's bounding box while crouched" );
+idCVar pm_crouchviewheight(			"pm_crouchviewheight",		"34",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's view while crouched" );
+idCVar pm_normalheight(				"pm_normalheight",			"74",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's bounding box while standing" );
+idCVar pm_normalviewheight(			"pm_normalviewheight",		"68",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's view while standing" );
+idCVar pm_deadheight(				"pm_deadheight",			"20",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's bounding box while dead" );
+idCVar pm_deadviewheight(			"pm_deadviewheight",		"10",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of player's view while dead" );
+idCVar pm_crouchrate(				"pm_crouchrate",			"0.87",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "time it takes for player's view to change from standing to crouching" );
+idCVar pm_bboxwidth(				"pm_bboxwidth",				"32",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "x/y size of player's bounding box" );
+idCVar pm_crouchbob(				"pm_crouchbob",				"0.2",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "bob much faster when crouched" );
+idCVar pm_walkbob(					"pm_walkbob",				"0.3",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "bob slowly when walking" );
+idCVar pm_runbob(					"pm_runbob",				"0.35",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "bob faster when running" );
+idCVar pm_runpitch(					"pm_runpitch",				"0.001",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "" );
+idCVar pm_runroll(					"pm_runroll",				"0.003",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "" );
+idCVar pm_bobup(					"pm_bobup",					"0.035",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "" );
+idCVar pm_bobpitch(					"pm_bobpitch",				"0.001",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "" );
+idCVar pm_bobroll(					"pm_bobroll",				"0.0015",		CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "" );
+idCVar pm_thirdPersonRange(			"pm_thirdPersonRange",		"80",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "camera distance from player in 3rd person" );
+idCVar pm_thirdPersonHeight(		"pm_thirdPersonHeight",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "height of camera from normal view height in 3rd person" );
+idCVar pm_thirdPersonAngle(			"pm_thirdPersonAngle",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_FLOAT, "direction of camera from player in 3rd person in degrees (0 = behind player, 180 = in front)" );
+idCVar pm_thirdPersonClip(			"pm_thirdPersonClip",		"1",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_BOOL, "clip third person view into world space" );
+idCVar pm_thirdPerson(				"pm_thirdPerson",			"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_BOOL, "enables third person view" );
+idCVar pm_thirdPersonDeath(			"pm_thirdPersonDeath",		"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_BOOL, "enables third person view when player dies" );
+idCVar pm_modelView(				"pm_modelView",				"0",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_INTEGER, "draws camera from POV of player model (1 = always, 2 = when dead)", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
+idCVar pm_airTics(					"pm_air",					"1800",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_INTEGER, "how long the player can go without air before he starts taking damage (One tic corresponds to 16 ms)", 1, 1000000);
+idCVar pm_airTicsRegainingSpeed(	"pm_air_regainingSpeed",	"4",			CVAR_GAME | CVAR_NETWORKSYNC | CVAR_ARCHIVE | CVAR_INTEGER, "how fast the player regains air after diving (value corresponds to number of tics regained every 16 ms)", 1, 8);
 
 idCVar g_showPlayerShadow(			"g_showPlayerShadow",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "enables shadow of player model" );
 idCVar g_showHud(					"g_showHud",				"1",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "toggles whether hud elements are shown in game" );
@@ -684,7 +775,7 @@ idCVar g_gun_z(						"g_gunZ",					"0",			CVAR_GAME | CVAR_FLOAT, "" );
 idCVar g_viewNodalX(				"g_viewNodalX",				"0",			CVAR_GAME | CVAR_FLOAT, "" );
 idCVar g_viewNodalZ(				"g_viewNodalZ",				"0",			CVAR_GAME | CVAR_FLOAT, "" );
 idCVar g_fov(						"g_fov",					"90",			CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER | CVAR_NOCHEAT, "Field of View in Degrees of the Camera" );
-idCVar g_skipViewEffects(			"g_skipViewEffects",		"0",			CVAR_GAME | CVAR_BOOL, "skip damage and other view effects" );
+idCVar g_skipViewEffects(			"g_skipViewEffects",		"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "skip damage and other view effects" );
 idCVar g_mpWeaponAngleScale(		"g_mpWeaponAngleScale",		"0",			CVAR_GAME | CVAR_FLOAT, "Control the weapon sway in MP" );
 
 idCVar g_testParticle(				"g_testParticle",			"0",			CVAR_GAME | CVAR_INTEGER, "test particle visualation, set by the particle editor" );
@@ -704,7 +795,7 @@ idCVar g_testDeath(					"g_testDeath",				"0",			CVAR_GAME | CVAR_BOOL, "" );
 idCVar g_exportMask(				"g_exportMask",				"",				CVAR_GAME, "" );
 idCVar g_flushSave(					"g_flushSave",				"0",			CVAR_GAME | CVAR_BOOL, "1 = don't buffer file writing for save games." );
 
-idCVar g_rotoscope(					"g_rotoscope",				"0",			CVAR_GAME | CVAR_BOOL, "Noir cartoon-like rendering" );
+idCVar g_rotoscope(					"g_rotoscope",				"0",			CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "Noir cartoon-like rendering" );
 
 idCVar aas_test(					"aas_test",					"0",			CVAR_GAME | CVAR_INTEGER, "" ); // "2" - show aas32
 idCVar aas_showAreas(				"aas_showAreas",			"0",			CVAR_GAME | CVAR_BOOL, "" );

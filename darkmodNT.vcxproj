@@ -45,56 +45,56 @@
     <SccProvider>
     </SccProvider>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>7.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -164,26 +164,26 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>10.0.40219.1</_ProjectFileVersion>
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'" />
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'" />
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NativeMinimumRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'" />
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'" />
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
-    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
     <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
     <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
@@ -222,19 +222,18 @@
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <PreprocessorDefinitions>NO_MFC;ID_REDIRECT_NEWDELETE;ID_DEBUG_MEMORY;ID_DEBUG_UNINITIALIZED_MEMORY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Message>Copies the openAL Soft DLL for Windows to the output folder</Message>
-      <Command>@echo Copying  $(SolutionDir)$(OpenALSoftDLLPath) to $(OutDir)
-@copy $(SolutionDir)$(OpenALSoftDLLPath) $(OutDir) /Y</Command>
-    </PostBuildEvent>
+    <PostBuildEvent />
     <Link />
     <Link>
       <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">
     <Link>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -243,11 +242,7 @@
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <PreprocessorDefinitions>NO_MFC;ID_REDIRECT_NEWDELETE;ID_DEBUG_MEMORY;ID_DEBUG_UNINITIALIZED_MEMORY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Command>@echo Copying  $(SolutionDir)$(OpenALSoftDLLPath) to $(OutDir)
-@copy $(SolutionDir)$(OpenALSoftDLLPath) $(OutDir) /Y</Command>
-      <Message>Copies the openAL Soft DLL for Windows to the output folder</Message>
-    </PostBuildEvent>
+    <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">
     <Link />
@@ -258,19 +253,17 @@
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <PreprocessorDefinitions>_INLINEDEBUG;NO_MFC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Message>
-      </Message>
-      <Command>
-      </Command>
-    </PostBuildEvent>
+    <PostBuildEvent />
     <Link>
       <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">
     <Link>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -279,17 +272,13 @@
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <PreprocessorDefinitions>NO_MFC;_INLINEDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Command>
-      </Command>
-      <Message>
-      </Message>
-    </PostBuildEvent>
+    <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Link>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -299,16 +288,13 @@
       <AdditionalOptions>/arch:SSE2 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NO_MFC;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Message>
-      </Message>
-      <Command>
-      </Command>
-    </PostBuildEvent>
+    <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Link>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -317,13 +303,8 @@
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <PreprocessorDefinitions>_DEBUG;NO_MFC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <PostBuildEvent>
-      <Command>@echo Copying  $(SolutionDir)$(OpenALSoftDLLPath) to $(OutDir)
-@copy $(SolutionDir)$(OpenALSoftDLLPath) $(OutDir) /Y</Command>
-    </PostBuildEvent>
-    <PostBuildEvent>
-      <Message>Copies the openAL Soft DLL for Windows to the output folder</Message>
-    </PostBuildEvent>
+    <PostBuildEvent />
+    <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Link>
@@ -331,41 +312,36 @@
       </OptimizeReferences>
       <MapExports>true</MapExports>
       <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
     </Link>
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
     </ClCompile>
     <ClCompile>
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PreprocessorDefinitions>NO_MFC;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <FavorSizeOrSpeed />
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
     </ClCompile>
-    <PostBuildEvent>
-      <Message>
-      </Message>
-      <Command>
-      </Command>
-    </PostBuildEvent>
+    <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <Link>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
+    <Link />
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
     </ClCompile>
     <ClCompile>
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PreprocessorDefinitions>NO_MFC;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
     </ClCompile>
-    <PostBuildEvent>
-      <Command>
-      </Command>
-      <Message>
-      </Message>
-    </PostBuildEvent>
+    <PostBuildEvent />
+    <Link>
+      <AdditionalDependencies>Ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions />
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="cm\CollisionModel.h" />
@@ -383,20 +359,22 @@
     <ClInclude Include="framework\DeclManager.h" />
     <ClInclude Include="framework\DeclParticle.h" />
     <ClInclude Include="framework\DeclSkin.h" />
+    <ClInclude Include="framework\DeclSubtitles.h" />
     <ClInclude Include="framework\DeclTable.h" />
     <ClInclude Include="framework\DemoFile.h" />
     <ClInclude Include="framework\EditField.h" />
     <ClInclude Include="framework\EventLoop.h" />
     <ClInclude Include="framework\File.h" />
     <ClInclude Include="framework\FileSystem.h" />
+    <ClInclude Include="framework\GamepadInput.h" />
     <ClInclude Include="framework\I18N.h" />
     <ClInclude Include="framework\KeyInput.h" />
     <ClInclude Include="framework\Licensee.h" />
-    <ClInclude Include="framework\minizip\ioapi.h" />
-    <ClInclude Include="framework\minizip\unzip.h" />
-    <ClInclude Include="framework\minizip\zip.h" />
+    <ClInclude Include="framework\LoadStack.h" />
+    <ClInclude Include="framework\minizip\minizip_extra.h" />
     <ClInclude Include="framework\Session.h" />
     <ClInclude Include="framework\Session_local.h" />
+    <ClInclude Include="framework\Tracing.h" />
     <ClInclude Include="framework\UsercmdGen.h" />
     <ClInclude Include="game\AbsenceMarker.h" />
     <ClInclude Include="game\Actor.h" />
@@ -523,6 +501,7 @@
     <ClInclude Include="game\FrobDoor.h" />
     <ClInclude Include="game\FrobDoorHandle.h" />
     <ClInclude Include="game\FrobHandle.h" />
+    <ClInclude Include="game\FrobHelper.h" />
     <ClInclude Include="game\FrobLever.h" />
     <ClInclude Include="game\FrobLock.h" />
     <ClInclude Include="game\FrobLockHandle.h" />
@@ -549,7 +528,6 @@
     <ClInclude Include="game\Http\HttpRequest.h" />
     <ClInclude Include="game\Http\MessageTcp.h" />
     <ClInclude Include="game\IK.h" />
-    <ClInclude Include="game\ImageMapManager.h" />
     <ClInclude Include="game\IniFile.h" />
     <ClInclude Include="game\Intersection.h" />
     <ClInclude Include="game\Inventory\Category.h" />
@@ -615,8 +593,6 @@
     <ClInclude Include="game\precompiled_game.h" />
     <ClInclude Include="game\Projectile.h" />
     <ClInclude Include="game\ProjectileResult.h" />
-    <ClInclude Include="game\pugixml\pugiconfig.hpp" />
-    <ClInclude Include="game\pugixml\pugixml.hpp" />
     <ClInclude Include="game\Pvs.h" />
     <ClInclude Include="game\PVSToAASMapping.h" />
     <ClInclude Include="game\RawVector.h" />
@@ -651,7 +627,6 @@
     <ClInclude Include="game\Weapon.h" />
     <ClInclude Include="game\WorldSpawn.h" />
     <ClInclude Include="game\ZipLoader\ZipLoader.h" />
-    <ClInclude Include="idlib\Base64.h" />
     <ClInclude Include="idlib\BitMsg.h" />
     <ClInclude Include="idlib\bv\Bounds.h" />
     <ClInclude Include="idlib\bv\Box.h" />
@@ -660,6 +635,7 @@
     <ClInclude Include="idlib\CmdArgs.h" />
     <ClInclude Include="idlib\containers\BinSearch.h" />
     <ClInclude Include="idlib\containers\BTree.h" />
+    <ClInclude Include="idlib\containers\DisjointSets.h" />
     <ClInclude Include="idlib\containers\HashIndex.h" />
     <ClInclude Include="idlib\containers\HashTable.h" />
     <ClInclude Include="idlib\containers\Hierarchy.h" />
@@ -672,6 +648,7 @@
     <ClInclude Include="idlib\containers\StrList.h" />
     <ClInclude Include="idlib\containers\StrPool.h" />
     <ClInclude Include="idlib\containers\VectorSet.h" />
+    <ClInclude Include="idlib\Debug.h" />
     <ClInclude Include="idlib\Dict.h" />
     <ClInclude Include="idlib\geometry\DrawVert.h" />
     <ClInclude Include="idlib\geometry\JointTransform.h" />
@@ -684,12 +661,11 @@
     <ClInclude Include="idlib\geometry\TraceModel.h" />
     <ClInclude Include="idlib\geometry\Winding.h" />
     <ClInclude Include="idlib\geometry\Winding2D.h" />
-    <ClInclude Include="idlib\hashing\CRC32.h" />
     <ClInclude Include="idlib\hashing\MD4.h" />
     <ClInclude Include="idlib\hashing\MD5.h" />
+    <ClInclude Include="idlib\hashing\sha256.h" />
     <ClInclude Include="idlib\Heap.h" />
     <ClInclude Include="idlib\Heap_Embedded.h" />
-    <ClInclude Include="idlib\Image.h" />
     <ClInclude Include="idlib\LangDict.h" />
     <ClInclude Include="idlib\Lexer.h" />
     <ClInclude Include="idlib\Lib.h" />
@@ -714,11 +690,12 @@
     <ClInclude Include="idlib\math\Simd_AVX.h" />
     <ClInclude Include="idlib\math\Simd_AVX2.h" />
     <ClInclude Include="idlib\math\Simd_Generic.h" />
-    <ClInclude Include="idlib\math\Simd_MMX.h" />
     <ClInclude Include="idlib\math\Simd_SSE.h" />
     <ClInclude Include="idlib\math\Simd_SSE2.h" />
-    <ClInclude Include="idlib\math\Simd_SSE3.h" />
+    <ClInclude Include="idlib\math\Simd_SSSE3.h" />
     <ClInclude Include="idlib\math\Vector.h" />
+    <ClInclude Include="idlib\ParallelJobList.h" />
+    <ClInclude Include="idlib\ParallelJobList_JobHeaders.h" />
     <ClInclude Include="idlib\Parser.h" />
     <ClInclude Include="idlib\precompiled.h" />
     <ClInclude Include="idlib\RevisionTracker.h" />
@@ -726,17 +703,38 @@
     <ClInclude Include="idlib\StdString.h" />
     <ClInclude Include="idlib\Str.h" />
     <ClInclude Include="idlib\svnversion.h" />
+    <ClInclude Include="idlib\sys\sys_assert.h" />
+    <ClInclude Include="idlib\sys\sys_defines.h" />
+    <ClInclude Include="idlib\sys\sys_includes.h" />
+    <ClInclude Include="idlib\sys\sys_threading.h" />
+    <ClInclude Include="idlib\sys\sys_types.h" />
+    <ClInclude Include="idlib\Thread.h" />
     <ClInclude Include="idlib\Timer.h" />
     <ClInclude Include="idlib\Token.h" />
-    <ClInclude Include="renderer\BufferObject.h" />
+    <ClInclude Include="renderer\AmbientOcclusionStage.h" />
+    <ClInclude Include="renderer\backend\DepthStage.h" />
+    <ClInclude Include="renderer\backend\DrawBatchExecutor.h" />
+    <ClInclude Include="renderer\backend\FrobOutlineStage.h" />
+    <ClInclude Include="renderer\backend\GpuBuffer.h" />
+    <ClInclude Include="renderer\backend\InteractionStage.h" />
+    <ClInclude Include="renderer\backend\ManyLightInteractionStage.h" />
+    <ClInclude Include="renderer\backend\RenderBackend.h" />
+    <ClInclude Include="renderer\backend\ShadowMapStage.h" />
+    <ClInclude Include="renderer\backend\StencilShadowStage.h" />
+    <ClInclude Include="renderer\BloomStage.h" />
     <ClInclude Include="renderer\Cinematic.h" />
     <ClInclude Include="renderer\CinematicFFMpeg.h" />
     <ClInclude Include="renderer\CinematicID.h" />
     <ClInclude Include="renderer\FrameBuffer.h" />
-    <ClInclude Include="renderer\glext.h" />
+    <ClInclude Include="renderer\FrameBufferManager.h" />
+    <ClInclude Include="renderer\glad.h" />
+    <ClInclude Include="renderer\glad_wgl.h" />
     <ClInclude Include="renderer\glsl.h" />
+    <ClInclude Include="renderer\GLSLProgram.h" />
+    <ClInclude Include="renderer\GLSLProgramManager.h" />
     <ClInclude Include="renderer\GuiModel.h" />
     <ClInclude Include="renderer\Image.h" />
+    <ClInclude Include="renderer\ImmediateRendering.h" />
     <ClInclude Include="renderer\Interaction.h" />
     <ClInclude Include="renderer\Material.h" />
     <ClInclude Include="renderer\MegaTexture.h" />
@@ -749,7 +747,9 @@
     <ClInclude Include="renderer\ModelDecal.h" />
     <ClInclude Include="renderer\ModelManager.h" />
     <ClInclude Include="renderer\ModelOverlay.h" />
-    <ClInclude Include="renderer\Profiling.h" />
+    <ClInclude Include="renderer\ParticleSystem.h" />
+    <ClInclude Include="renderer\ParticleSystem_decl.h" />
+    <ClInclude Include="renderer\ParticleSystem_def.h" />
     <ClInclude Include="renderer\qgl.h" />
     <ClInclude Include="renderer\qgl_linked.h" />
     <ClInclude Include="renderer\RenderSystem.h" />
@@ -763,9 +763,13 @@
     <ClInclude Include="sound\snd_local.h" />
     <ClInclude Include="sound\sound.h" />
     <ClInclude Include="sys\sys_local.h" />
+    <ClInclude Include="sys\sys_padinput.h" />
     <ClInclude Include="sys\sys_public.h" />
     <ClInclude Include="sys\win32\wglext.h" />
     <ClInclude Include="sys\win32\win_local.h" />
+    <ClInclude Include="tests\doctest.h" />
+    <ClInclude Include="tests\testing.h" />
+    <ClInclude Include="tests\TestRun.h" />
     <ClInclude Include="tools\compilers\aas\AASBuild_local.h" />
     <ClInclude Include="tools\compilers\aas\AASCluster.h" />
     <ClInclude Include="tools\compilers\aas\AASFile.h" />
@@ -774,8 +778,11 @@
     <ClInclude Include="tools\compilers\aas\AASReach.h" />
     <ClInclude Include="tools\compilers\aas\Brush.h" />
     <ClInclude Include="tools\compilers\aas\BrushBSP.h" />
+    <ClInclude Include="tools\compilers\compiler_common.h" />
     <ClInclude Include="tools\compilers\compiler_public.h" />
     <ClInclude Include="tools\compilers\dmap\dmap.h" />
+    <ClInclude Include="tools\compilers\dmap\earcut.h" />
+    <ClInclude Include="tools\compilers\dmap\planargraph.h" />
     <ClInclude Include="tools\compilers\roqvq\codec.h" />
     <ClInclude Include="tools\compilers\roqvq\gdefs.h" />
     <ClInclude Include="tools\compilers\roqvq\quaddefs.h" />
@@ -821,46 +828,30 @@
     <ClCompile Include="framework\DeclManager.cpp" />
     <ClCompile Include="framework\DeclParticle.cpp" />
     <ClCompile Include="framework\DeclSkin.cpp" />
+    <ClCompile Include="framework\DeclSubtitles.cpp" />
     <ClCompile Include="framework\DeclTable.cpp" />
     <ClCompile Include="framework\DemoFile.cpp" />
     <ClCompile Include="framework\EditField.cpp" />
     <ClCompile Include="framework\EventLoop.cpp" />
     <ClCompile Include="framework\File.cpp" />
     <ClCompile Include="framework\FileSystem.cpp" />
+    <ClCompile Include="framework\GamepadInput.cpp" />
     <ClCompile Include="framework\I18N.cpp" />
     <ClCompile Include="framework\KeyInput.cpp" />
-    <ClCompile Include="framework\minizip\ioapi.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+    <ClCompile Include="framework\LoadStack.cpp" />
+    <ClCompile Include="framework\minizip\minizip_extra.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="framework\minizip\unzip.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="framework\minizip\zip.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="framework\Session.cpp" />
     <ClCompile Include="framework\Session_menu.cpp" />
+    <ClCompile Include="framework\Tracing.cpp" />
     <ClCompile Include="framework\UsercmdGen.cpp" />
     <ClCompile Include="game\AbsenceMarker.cpp" />
     <ClCompile Include="game\Actor.cpp" />
@@ -988,6 +979,7 @@
     <ClCompile Include="game\FrobDoor.cpp" />
     <ClCompile Include="game\FrobDoorHandle.cpp" />
     <ClCompile Include="game\FrobHandle.cpp" />
+    <ClCompile Include="game\FrobHelper.cpp" />
     <ClCompile Include="game\FrobLever.cpp" />
     <ClCompile Include="game\FrobLock.cpp" />
     <ClCompile Include="game\FrobLockHandle.cpp" />
@@ -1018,7 +1010,6 @@
     <ClCompile Include="game\Http\HttpRequest.cpp" />
     <ClCompile Include="game\Http\MessageTcp.cpp" />
     <ClCompile Include="game\IK.cpp" />
-    <ClCompile Include="game\ImageMapManager.cpp" />
     <ClCompile Include="game\IniFile.cpp" />
     <ClCompile Include="game\Intersection.cpp" />
     <ClCompile Include="game\Inventory\Category.cpp" />
@@ -1080,7 +1071,6 @@
     <ClCompile Include="game\precompiled_game.cpp" />
     <ClCompile Include="game\Projectile.cpp" />
     <ClCompile Include="game\ProjectileResult.cpp" />
-    <ClCompile Include="game\pugixml\pugixml.cpp" />
     <ClCompile Include="game\Pvs.cpp" />
     <ClCompile Include="game\PVSToAASMapping.cpp" />
     <ClCompile Include="game\RawVector.cpp" />
@@ -1114,15 +1104,18 @@
     <ClCompile Include="game\Weapon.cpp" />
     <ClCompile Include="game\WorldSpawn.cpp" />
     <ClCompile Include="game\ZipLoader\ZipLoader.cpp" />
-    <ClCompile Include="idlib\Base64.cpp" />
     <ClCompile Include="idlib\BitMsg.cpp" />
     <ClCompile Include="idlib\bv\Bounds.cpp" />
     <ClCompile Include="idlib\bv\Box.cpp" />
     <ClCompile Include="idlib\bv\Frustum.cpp" />
     <ClCompile Include="idlib\bv\Sphere.cpp" />
     <ClCompile Include="idlib\CmdArgs.cpp" />
+    <ClCompile Include="idlib\containers\DisjointSets.cpp" />
     <ClCompile Include="idlib\containers\HashIndex.cpp" />
     <ClCompile Include="idlib\containers\LinkList.cpp" />
+    <ClCompile Include="idlib\containers\PlaneSet.cpp" />
+    <ClCompile Include="idlib\containers\StrPool.cpp" />
+    <ClCompile Include="idlib\Debug.cpp" />
     <ClCompile Include="idlib\Dict.cpp" />
     <ClCompile Include="idlib\geometry\DrawVert.cpp" />
     <ClCompile Include="idlib\geometry\JointTransform.cpp" />
@@ -1134,12 +1127,20 @@
     <ClCompile Include="idlib\geometry\TraceModel.cpp" />
     <ClCompile Include="idlib\geometry\Winding.cpp" />
     <ClCompile Include="idlib\geometry\Winding2D.cpp" />
-    <ClCompile Include="idlib\hashing\CRC32.cpp" />
     <ClCompile Include="idlib\hashing\MD4.cpp" />
     <ClCompile Include="idlib\hashing\MD5.cpp" />
+    <ClCompile Include="idlib\hashing\sha256.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="idlib\Heap.cpp" />
     <ClCompile Include="idlib\Heap_Embedded.cpp" />
-    <ClCompile Include="idlib\Image.cpp" />
     <ClCompile Include="idlib\LangDict.cpp" />
     <ClCompile Include="idlib\Lexer.cpp" />
     <ClCompile Include="idlib\Lib.cpp" />
@@ -1160,11 +1161,12 @@
     <ClCompile Include="idlib\math\Simd_AVX.cpp" />
     <ClCompile Include="idlib\math\Simd_AVX2.cpp" />
     <ClCompile Include="idlib\math\Simd_Generic.cpp" />
-    <ClCompile Include="idlib\math\Simd_MMX.cpp" />
+    <ClCompile Include="idlib\math\Simd_IdAsm.cpp" />
     <ClCompile Include="idlib\math\Simd_SSE.cpp" />
     <ClCompile Include="idlib\math\Simd_SSE2.cpp" />
-    <ClCompile Include="idlib\math\Simd_SSE3.cpp" />
+    <ClCompile Include="idlib\math\Simd_SSSE3.cpp" />
     <ClCompile Include="idlib\math\Vector.cpp" />
+    <ClCompile Include="idlib\ParallelJobList.cpp" />
     <ClCompile Include="idlib\Parser.cpp" />
     <ClCompile Include="idlib\precompiled.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">Create</PrecompiledHeader>
@@ -1180,23 +1182,60 @@
     <ClCompile Include="idlib\StdFilesystem.cpp" />
     <ClCompile Include="idlib\StdString.cpp" />
     <ClCompile Include="idlib\Str.cpp" />
+    <ClCompile Include="idlib\sys\sys_assert.cpp" />
+    <ClCompile Include="idlib\sys\win32\win_thread.cpp" />
+    <ClCompile Include="idlib\Thread.cpp" />
     <ClCompile Include="idlib\Timer.cpp" />
     <ClCompile Include="idlib\Token.cpp" />
-    <ClCompile Include="renderer\BufferObject.cpp" />
+    <ClCompile Include="renderer\AmbientOcclusionStage.cpp" />
+    <ClCompile Include="renderer\backend\DepthStage.cpp" />
+    <ClCompile Include="renderer\backend\DrawBatchExecutor.cpp" />
+    <ClCompile Include="renderer\backend\FrobOutlineStage.cpp" />
+    <ClCompile Include="renderer\backend\GpuBuffer.cpp" />
+    <ClCompile Include="renderer\backend\InteractionStage.cpp" />
+    <ClCompile Include="renderer\backend\ManyLightInteractionStage.cpp" />
+    <ClCompile Include="renderer\backend\RenderBackend.cpp" />
+    <ClCompile Include="renderer\backend\ShadowMapStage.cpp" />
+    <ClCompile Include="renderer\backend\StencilShadowStage.cpp" />
+    <ClCompile Include="renderer\BloomStage.cpp" />
     <ClCompile Include="renderer\Cinematic.cpp" />
     <ClCompile Include="renderer\CinematicFFMpeg.cpp" />
     <ClCompile Include="renderer\CinematicID.cpp" />
-    <ClCompile Include="renderer\draw_arb2.cpp" />
     <ClCompile Include="renderer\draw_common.cpp" />
     <ClCompile Include="renderer\draw_glsl.cpp" />
+    <ClCompile Include="renderer\draw_glsl_multi.cpp" />
     <ClCompile Include="renderer\draw_stencil.cpp" />
     <ClCompile Include="renderer\FrameBuffer.cpp" />
+    <ClCompile Include="renderer\FrameBufferManager.cpp" />
+    <ClCompile Include="renderer\glad.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="renderer\glad_wgl.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="renderer\GLSLProgram.cpp" />
+    <ClCompile Include="renderer\GLSLProgramManager.cpp" />
     <ClCompile Include="renderer\GuiModel.cpp" />
     <ClCompile Include="renderer\Image_files.cpp" />
     <ClCompile Include="renderer\Image_init.cpp" />
     <ClCompile Include="renderer\Image_load.cpp" />
     <ClCompile Include="renderer\Image_process.cpp" />
     <ClCompile Include="renderer\Image_program.cpp" />
+    <ClCompile Include="renderer\ImmediateRendering.cpp" />
     <ClCompile Include="renderer\Interaction.cpp" />
     <ClCompile Include="renderer\Material.cpp" />
     <ClCompile Include="renderer\MegaTexture.cpp" />
@@ -1213,7 +1252,8 @@
     <ClCompile Include="renderer\ModelDecal.cpp" />
     <ClCompile Include="renderer\ModelManager.cpp" />
     <ClCompile Include="renderer\ModelOverlay.cpp" />
-    <ClCompile Include="renderer\Profiling.cpp" />
+    <ClCompile Include="renderer\ParticleSystem.cpp" />
+    <ClCompile Include="renderer\qgl.cpp" />
     <ClCompile Include="renderer\RenderEntity.cpp" />
     <ClCompile Include="renderer\RenderSystem.cpp" />
     <ClCompile Include="renderer\RenderSystem_init.cpp" />
@@ -1248,16 +1288,28 @@
     <ClCompile Include="sound\snd_system.cpp" />
     <ClCompile Include="sound\snd_wavefile.cpp" />
     <ClCompile Include="sound\snd_world.cpp" />
+    <ClCompile Include="sys\sys_cpu.cpp" />
     <ClCompile Include="sys\sys_local.cpp" />
+    <ClCompile Include="sys\sys_padinput.cpp" />
     <ClCompile Include="sys\win32\win_cpu.cpp" />
     <ClCompile Include="sys\win32\win_glimp.cpp" />
     <ClCompile Include="sys\win32\win_input.cpp" />
     <ClCompile Include="sys\win32\win_main.cpp" />
     <ClCompile Include="sys\win32\win_net.cpp" />
-    <ClCompile Include="sys\win32\win_qgl.cpp" />
     <ClCompile Include="sys\win32\win_shared.cpp" />
     <ClCompile Include="sys\win32\win_syscon.cpp" />
     <ClCompile Include="sys\win32\win_wndproc.cpp" />
+    <ClCompile Include="tests\TestRun.cpp" />
+    <ClCompile Include="ThirdParty\artefacts\tracy\src\TracyClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug with inlines and memory log|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="tools\compilers\aas\AASBuild.cpp" />
     <ClCompile Include="tools\compilers\aas\AASBuild_file.cpp" />
     <ClCompile Include="tools\compilers\aas\AASBuild_gravity.cpp" />
@@ -1271,21 +1323,23 @@
     <ClCompile Include="tools\compilers\aas\AASReach.cpp" />
     <ClCompile Include="tools\compilers\aas\Brush.cpp" />
     <ClCompile Include="tools\compilers\aas\BrushBSP.cpp" />
+    <ClCompile Include="tools\compilers\compiler_common.cpp" />
     <ClCompile Include="tools\compilers\dmap\dmap.cpp" />
+    <ClCompile Include="tools\compilers\dmap\earcut.cpp" />
     <ClCompile Include="tools\compilers\dmap\facebsp.cpp" />
     <ClCompile Include="tools\compilers\dmap\gldraw.cpp" />
     <ClCompile Include="tools\compilers\dmap\glfile.cpp" />
-    <ClCompile Include="tools\compilers\dmap\leakfile.cpp" />
     <ClCompile Include="tools\compilers\dmap\map.cpp" />
     <ClCompile Include="tools\compilers\dmap\optimize.cpp" />
-    <ClCompile Include="tools\compilers\dmap\optimize_gcc.cpp" />
     <ClCompile Include="tools\compilers\dmap\output.cpp" />
+    <ClCompile Include="tools\compilers\dmap\planargraph.cpp" />
     <ClCompile Include="tools\compilers\dmap\portals.cpp" />
     <ClCompile Include="tools\compilers\dmap\shadowopt3.cpp" />
     <ClCompile Include="tools\compilers\dmap\tritjunction.cpp" />
     <ClCompile Include="tools\compilers\dmap\tritools.cpp" />
     <ClCompile Include="tools\compilers\dmap\ubrush.cpp" />
     <ClCompile Include="tools\compilers\dmap\usurface.cpp" />
+    <ClCompile Include="tools\compilers\particle\ParticleCollisionStatic.cpp" />
     <ClCompile Include="tools\compilers\renderbump\renderbump.cpp" />
     <ClCompile Include="tools\compilers\roqvq\codec.cpp" />
     <ClCompile Include="tools\compilers\roqvq\NSBitmapImageRep.cpp" />

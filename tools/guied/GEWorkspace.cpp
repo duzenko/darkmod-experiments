@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -269,8 +269,8 @@ void rvGEWorkspace::Render ( HDC hdc )
 
 	// Prepare the view and clear it
 	GL_State( GLS_DEFAULT );
-	GL_Viewport(0, 0, mWindowWidth, mWindowHeight );
-	GL_Scissor(0, 0, mWindowWidth, mWindowHeight );
+	GL_ViewportVidSize(0, 0, mWindowWidth, mWindowHeight );
+	GL_ScissorVidSize(0, 0, mWindowWidth, mWindowHeight );
 	qglClearColor ( 0.75f, 0.75f, 0.75f, 0 );
 
 	qglDisable(GL_DEPTH_TEST);
@@ -278,11 +278,11 @@ void rvGEWorkspace::Render ( HDC hdc )
 	qglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Render the workspace below
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
+	qglMatrixMode(GL_PROJECTION);
+	qglLoadIdentity();
 	qglOrtho(0,mWindowWidth, mWindowHeight, 0, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	qglMatrixMode(GL_MODELVIEW);
+	qglLoadIdentity();
 
 	GL_FloatColor ( mApplication->GetOptions().GetWorkspaceColor()[0], mApplication->GetOptions().GetWorkspaceColor()[1], mApplication->GetOptions().GetWorkspaceColor()[2] );	
 
@@ -325,20 +325,20 @@ void rvGEWorkspace::Render ( HDC hdc )
 //	qglDisable(GL_BLEND);
 	qglDisable(GL_CULL_FACE);
 	
-	GL_Viewport(0, 0, mWindowWidth, mWindowHeight );
-	GL_Scissor(0, 0, mWindowWidth, mWindowHeight );
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
+	GL_ViewportVidSize(0, 0, mWindowWidth, mWindowHeight );
+	GL_ScissorVidSize(0, 0, mWindowWidth, mWindowHeight );
+	qglMatrixMode(GL_PROJECTION);
+	qglLoadIdentity();
 	qglOrtho(0,mWindowWidth, mWindowHeight, 0, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	qglMatrixMode(GL_MODELVIEW);
+	qglLoadIdentity();
 
 	RenderGrid ( );
 	
 	mSelections.Render ( );
 	
 	qglFinish ( );
-	qwglSwapBuffers(hdc);
+	SwapBuffers(hdc);
 
 	qglEnable( GL_TEXTURE_CUBE_MAP_EXT );
 	qglEnable( GL_CULL_FACE);

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MATH_EXTRAPOLATE_H__
@@ -39,13 +39,13 @@ class idExtrapolate {
 public:
 						idExtrapolate();
 
-	void				Init( const float startTime, const float duration, const type &startValue, const type &baseSpeed, const type &speed, const extrapolation_t extrapolationType );
-	type				GetCurrentValue( float time ) const;
-	type				GetCurrentSpeed( float time ) const;
-	bool				IsDone( float time ) const { return ( !( extrapolationType & EXTRAPOLATION_NOSTOP ) && time >= startTime + duration ); }
-	void				SetStartTime( float time ) { startTime = time; currentTime = -1; }
-	float				GetStartTime( void ) const { return startTime; }
-	float				GetEndTime( void ) const { return ( !( extrapolationType & EXTRAPOLATION_NOSTOP ) && duration > 0 ) ? startTime + duration : 0; }
+	void				Init( const double startTime, const float duration, const type &startValue, const type &baseSpeed, const type &speed, const extrapolation_t extrapolationType );
+	type				GetCurrentValue( double time ) const;
+	type				GetCurrentSpeed( double time ) const;
+	bool				IsDone( double time ) const { return ( !( extrapolationType & EXTRAPOLATION_NOSTOP ) && time >= startTime + duration ); }
+	void				SetStartTime( double time ) { startTime = time; currentTime = -1; }
+	double				GetStartTime( void ) const { return startTime; }
+	double				GetEndTime( void ) const { return ( !( extrapolationType & EXTRAPOLATION_NOSTOP ) && duration > 0 ) ? startTime + duration : 0; }
 	float				GetDuration( void ) const { return duration; }
 	void				SetStartValue( const type &value ) { startValue = value; currentTime = -1; }
 	const type &		GetStartValue( void ) const { return startValue; }
@@ -55,12 +55,12 @@ public:
 
 private:
 	extrapolation_t		extrapolationType;
-	float				startTime;
+	double				startTime;
 	float				duration;
 	type				startValue;
 	type				baseSpeed;
 	type				speed;
-	mutable float		currentTime;
+	mutable double		currentTime;
 	mutable type		currentValue;
 };
 
@@ -86,7 +86,7 @@ idExtrapolate::Init
 ====================
 */
 template< class type >
-ID_INLINE void idExtrapolate<type>::Init( const float startTime, const float duration, const type &startValue, const type &baseSpeed, const type &speed, const extrapolation_t extrapolationType ) {
+ID_INLINE void idExtrapolate<type>::Init( const double startTime, const float duration, const type &startValue, const type &baseSpeed, const type &speed, const extrapolation_t extrapolationType ) {
 	this->extrapolationType = extrapolationType;
 	this->startTime = startTime;
 	this->duration = duration;
@@ -103,7 +103,7 @@ idExtrapolate::GetCurrentValue
 ====================
 */
 template< class type >
-ID_INLINE type idExtrapolate<type>::GetCurrentValue( float time ) const {
+ID_INLINE type idExtrapolate<type>::GetCurrentValue( double time ) const {
 	float deltaTime, s;
 
 	if ( time == currentTime ) {
@@ -181,7 +181,7 @@ idExtrapolate::GetCurrentSpeed
 ====================
 */
 template< class type >
-ID_INLINE type idExtrapolate<type>::GetCurrentSpeed( float time ) const {
+ID_INLINE type idExtrapolate<type>::GetCurrentSpeed( double time ) const {
 	float deltaTime, s;
 
 	if ( time < startTime || !duration ) {

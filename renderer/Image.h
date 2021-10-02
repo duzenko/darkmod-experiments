@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 
@@ -44,12 +44,6 @@ qglDisable( GL_TEXTURE_* )
 
 ====================================================================
 */
-
-typedef enum {
-	IS_UNLOADED,	// no gl texture number
-	IS_PARTIAL,		// has a texture number and the low mip levels loaded
-	IS_LOADED		// has a texture number and the full mip hierarchy
-} imageState_t;
 
 #define	MAX_TEXTURE_LEVELS				14
 
@@ -137,6 +131,54 @@ typedef enum {
 #define	MAX_IMAGE_NAME	256
 #define MIN_IMAGE_NAME  4
 
+typedef enum {
+	IR_NONE = 0,			// should never happen
+	IR_GRAPHICS = 0x1,
+	IR_CPU = 0x2,
+	IR_BOTH = IR_GRAPHICS | IR_CPU,
+} imageResidency_t;
+
+typedef enum {
+	IS_NONE,		// empty/foreground load
+	IS_SCHEDULED,	// waiting in queue
+	IS_LOADED		// data loaded, waiting for GL thread
+} imageLoadState_t;
+
+// stgatilov: represents uncompressed image data on CPU side in RGBA8 format
+typedef struct imageBlock_s {
+	byte *pic[6];
+	int width;
+	int height;
+	int sides;			//six for cubemaps, one for the others
+
+	byte *GetPic(int side = 0) const { return pic[side]; }
+	bool IsValid() const { return pic[0] != nullptr; }
+	bool IsCubemap() const { return sides == 6; }
+	int GetSizeInBytes() const { return width * height * 4; }
+	int GetTotalSizeInBytes() const { return sides * GetSizeInBytes(); }
+	void Purge();
+} imageBlock_t;
+
+// stgatilov: represents compressed texture as contents of DDS file
+typedef struct imageCompressedData_s {
+	int fileSize;				//size of tail starting from "magic"
+	int _;						//(padding)
+
+	//----- data below is stored in DDS file -----
+	dword magic;				//always must be "DDS "in little-endian
+	ddsFileHeader_t header;		//DDS file header (124 bytes)
+	byte contents[1];			//the rest of file (variable size)
+
+	byte *GetFileData() const { return (byte*)&magic; }
+	static int FileSizeFromContentSize(int contentSize) { return contentSize + 4 + sizeof(ddsFileHeader_t); }
+	static int TotalSizeFromFileSize(int fileSize) { return fileSize + 8; }
+	static int TotalSizeFromContentSize(int contentSize) { return TotalSizeFromFileSize(FileSizeFromContentSize(contentSize)); }
+	int GetTotalSize() const { return TotalSizeFromFileSize(fileSize); }
+} imageCompressedData_t;
+static_assert(offsetof(imageCompressedData_s, contents) - offsetof(imageCompressedData_s, magic) == 128, "Wrong imageCompressedData_t layout");
+
+class LoadStack;
+
 class idImage {
 public:
 	idImage();
@@ -147,11 +189,11 @@ public:
 	// May start a background image read.
 	void		Bind();
 
-	// for use with fragment programs, doesn't change any enable2D/3D/cube states
-	void		BindFragment();
+	// checks if the texture is currently bound to the specified texture unit
+	bool		IsBound( int textureUnit ) const;
 
 	// deletes the texture object, but leaves the structure so it can be reloaded
-	void		PurgeImage();
+	void		PurgeImage( bool purgeCpuData = true );
 
 	// used by callback functions to specify the actual data
 	// data goes from the bottom to the top line of the image, as OpenGL expects it
@@ -159,23 +201,13 @@ public:
 	// FIXME: should we implement cinematics this way, instead of with explicit calls?
 	void		GenerateImage( const byte *pic, int width, int height,
 	                           textureFilter_t filter, bool allowDownSize,
-	                           textureRepeat_t repeat, textureDepth_t depth );
+	                           textureRepeat_t repeat, textureDepth_t depth,
+	                           imageResidency_t residency = IR_GRAPHICS );
 	void		GenerateCubeImage( const byte *pic[6], int size,
 	                               textureFilter_t filter, bool allowDownSize,
 	                               textureDepth_t depth );
-	void		GenerateAttachment( int width, int height, GLint format );
-	/*	void		GenerateRendertarget(); //~SS
-		// added for soft shadows jitter map, but should be generally useful for storing data
-		// in a 3D texture. No mipmaps, high quality, nearest filtering, user specifies the format.
-		void		GenerateDataCubeImage( const GLvoid* data, int width, int height, int depth, textureRepeat_t repeat,
-										   GLuint internalFormat, GLuint pixelFormat, GLuint pixelType );
-	*/
-
-
-
-	void		CopyFramebuffer( int x, int y, int width, int height, bool useOversizedBuffer );
-
-	void		CopyDepthBuffer( int x, int y, int width, int height, bool useOversizedBuffer );
+	void		GenerateAttachment( int width, int height, GLenum format,
+									GLenum filter = GL_LINEAR, GLenum wrapMode = GL_CLAMP_TO_EDGE );
 
 	void		UploadScratch( const byte *pic, int width, int height );
 
@@ -200,11 +232,9 @@ public:
 	void		SetImageFilterAndRepeat() const;
 	void		WritePrecompressedImage();
 	bool		CheckPrecompressedImage( bool fullLoad );
-	void		UploadPrecompressedImage( byte *data, int len );
-	void		ActuallyLoadImage( bool checkForPrecompressed, bool fromBackEnd );
-	void		StartBackgroundImageLoad();
+	void		UploadPrecompressedImage( void );
+	void		ActuallyLoadImage( bool allowBackground = false );
 	int			BitsForInternalFormat( int internalFormat ) const;
-	//void		UploadCompressedNormalMap( int width, int height, const byte *rgba, int mipLevel );
 	GLenum		SelectInternalFormat( const byte **dataPtrs, int numDataPtrs, int width, int height, textureDepth_t minimumDepth ) const;
 	void		ImageProgramStringToCompressedFileName( const char *imageProg, char *fileName ) const;
 	int			NumLevelsForImageSize( int width, int height ) const;
@@ -238,42 +268,32 @@ public:
 	// data for listImages
 	int					uploadWidth, uploadHeight;	// after power of two, downsample, and MAX_TEXTURE_SIZE
 	int					internalFormat;
+	const GLint *		swizzleMask;			// replacement for deprecated intensity/luminance formats
 
 	idImage *			hashNext;				// for hash chains to speed lookup
 
 	int					refCount;				// overall ref count
+
+	// stgatilov: storing image data on CPU side
+	imageBlock_t		cpuData;				// CPU-side usable image data (usually absent)
+	imageResidency_t	residency;				// determines whether cpuData and/or texnum should be valid
+	imageCompressedData_t *compressedData;		// CPU-side compressed texture contents (aka DDS file)
+	imageLoadState_t	backgroundLoadState;	// state of background loading (usually disabled)
+
+	//stgatilov: information about why and how this image was loaded (may be missing)
+	LoadStack *			loadStack;
+
+	// START bindless texture support
+private:
+	GLuint64			textureHandle;
+	bool				isBindlessHandleResident;
+public:
+	bool				isImmutable;
+	int					lastNeededInFrame;
+	void				MakeResident();
+	void				MakeNonResident();
+	GLuint64			BindlessHandle();
 };
-
-ID_INLINE idImage::idImage() {
-	texnum = static_cast< GLuint >( TEXTURE_NOT_LOADED );
-	type = TT_DISABLED;
-	frameUsed = 0;
-	classification = 0;
-	imgName[0] = '\0';
-	generatorFunction = NULL;
-	allowDownSize = false;
-	filter = TF_DEFAULT;
-	repeat = TR_REPEAT;
-	depth = TD_DEFAULT;
-	cubeFiles = CF_2D;
-	referencedOutsideLevelLoad = false;
-	levelLoadReferenced = false;
-	precompressedFile = false;
-	defaulted = false;
-	timestamp = 0;
-	bindCount = 0;
-	uploadWidth = uploadHeight = 0;
-	internalFormat = 0;
-	hashNext = NULL;
-	refCount = 0;
-}
-
-
-// data is RGBA
-void	R_WriteTGA( const char *filename, const byte *data, int width, int height, bool flipVertical = false );
-// data is an 8 bit index into palette, which is RGB (no A)
-void	R_WritePalTGA( const char *filename, const byte *data, const byte *palette, int width, int height, bool flipVertical = false );
-// data is in top-to-bottom raster order unless flipVertical is set
 
 
 class idImageManager {
@@ -290,7 +310,8 @@ public:
 	// Will automatically resample non-power-of-two images and execute image programs if needed.
 	idImage *			ImageFromFile( const char *name,
 	                                   textureFilter_t filter, bool allowDownSize,
-	                                   textureRepeat_t repeat, textureDepth_t depth, cubeFiles_t cubeMap = CF_2D );
+	                                   textureRepeat_t repeat, textureDepth_t depth, cubeFiles_t cubeMap = CF_2D,
+	                                   imageResidency_t residency = IR_GRAPHICS );
 
 	// look for a loaded image, whatever the parameters
 	idImage *			GetImage( const char *name ) const;
@@ -300,7 +321,7 @@ public:
 	idImage *			ImageFromFunction( const char *name, void ( *generatorFunction )( idImage *image ) );
 
 	// returns the number of bytes of image data bound in the previous frame
-	int					SumOfUsedImages();
+	int					SumOfUsedImages( int *numberOfUsed = nullptr );
 
 	// called each frame to allow some cvars to automatically force changes
 	void				CheckCvars();
@@ -310,9 +331,6 @@ public:
 
 	// reloads all apropriate images after a vid_restart
 	void				ReloadAllImages();
-
-	// disable the active texture unit
-	void				BindNull();
 
 	// Mark all file based images as currently unused,
 	// but don't free anything.  Calls to ImageFromFile() will
@@ -335,19 +353,17 @@ public:
 	void				PrintMemInfo( MemInfo_t *mi );
 
 	// cvars
-	static idCVar		image_roundDown;			// round bad sizes down to nearest power of two
 	static idCVar		image_colorMipLevels;		// development aid to see texture mip usage
 	static idCVar		image_downSize;				// controls texture downsampling
 	static idCVar		image_useCompression;		// 0 = force everything to high quality
 	static idCVar		image_filter;				// changes texture filtering on mipmapped images
 	static idCVar		image_anisotropy;			// set the maximum texture anisotropy if available
 	static idCVar		image_lodbias;				// change lod bias on mipmapped images
-	static idCVar		image_useAllFormats;		// allow alpha/intensity/luminance/luminance+alpha
 	static idCVar		image_usePrecompressedTextures;	// use .dds files if present
 	static idCVar		image_writePrecompressedTextures; // write .dds files if necessary
 	static idCVar		image_writeNormalTGA;		// debug tool to write out .tgas of the final normal maps
 	static idCVar		image_writeTGA;				// debug tool to write out .tgas of the non normal maps
-	static idCVar		image_useNormalCompression;	// use rxgb compression
+	static idCVar		image_useNormalCompression;	// use RGTC2 compression
 	static idCVar		image_useOffLineCompression; // will write a batch file with commands for the offline compression
 	static idCVar		image_preload;				// if 0, dynamically load all images
 	static idCVar		image_forceDownSize;		// allows the ability to force a downsize
@@ -358,14 +374,13 @@ public:
 	static idCVar		image_ignoreHighQuality;	// ignore high quality on materials
 	static idCVar		image_downSizeLimit;		// downsize diffuse limit
 	static idCVar		image_blockChecksum;		// duplicate check
-	static idCVar		image_mipmapMode;			// 0 - software, 1 = gl 1.4, 2 = gl 3.0
 
 	// built-in images
 	idImage *			defaultImage;
 	idImage *			flatNormalMap;				// 128 128 255 in all pixels
 	idImage *			ambientNormalMap;			// tr.ambientLightVector encoded in all pixels
-	idImage *			rampImage;					// 0-255 in RGBA in S
-	idImage *			alphaRampImage;				// 0-255 in alpha, 255 in RGB
+	//idImage *			rampImage;					// 0-255 in RGBA in S
+	//idImage *			alphaRampImage;				// 0-255 in alpha, 255 in RGB
 	idImage *			alphaNotchImage;			// 2x1 texture with just 1110 and 1111 with point sampling
 	idImage *			whiteImage;					// full of 0xff
 	idImage *			blackImage;					// full of 0x00
@@ -376,21 +391,21 @@ public:
 	idImage *			cinematicImage;
 	idImage *			scratchImage;
 	idImage *			scratchImage2;
+	idImage *			xrayImage;
 	idImage *			accumImage;
 	idImage *			currentRenderImage;			// for SS_POST_PROCESS shaders
+	idImage *			guiRenderImage;
 	idImage *			scratchCubeMapImage;
-	idImage *			specularTableImage;			// 1D intensity texture with our specular function
-	idImage *			specular2DTableImage;		// 2D intensity texture with our specular function with variable specularity
-	idImage *			borderClampImage;			// white inside, black outside
+	//idImage *			specularTableImage;			// 1D intensity texture with our specular function
+	//idImage *			specular2DTableImage;		// 2D intensity texture with our specular function with variable specularity
+	//idImage *			borderClampImage;			// white inside, black outside
 
 
 	idImage *			currentDepthImage;			// #3877. Allow shaders to access scene depth
 	idImage *			shadowDepthFbo;
 	idImage *			shadowAtlas;
+	//idImage *			shadowAtlasHistory;
 	idImage *			currentStencilFbo; // these two are only used on Intel since no one else support separate stencil
-	idImage *			shadowStencilFbo;
-	idImage *			bloomCookedMath;
-	idImage *			bloomImage;
 
 	//--------------------------------------------------------
 
@@ -414,6 +429,8 @@ public:
 	float				textureLODBias;
 
 	idImage *			imageHashTable[FILE_HASH_SIZE];
+
+	void				MakeUnusedImagesNonResident();
 };
 
 extern idImageManager	*globalImages;		// pointer to global list for the rest of the system
@@ -431,7 +448,7 @@ byte *R_Dropsample( const byte *in, int inwidth, int inheight,
                     int outwidth, int outheight );
 byte *R_ResampleTexture( const byte *in, int inwidth, int inheight,
                          int outwidth, int outheight );
-byte *R_MipMap( const byte *in, int width, int height, bool preserveBorder );
+byte *R_MipMap( const byte *in, int width, int height );
 
 // these operate in-place on the provided pixels
 void R_SetBorderTexels( byte *inBase, int width, int height, const byte border[4] );
@@ -448,10 +465,11 @@ IMAGEFILES
 ====================================================================
 */
 
-void R_LoadImage( const char *name, byte **pic, int *width, int *height, ID_TIME_T *timestamp, bool makePowerOf2 );
+void R_LoadImage( const char *name, byte **pic, int *width, int *height, ID_TIME_T *timestamp );
 // pic is in top to bottom raster format
 bool R_LoadCubeImages( const char *cname, cubeFiles_t extensions, byte *pic[6], int *size, ID_TIME_T *timestamp );
 void R_MakeAmbientMap( MakeAmbientMapParam param );
+void R_LoadImageData( idImage &image );
 
 /*
 ====================================================================
@@ -463,5 +481,85 @@ IMAGEPROGRAM
 
 void R_LoadImageProgram( const char *name, byte **pic, int *width, int *height, ID_TIME_T *timestamp, textureDepth_t *depth = NULL );
 const char *R_ParsePastImageProgram( idLexer &src );
+
+/*
+====================================================================
+
+IMAGE READER/WRITER
+
+====================================================================
+*/
+
+// data is RGBA
+void R_WriteTGA( const char* filename, const byte* data, int width, int height, bool flipVertical = false );
+
+class idImageWriter {
+public:
+	//setting common settings
+	inline idImageWriter &Source(const byte *data, int width, int height, int bpp = 4) {
+		srcData = data;
+		srcWidth = width;
+		srcHeight = height;
+		srcBpp = bpp;
+		return *this;
+	}
+	inline idImageWriter &Dest(idFile *file, bool close = true) {
+		dstFile = file;
+		dstClose = close;
+		return *this;
+	}
+	inline idImageWriter &Flip(bool doFlip = true) {
+		flip = doFlip;
+		return *this;
+	}
+	//perform save (final call)
+	bool WriteTGA();
+	bool WriteJPG(int quality = 85);
+	bool WritePNG(int level = -1);
+	bool WriteExtension(const char *extension);
+
+private:
+	bool Preamble();
+	void Postamble();
+
+	const byte *srcData = nullptr;
+	int srcWidth = -1, srcHeight = -1, srcBpp = -1;
+	idFile *dstFile = nullptr;
+	bool dstClose = true;
+	bool flip = false;
+};
+
+class idImageReader {
+public:
+	//setting common settings
+	inline idImageReader &Source(idFile *file, bool close = true) {
+		srcFile = file;
+		srcClose = close;
+		return *this;
+	}
+	inline idImageReader &Dest(byte* &data, int &width, int &height) {
+		dstData = &data;
+		dstWidth = &width;
+		dstHeight = &height;
+		return *this;
+	}
+	//perform load (final call)
+	void LoadTGA();
+	void LoadJPG();
+	void LoadPNG();
+	void LoadExtension(const char *extension = nullptr);
+
+private:
+	bool Preamble();
+	void Postamble();
+	void LoadBMP();
+
+	idFile *srcFile = nullptr;
+	bool srcClose = true;
+	byte* *dstData = nullptr;
+	int *dstWidth = nullptr, *dstHeight = nullptr;
+	byte *srcBuffer = nullptr;
+	int srcLength = 0;
+};
 
 #endif /* !__R_IMAGE_H__ */

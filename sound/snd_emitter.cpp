@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -247,8 +247,6 @@ void idSoundChannel::GatherChannelSamples( int sampleOffset44k, int sampleCount4
 	float	*dest_p = dest;
 	int		len;
 
-//Sys_DebugPrintf( "msec:%i sample:%i : %i : %i\n", Sys_Milliseconds(), soundSystemLocal.GetCurrent44kHzTime(), sampleOffset44k, sampleCount44k );	//!@#
-
 	// negative offset times will just zero fill
 	if ( sampleOffset44k < 0 ) {
 		len = -sampleOffset44k;
@@ -315,6 +313,53 @@ void idSoundChannel::GatherChannelSamples( int sampleOffset44k, int sampleCount4
 		sampleCount44k -= len;
 		sampleOffset44k += len;
 	}
+}
+
+/*
+===================
+idSoundChannel::GatherSubtitles
+
+Gets subtitles to show at given moment.
+Handles looping between multiple different samples and leadins.
+Return values are appended to "matches" array, their number is returned.
+
+Note: sampleOffset44k is multiplied by number of channels, like in GatherChannelSamples.
+===================
+*/
+int idSoundChannel::GatherSubtitles( int sampleOffset44k, idList<SubtitleMatch> &matches, int level ) const {
+	// grab part of the leadin sample
+	idSoundSample *leadin = leadinSample;
+	if ( !leadin || sampleOffset44k < 0 ) {
+		return 0;
+	}
+	if ( leadin->subtitlesVerbosity > level ) {
+		return 0;
+	}
+
+	int addedNum = 0;
+	// if current moment is in leadin sample
+	if ( sampleOffset44k < leadin->LengthIn44kHzSamples() ) {
+		addedNum = leadin->FetchSubtitles( sampleOffset44k / leadin->objectInfo.nChannels, matches );
+	}
+	else {
+		// is it looping?
+		if ( !soundShader || !( parms.soundShaderFlags & SSF_LOOPING ) ) {
+			return 0;
+		}
+		idSoundSample *loop = soundShader->entries[0];
+		if ( !loop ) {
+			return 0;
+		}
+
+		// if current moment is in looping sample
+		int remainderOffset = ( sampleOffset44k - leadin->LengthIn44kHzSamples() ) % loop->LengthIn44kHzSamples();
+		addedNum = leadin->FetchSubtitles( remainderOffset / leadin->objectInfo.nChannels, matches );
+	}
+
+	// save channel in generated matches
+	for ( int i = matches.Num() - addedNum; i < matches.Num(); i++ )
+		matches[i].channel = this;
+	return addedNum;
 }
 
 
@@ -437,14 +482,10 @@ void idSoundEmitterLocal::CheckForCompletion( int current44kHzTime ) {
 			if ( !shader ) {
 				continue;
 			}
+			const char *shaderName = shader->GetName();
 
 			// see if this channel has completed
 			if ( !( chan->parms.soundShaderFlags & SSF_LOOPING ) ) {
-				ALint state = AL_PLAYING;
-
-				if (alIsSource(chan->openalSource)) {
-					alGetSourcei( chan->openalSource, AL_SOURCE_STATE, &state );
-				}
 				idSlowChannel slow = GetSlowChannel( chan );
 
 				if ( soundWorld->slowmoActive && slow.IsActive() ) {
@@ -456,7 +497,7 @@ void idSoundEmitterLocal::CheckForCompletion( int current44kHzTime ) {
 						}
 						continue;
 					}
-				} else if ( ( chan->trigger44kHzTime + chan->leadinSample->LengthIn44kHzSamples() < current44kHzTime ) || ( state == AL_STOPPED ) ) {
+				} else if ( ( chan->trigger44kHzTime + chan->leadinSample->LengthIn44kHzSamples() < current44kHzTime ) ) {
 					chan->Stop();
 
 					// free hardware resources

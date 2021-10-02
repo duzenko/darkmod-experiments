@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -85,7 +85,7 @@ bool idAASBuild::MergeWithAdjacentLeafNodes( idBrushBSP &bsp, idBrushBSPNode *no
 			otherNodeFlags = p->GetNode(!s)->GetFlags();
 
 			// try to merge the leaf nodes
-			if ( bsp.TryMergeLeafNodes( p, s ) ) {
+			if ( bsp.TryMergeLeafNodes( p, s, zombieNodes ) ) {
 				node->SetFlag( otherNodeFlags );
 				if ( node->GetFlags() & AREA_FLOOR ) {
 					node->RemoveFlag( AREA_GAP );
@@ -111,6 +111,12 @@ idAASBuild::MergeLeafNodes_r
 void idAASBuild::MergeLeafNodes_r( idBrushBSP &bsp, idBrushBSPNode *node ) {
 
 	if ( !node ) {
+		return;
+	}
+
+	// stgatilov #5212: any zombie node was merged into some node X
+	// the node X is surely marked as "done", so we can ignore it for now
+	if ( node->GetFlags() & NODE_ZOMBIE ) {
 		return;
 	}
 
@@ -142,11 +148,20 @@ idAASBuild::MergeLeafNodes
 void idAASBuild::MergeLeafNodes( idBrushBSP &bsp ) {
 	numMergedLeafNodes = 0;
 
+	TRACE_CPU_SCOPE("MergeLeafNodes")
 	common->Printf( "[Merge Leaf Nodes]\n" );
 
 	MergeLeafNodes_r( bsp, bsp.GetRootNode() );
-	bsp.GetRootNode()->RemoveFlagRecurse( NODE_DONE );
+	//bsp.GetRootNode()->RemoveFlagRecurse( NODE_DONE );	//stgatilov #5212: this is done inside PruneMergedTree_r
 	bsp.PruneMergedTree_r( bsp.GetRootNode() );
+
+	//stgatilov #5212: now that zombies are no longer referenced, delete them
+	for ( int i = 0; i < zombieNodes.Num(); i++ ) {
+		//note: we call destructor on already destructed object here
+		//I checked this to be OK because zombies are fully zeroed
+		delete zombieNodes[i];	
+	}
+	zombieNodes.ClearFree();
 
 	common->Printf( "\r%6d leaf nodes merged\n", numMergedLeafNodes );
 }

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __DRAWVERT_H__
@@ -50,11 +50,11 @@ public:
 	dword			GetColor( void ) const;
 };
 
-ID_INLINE float idDrawVert::operator[]( const int index ) const {
+ID_FORCE_INLINE float idDrawVert::operator[]( const int index ) const {
 	assert( index >= 0 && index < 5 );
 	return ((float *)(&xyz))[index];
 }
-ID_INLINE float	&idDrawVert::operator[]( const int index ) {
+ID_FORCE_INLINE float	&idDrawVert::operator[]( const int index ) {
 	assert( index >= 0 && index < 5 );
 	return ((float *)(&xyz))[index];
 }
@@ -85,11 +85,11 @@ ID_INLINE void idDrawVert::LerpAll( const idDrawVert &a, const idDrawVert &b, co
 	color[3] = (byte)( a.color[3] + f * ( b.color[3] - a.color[3] ) );
 }
 
-ID_INLINE void idDrawVert::SetColor( dword color ) {
+ID_FORCE_INLINE void idDrawVert::SetColor( dword color ) {
 	*reinterpret_cast<dword *>(this->color) = color;
 }
 
-ID_INLINE dword idDrawVert::GetColor( void ) const {
+ID_FORCE_INLINE dword idDrawVert::GetColor( void ) const {
 	return *reinterpret_cast<const dword *>(this->color);
 }
 

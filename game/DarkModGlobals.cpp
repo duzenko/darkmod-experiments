@@ -1,23 +1,16 @@
-/******************************************************************************/
-/*                                                                            */
-/*         DarkModGlobals (C) by Gerhard W. Gruber in Germany 2004            */
-/*                          All rights reserved                               */
-/*                                                                            */
-/******************************************************************************/
-
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -32,6 +25,7 @@
 #include "ModMenu.h"
 #include "ai/AI.h"
 #include "IniFile.h"
+#include "Debug.h"
 
 #ifdef MACOS_X
 #include <mach-o/dyld.h>
@@ -170,18 +164,15 @@ CGlobal::~CGlobal()
 }
 
 void CGlobal::Shutdown() {
-	m_SurfaceHardness.Clear();
-	m_SurfaceHardnessHash.Clear();
+	m_SurfaceHardness.ClearFree();
+	m_SurfaceHardnessHash.ClearFree();
 	if (m_LogFile != NULL)
 	{
 		fclose(m_LogFile);
 		m_LogFile = 0;
 	}
-	m_LightMaterial.Clear();
-	m_Image.Clear();
-	m_RenderImage.Unload();
-	m_AcuityNames.Clear();
-	m_AcuityHash.Clear();
+	m_AcuityNames.ClearFree();
+	m_AcuityHash.ClearFree();
 }
 
 void CGlobal::Init()
@@ -322,7 +313,8 @@ void CGlobal::LogString(const char *fmt, ...)
 	va_list arg;
 	va_start(arg, fmt);
 
-	fprintf(m_LogFile, "[%s (%4u):%s (%s) FR: %4u] ", m_Filename, m_Linenumber, LTString[lt], LCString[lc], m_Frame);
+	const char *cleanFilename = CleanupSourceCodeFileName(m_Filename);
+	fprintf(m_LogFile, "[%s (%4u):%s (%s) FR: %4u] ", cleanFilename, m_Linenumber, LTString[lt], LCString[lc], m_Frame);
 	vfprintf(m_LogFile, fmt, arg);
 	fprintf(m_LogFile, "\n");
 	fflush(m_LogFile);
@@ -434,152 +426,6 @@ void CGlobal::CheckLogClass(const IniFilePtr& iniFile, const char* key, LC_LogCl
 	}
 
 	DM_LOG(LC_FORCE, LT_FORCE)LOGSTRING("%s: %d\r", key, m_ClassArray[logClass]);
-}
-
-CLightMaterial *CGlobal::GetMaterial(idStr const &mn)
-{
-	CLightMaterial *rc = NULL;
-	int i, n;
-
-	n = m_LightMaterial.Num();
-	for ( i = 0 ; i < n ; i++ )
-	{
-		if (m_LightMaterial[i]->m_MaterialName.Icmp(mn) == 0)
-		{
-			rc = m_LightMaterial[i];
-			break;
-		}
-	}
-
-	DM_LOG(LC_SYSTEM, LT_INFO)LOGSTRING("CGlobal::GetMaterial returns: [%s] for [%s]\r", (rc == NULL) ? "(null)" : rc->m_MaterialName.c_str(), mn.c_str());
-	return rc;
-}
-
-
-int CGlobal::AddImage(idStr const &Name, bool &Added)
-{
-	int rc = -1;
-	Image *im;
-	Added = false;
-
-	if(Name.Length() == 0)
-		goto Quit;
-
-	// If the image is already in the list, we have now the
-	// index and can immediately return.
-	if(GetImage(Name, rc) != NULL)
-		goto Quit;
-
-	im = new Image(Name);
-
-	m_Image.Append(im);
-	rc = m_Image.Num()-1;
-	Added = true;
-
-Quit:
-	return rc;
-}
-
-Image *CGlobal::GetImage(int i)
-{
-	if(i > m_Image.Num())
-		return NULL;
-	else
-		return m_Image[i];
-}
-
-Image *CGlobal::GetImage(idStr const &Name, int &Index)
-{
-	int i, n;
-
-	Index = -1;
-
-	n = m_Image.Num();
-	for(i = 0; i < n; i++)
-	{
-		if(m_Image[i]->m_Name.Icmp(Name) == 0)
-		{
-			Index = i;
-			return m_Image[i];
-		}
-	}
-
-	return NULL;
-}
-
-
-CLightMaterial::CLightMaterial(idStr const &MaterialName, idStr const &TextureName, idStr const &MapName)
-{
-	bool added;
-
-	m_MaterialName = MaterialName;
-	m_FallOffTexture = TextureName;
-	m_Map = MapName;
-	m_AmbientLight = false;
-
-	m_FallOffIndex = g_Global.AddImage(TextureName, added);
-	m_MapIndex = g_Global.AddImage(MapName, added);
-}
-
-
-void CLightMaterial::Save( idSaveGame *savefile ) const
-{
-	savefile->WriteString(m_MaterialName);
-	savefile->WriteBool(m_AmbientLight);
-	savefile->WriteString(m_FallOffTexture);
-	savefile->WriteInt(m_FallOffIndex);
-	savefile->WriteString(m_Map);
-	savefile->WriteInt(m_MapIndex);
-}
-
-void CLightMaterial::Restore( idRestoreGame *savefile )
-{
-	savefile->ReadString(m_MaterialName);
-	savefile->ReadBool(m_AmbientLight);
-	savefile->ReadString(m_FallOffTexture);
-	savefile->ReadInt(m_FallOffIndex);
-	savefile->ReadString(m_Map);
-	savefile->ReadInt(m_MapIndex);
-}
-
-const unsigned char *CLightMaterial::GetFallOffTexture(int &Width, int &Height, int &Bpp)
-{
-	const unsigned char *rc = NULL;
-	Image *im;
-
-	if(m_FallOffIndex != -1)
-	{
-		if((im = g_Global.GetImage(m_FallOffIndex)) != NULL)
-		{
-			DM_LOG(LC_SYSTEM, LT_DEBUG)LOGSTRING("Falloff [%s]\r", im->m_Name.c_str());
-			rc = im->GetImageData();
-			Width = im->m_Width;
-			Height = im->m_Height;
-			Bpp = im->m_Bpp;
-		}
-	}
-
-	return(rc);
-}
-
-const unsigned char *CLightMaterial::GetImage(int &Width, int &Height, int &Bpp)
-{
-	const unsigned char *rc = NULL;
-	Image *im;
-
-	if(m_MapIndex != -1)
-	{
-		if((im = g_Global.GetImage(m_MapIndex)) != NULL)
-		{
-			DM_LOG(LC_SYSTEM, LT_DEBUG)LOGSTRING("Image [%s]\r", im->m_Name.c_str());
-			rc = im->GetImageData();
-			Width = im->m_Width;
-			Height = im->m_Height;
-			Bpp = im->m_Bpp;
-		}
-	}
-
-	return(rc);
 }
 
 void DM_Printf(const char* fmt, ...)

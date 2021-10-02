@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -21,7 +21,6 @@
 #include "Game_local.h"
 #include "DarkModGlobals.h"
 #include "PickableLock.h"
-#include <random>
 
 static const char* StateNames[] =
 {
@@ -209,8 +208,13 @@ void PickableLock::OnFrobbedStatusChange(bool val)
 		// Reset the lockpick fail counter when entity is losing frob focus
 		m_FailedLockpickRounds = 0;
 
-		// And cancel any pending events
-		CancelEvents(&EV_TDM_LockpickSoundFinished);
+		if (m_Locked) {
+			// Cancel any pending events
+			CancelEvents(&EV_TDM_LockpickSoundFinished);
+			// Make sure m_SoundTimerStarted is cleared
+			// Also return lock to initial state
+			Event_LockpickSoundFinished(LOCKED);
+		}
 	}
 }
 
@@ -569,6 +573,12 @@ bool PickableLock::ProcessLockpickRelease(int type)
 	{
 		return false; // busy playing the wrong lockpick sound
 	}
+	if (m_LockpickState == LOCKED || m_LockpickState == UNLOCKED || m_LockpickState == LOCK_SUCCESS || m_LockpickState == PIN_SUCCESS)
+	{
+		//stgatilov #5312: avoid second failed click due to CBinaryFrobMover::Event_ClearPlayerImmobilization
+		//also avoid failed click on successful release
+		return false;
+	}
 	
 	// Cancel all previous events on release
 	CancelEvents(&EV_TDM_LockpickSoundFinished);
@@ -814,12 +824,9 @@ idStringList PickableLock::CreatePinPattern(int clicks, int baseCount, int maxCo
 	
 	idStr head = va(header + "%%0%uu", strNumLen);
 
-    // We want random integers in the range [0..maxCount]
-    std::uniform_int_distribution<int> randomInts(0, maxCount);
-
 	for (int i = 0; i < clicks; i++)
 	{
-        int r = randomInts(gameLocal.randomMt);
+		int r = gameLocal.random.RandomInt(maxCount + 1);
 
 		idStr click = va(head, r);
 		returnValue.Append(click);

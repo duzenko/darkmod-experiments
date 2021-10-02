@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -32,8 +32,11 @@
 #include "FleeState.h"
 #include "../Library.h"
 
-#define REACTION_TIME_MIN      100	// grayman #3063
-#define REACTION_TIME_MAX     1000	// grayman #3063 // grayman #3492
+//#define REACTION_TIME_MIN      100	// grayman #3063
+//#define REACTION_TIME_MAX     1000	// grayman #3063 // grayman #3492
+#define REACTION_TIME_MIN		1000	// grayman #5019
+#define REACTION_TIME_MAX		3000	// grayman #5019
+#define REACTION_TIME_SPREAD	1000	// grayman #5019
 
 namespace ai
 {
@@ -325,7 +328,8 @@ void CombatState::Init(idAI* owner)
 
 	// grayman #3331 - add a bit of variability so multiple AI spotting the enemy in the same frame aren't in sync
 
-	reactionTime += gameLocal.random.RandomInt(REACTION_TIME_MAX/2);
+//	reactionTime += gameLocal.random.RandomInt(REACTION_TIME_MAX/2);
+	reactionTime += gameLocal.random.RandomInt(REACTION_TIME_SPREAD); // grayman #5019
 
 	_combatSubState = EStateReaction;
 	_reactionEndTime = gameLocal.time + reactionTime;
@@ -1112,7 +1116,7 @@ void CombatState::Think(idAI* owner)
 		// Check whether the enemy can hit us in the near future
 		memory.canBeHitByEnemy = owner->CanBeHitByEntity(enemy, _combatType);
 
-		if ( !owner->AI_ENEMY_VISIBLE && 
+		if ( !owner->AI_ENEMY_VISIBLE &&
 			 ( ( ( _combatType == COMBAT_MELEE )  && !memory.canHitEnemy ) || ( _combatType == COMBAT_RANGED) ) )
 		{
 			// The enemy is not visible, let's keep track of him for a small amount of time

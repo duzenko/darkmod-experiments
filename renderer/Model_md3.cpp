@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "precompiled.h"
 #pragma hdrstop
@@ -280,6 +280,10 @@ idRenderModel *idRenderModelMD3::InstantiateDynamicModel( const struct renderEnt
 	staticModel = new idRenderModelStatic;
 	staticModel->bounds.Clear();
 
+	if ( !md3 ) {
+		common->FatalError( "NULL model for entity %s\n", ent->hModel->Name() );
+	}
+
 	surface = (md3Surface_t *) ((byte *)md3 + md3->ofsSurfaces);
 
 	// TODO: these need set by an entity
@@ -297,9 +301,12 @@ idRenderModel *idRenderModelMD3::InstantiateDynamicModel( const struct renderEnt
 		modelSurface_t	surf;
 
 		surf.geometry = tri;
+		//stgatilov: surfaces with negative "id" are considered as "overlays" and removed
+		//this caused random flickering of MD3 models (e.g. md3_water_test)
+		surf.id = i;
 
 		md3Shader_t* shaders = (md3Shader_t *) ((byte *)surface + surface->ofsShaders);
-		surf.shader = shaders->shader;
+		surf.material = shaders->shader;
 
 		LerpMeshVertexes( tri, surface, backlerp, frame, oldframe );
 

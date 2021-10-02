@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __STR_H__
@@ -64,7 +63,7 @@ const int C_COLOR_BLACK				= '9';
 
 // make idStr a multiple of 32 bytes long
 // don't make too large to keep memory requirements to a minimum
-const int STR_ALLOC_BASE			= 20;
+const int STR_ALLOC_BASE			= 32 - 8 - sizeof(char*);
 const int STR_ALLOC_GRAN			= 32;
 
 typedef enum {
@@ -85,6 +84,7 @@ public:
 						explicit idStr( const int i );
 						explicit idStr( const unsigned u );
 						explicit idStr( const float f );
+						explicit idStr( const double f );
 						~idStr( void );
 
 	size_t				Size( void ) const;
@@ -120,6 +120,7 @@ public:
 	friend bool			operator==( const idStr &a, const idStr &b );
 	friend bool			operator==( const idStr &a, const char *b );
 	friend bool			operator==( const char *a, const idStr &b );
+	friend bool			operator<( const idStr& a, const idStr& b );
 
 						// case sensitive compare
 	friend bool			operator!=( const idStr &a, const idStr &b );
@@ -146,9 +147,9 @@ public:
 
 	int					Length( void ) const;
 	int					Allocated( void ) const;
-	void				Empty( void );
 	bool				IsEmpty( void ) const;
 	void				Clear( void );
+	void				ClearFree( void );
 	void				Append( const char a );
 	void				Append( const idStr &text );
 	void				Append( const char *text );
@@ -200,6 +201,10 @@ public:
 	void				Remove( const char *old );						// Tels: Faster than Replace("..","");
 	void				Remove( const char rem );						// Tels: Faster version of Remove(" ");
 	void				Remap( const unsigned int tablesize, const char *table );	// Table-driven remap (replace A w/ B, and B w/ C etc.) many chars simultanously
+	idList<idStr>		Split( const char *delimiters, bool skipEmpty ) const;
+	idList<idStr>		Split( const idList<idStr> &delimiters, bool skipEmpty ) const;
+	idList<idStr>		SplitLines( void ) const;
+	static idStr		Join( const idList<idStr> &tokens, const char *separator );
 
 	// file name methods
 	int					FileNameHash( void ) const;						// hash key for the filename (skips extension)
@@ -241,6 +246,7 @@ public:
 	static void			Copynz( char *dest, const char *src, int destsize );
 	static int			snPrintf( char *dest, int size, const char *fmt, ... ) id_attribute((format(printf,3,4)));
 	static int			vsnPrintf( char *dest, int size, const char *fmt, va_list argptr );
+	static idStr		Fmt( const char* fmt, ... );
 	// returns -1 if not found otherwise the index of the char
 	static int			FindChar( const char *str, const char c, int start = 0, int end = -1 );
 	static int			CountChar( const char *str, const char c, int start = 0, int end = -1 );
@@ -255,6 +261,10 @@ public:
 	static int			Hash( const char *string, int length );
 	static int			IHash( const char *string );					// case insensitive
 	static int			IHash( const char *string, int length );		// case insensitive
+	// stgatilov: polynomial hash djb2 / DJBX33A extended to 64 bits
+	// maybe it is a slower than idStr::Hash, but it is a much better hash function
+	static uint64		HashPoly64( const char *string, int length = -1 );
+	static uint64		IHashPoly64( const char *string, int length = -1 );
 
 	// character methods
 	static char			ToLower( char c );
@@ -272,9 +282,6 @@ public:
 	friend int			sprintf( idStr &dest, const char *fmt, ... );
 	friend int			vsprintf( idStr &dest, const char *fmt, va_list ap );
 
-	void				ReAllocate( int amount, bool keepold );				// reallocate string data buffer
-	void				FreeData( void );									// free allocated string memory
-
 						// format value in the given measurement with the best unit, returns the best unit
 	int					BestUnit( const char *format, float value, Measure_t measure );
 						// format value in the requested unit and measurement
@@ -288,10 +295,14 @@ public:
 	int					DynamicMemoryUsed() const;
 	static idStr		FormatNumber( int number );
 
+	//stgatilov: these methods are private! do not ever used them!
+	void				ReAllocate( int amount, bool keepold );				// reallocate string data buffer
+	void				FreeData( void );									// free allocated string memory
+
 protected:
 	int					len;
-	char *				data;
 	int					alloced;
+	char *				data;
 	char				baseBuffer[ STR_ALLOC_BASE ];
 
 	void				Init( void );										// initialize string using base buffer
@@ -299,7 +310,6 @@ protected:
 };
 
 char *					va( const char *fmt, ... ) id_attribute((format(printf,1,2)));
-
 
 ID_INLINE void idStr::EnsureAlloced( int amount, bool keepold ) {
 	if ( amount > alloced ) {
@@ -452,6 +462,19 @@ ID_INLINE idStr::idStr( const float f ) {
 	len = l;
 }
 
+ID_INLINE idStr::idStr( const double f ) {
+	char text[ 64 ];
+	int l;
+
+	Init();
+	l = idStr::snPrintf( text, sizeof( text ), "%lf", f );
+	while( l > 0 && text[l-1] == '0' ) text[--l] = '\0';
+	while( l > 0 && text[l-1] == '.' ) text[--l] = '\0';
+	EnsureAlloced( l + 1 );
+	strcpy( data, text );
+	len = l;
+}
+
 ID_INLINE idStr::~idStr( void ) {
 	FreeData();
 }
@@ -460,24 +483,24 @@ ID_INLINE size_t idStr::Size( void ) const {
 	return sizeof( *this ) + Allocated();
 }
 
-ID_INLINE const char *idStr::c_str( void ) const {
+ID_FORCE_INLINE const char *idStr::c_str( void ) const {
 	return data;
 }
 
-ID_INLINE idStr::operator const char *( void ) {
+ID_FORCE_INLINE idStr::operator const char *( void ) {
 	return c_str();
 }
 
-ID_INLINE idStr::operator const char *( void ) const {
+ID_FORCE_INLINE idStr::operator const char *( void ) const {
 	return c_str();
 }
 
-ID_INLINE char idStr::operator[]( int index ) const {
+ID_FORCE_INLINE char idStr::operator[]( int index ) const {
 	assert( ( index >= 0 ) && ( index <= len ) );
 	return data[ index ];
 }
 
-ID_INLINE char &idStr::operator[]( int index ) {
+ID_FORCE_INLINE char &idStr::operator[]( int index ) {
 	assert( ( index >= 0 ) && ( index <= len ) );
 	return data[ index ];
 }
@@ -613,6 +636,10 @@ ID_INLINE bool operator==( const char *a, const idStr &b ) {
 	return ( !idStr::Cmp( a, b.data ) );
 }
 
+ID_INLINE bool operator<( const idStr& a, const idStr& b ) {
+	return idStr::Cmp( a.data, b.data ) < 0;
+}
+
 ID_INLINE bool operator!=( const idStr &a, const idStr &b ) {
 	return !( a == b );
 }
@@ -675,7 +702,7 @@ ID_INLINE int idStr::IcmpPrefixPath( const char *text ) const {
     return idStr::IcmpnPath(data, text, static_cast<int>(strlen(text)));
 }
 
-ID_INLINE int idStr::Length( void ) const {
+ID_FORCE_INLINE int idStr::Length( void ) const {
 	return len;
 }
 
@@ -687,17 +714,17 @@ ID_INLINE int idStr::Allocated( void ) const {
 	}
 }
 
-ID_INLINE void idStr::Empty( void ) {
+ID_INLINE void idStr::Clear( void ) {
 	EnsureAlloced( 1 );
 	data[ 0 ] = '\0';
 	len = 0;
 }
 
-ID_INLINE bool idStr::IsEmpty( void ) const {
+ID_FORCE_INLINE bool idStr::IsEmpty( void ) const {
 	return len == 0;
 }
 
-ID_INLINE void idStr::Clear( void ) {
+ID_INLINE void idStr::ClearFree( void ) {
 	FreeData();
 	Init();
 }
@@ -964,6 +991,20 @@ ID_INLINE int idStr::IHash( const char *string, int length ) {
 	return hash;
 }
 
+ID_INLINE uint64 idStr::HashPoly64( const char *string, int length ) {
+	uint64 value = 5381;
+	for ( int i = 0; (length < 0 ? string[i] : i < length); i++)
+		value = ((value << 5) + value) + string[i];
+	return value;
+}
+
+ID_INLINE uint64 idStr::IHashPoly64( const char *string, int length ) {
+	uint64 value = 5381;
+	for ( int i = 0; (length < 0 ? string[i] : i < length); i++)
+		value = ((value << 5) + value) + ToLower(string[i]);
+	return value;
+}
+
 ID_INLINE bool idStr::IsColor( const char *s ) {
 	return ( s[0] == C_COLOR_ESCAPE && s[1] != '\0' && s[1] != ' ' );
 }
@@ -1016,7 +1057,7 @@ ID_INLINE bool idStr::CharIsTab( char c ) {
 }
 
 ID_INLINE int idStr::ColorIndex( int c ) {
-	return ( c & 15 );
+	return ( ( c - C_COLOR_DEFAULT ) & 15 );
 }
 
 ID_INLINE int idStr::DynamicMemoryUsed() const {

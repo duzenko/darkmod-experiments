@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -20,8 +20,8 @@
 
 #ifdef WIN32
 #include <windows.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
+//#include <GL/gl.h>
+//#include <GL/glu.h>
 #include "../../../sys/win32/win_local.h"
 #endif
 
@@ -892,7 +892,7 @@ static idRenderModel *CombineModelSurfaces( idRenderModel *model ) {
 
 	surf.id = 0;
 	surf.geometry = newTri;
-	surf.shader = tr.defaultMaterial;
+	surf.material = tr.defaultMaterial;
 
 	idRenderModel *newModel = renderModelManager->AllocModel();
 	newModel->AddSurface( surf );
@@ -1017,15 +1017,15 @@ static void WriteRenderBump( renderBump_t *rb, int outLinePixels ) {
 		byte	*old;
 
 		old = rb->localPic;
-		rb->localPic = R_MipMap( rb->localPic, width, height, false );
+		rb->localPic = R_MipMap( rb->localPic, width, height );
 		Mem_Free( old );
 
 		old = rb->globalPic;
-		rb->globalPic = R_MipMap( rb->globalPic, width, height, false );
+		rb->globalPic = R_MipMap( rb->globalPic, width, height );
 		Mem_Free( old );
 
 		old = rb->colorPic;
-		rb->colorPic = R_MipMap( rb->colorPic, width, height, false );
+		rb->colorPic = R_MipMap( rb->colorPic, width, height );
 		Mem_Free( old );
 
 		width >>= 1;
@@ -1194,10 +1194,10 @@ void RenderBump_f( const idCmdArgs &args ) {
 		opt.traceFrac = 0.05f;
 
 		// parse the renderbump parameters for this surface
-		cmdLine = ms->shader->GetRenderBump();
+		cmdLine = ms->material->GetRenderBump();
 
 		common->Printf( "surface %i, shader %s\nrenderBump = %s ", i, 
-			ms->shader->GetName(), cmdLine );
+			ms->material->GetName(), cmdLine );
 
 		if ( !ms->geometry ) {
 			common->Printf( "(no geometry)\n" );
@@ -1404,7 +1404,7 @@ void RenderBumpFlat_f( const idCmdArgs &args ) {
 	ResizeWindow( width, height );
 
 	// for small images, the viewport may be less than the minimum window
-	GL_Viewport( 0, 0, width, height );
+	GL_ViewportVidSize( 0, 0, width, height );
 
 	qglEnable( GL_CULL_FACE );
 	qglCullFace( GL_FRONT );
@@ -1497,7 +1497,7 @@ void RenderBumpFlat_f( const idCmdArgs &args ) {
 
 							// NULLNORMAL is used by the artists to force an area to reflect no
 							// light at all
-							if ( surf->shader->GetSurfaceFlags() & SURF_NULLNORMAL ) {
+							if ( surf->material->GetSurfaceFlags() & SURF_NULLNORMAL ) {
 								GL_FloatColor( 0.5, 0.5, 0.5 );
 							} else {
 								GL_FloatColor( 0.5 + 0.5*plane[0], 0.5 - 0.5*plane[2], 0.5 - 0.5*plane[1] );
@@ -1517,7 +1517,7 @@ void RenderBumpFlat_f( const idCmdArgs &args ) {
 
 								// NULLNORMAL is used by the artists to force an area to reflect no
 								// light at all
-								if ( surf->shader->GetSurfaceFlags() & SURF_NULLNORMAL ) {
+								if ( surf->material->GetSurfaceFlags() & SURF_NULLNORMAL ) {
 									GL_FloatColor( 0.5, 0.5, 0.5 );
 								} else {
 								// we are going to flip the normal Z direction

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __FILE_H__
@@ -19,8 +19,6 @@
 #ifndef MAX_PRINT_MSG_SIZE
 	#define	MAX_PRINT_MSG_SIZE	16 * 1024
 #endif
-
-#include "minizip/unzip.h"
 
 /*
 ==============================================================
@@ -114,8 +112,7 @@ class idFile_Memory : public idFile {
 public:
 							idFile_Memory( void );	// file for writing without name
 							idFile_Memory( const char *name );	// file for writing
-							idFile_Memory( const char *name, char *data, int length );	// file for writing
-							idFile_Memory( const char *name, const char *data, int length );	// file for reading
+							idFile_Memory( const char *name, const char *data, int length, bool owned = false );	// file for reading
 	virtual					~idFile_Memory( void );
 
 	virtual const char *	GetName( void ) { return name.c_str(); }
@@ -129,25 +126,21 @@ public:
 	virtual void			Flush( void );
 	virtual int				Seek( long offset, fsOrigin_t origin );
 
-							// changes memory file to read only
-	virtual void			MakeReadOnly( void );
-							// clear the file
-	virtual void			Clear( bool freeMemory = true );
-							// set data for reading
-	void					SetData( const char *data, int length );
 							// returns const pointer to the memory buffer
 	const char *			GetDataPtr( void ) const { return filePtr; }
 							// set the file granularity
 	void					SetGranularity( int g ) { assert( g > 0 ); granularity = g; }
+	void					SetTimestamp( ID_TIME_T t ) { timestamp = t; }
 
 private:
 	idStr					name;			// name of the file
 	int						mode;			// open mode
-	int						maxSize;		// maximum size of file
 	int						fileSize;		// size of the file
 	int						allocated;		// allocated size
 	int						granularity;	// file granularity
 	char *					filePtr;		// buffer holding the file data
+	bool					owned;			// if the filePtr is owned and should be deleted
+	int						timestamp;		// custom timestamp (if set)
 	char *					curPtr;			// current read/write pointer
 };
 
@@ -232,9 +225,9 @@ private:
 	idStr					name;			// name of the file in the pak
 	idStr					fullPath;		// full file path including pak file name
 	bool compressed;		// whether the file is actually compressed
-	ZPOS64_T				zipFilePos;		// zip file info position in pak
+	uint64_t				zipFilePos;		// zip file info position in pak
 	int						fileSize;		// size of the file
-    ID_TIME_T               fileLastMod;    // last modified date/time of the file
+	static const ID_TIME_T	fileLastMod = 0;	//stgatilov #5042: not used any more
 	void *					z;				// unzip info
 };
 

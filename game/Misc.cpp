@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Id Software, Inc.
@@ -198,17 +197,9 @@ void idPlayerStart::TeleportPlayer( idPlayer *player ) {
 		player->StartSound( "snd_teleport_enter", SND_CHANNEL_ANY, 0, false, NULL );
 		player->SetPrivateCameraView( static_cast<idCamera*>(ent) );
 		// the player entity knows where to spawn from the previous Teleport call
-		if ( !gameLocal.isClient ) {
-			player->PostEventSec( &EV_Player_ExitTeleporter, f );
-		}
 	} else {
 		// direct to exit, Teleport will take care of the killbox
 		player->Teleport( GetPhysics()->GetOrigin(), GetPhysics()->GetAxis().ToAngles(), NULL );
-
-		// multiplayer hijacked this entity, so only push the player in multiplayer
-		if ( gameLocal.isMultiplayer ) {
-			player->GetPhysics()->SetLinearVelocity( GetPhysics()->GetAxis()[0] * pushVel );
-		}
 	}
 }
 
@@ -232,17 +223,6 @@ void idPlayerStart::Event_TeleportPlayer( idEntity *activator ) {
 			Event_TeleportStage( player );
 
 		} else {
-
-			if ( gameLocal.isServer ) {
-				idBitMsg	msg;
-				byte		msgBuf[MAX_EVENT_PARAM_SIZE];
-
-				msg.Init( msgBuf, sizeof( msgBuf ) );
-				msg.BeginWriting();
-				msg.WriteBits( player->entityNumber, GENTITYNUM_BITS );
-				ServerSendEvent( EVENT_TELEPORTPLAYER, &msg, false, -1 );
-			}
-
 			TeleportPlayer( player );
 		}
 	}
@@ -383,9 +363,8 @@ idPathCorner *idPathCorner::RandomPath( const idEntity *source, const idEntity *
 		return NULL;
 	}
 
-	idPathCorner *path[ MAX_GENTITIES ];
+	idFlexList<idPathCorner*, 128> path;
 
-	int num(0);
 	float rand(gameLocal.random.RandomFloat());
 	float accumulatedChance(0);
 	float maxChance(0);
@@ -434,10 +413,7 @@ idPathCorner *idPathCorner::RandomPath( const idEntity *source, const idEntity *
 			{
 				// path doesn't have chance spawn arg set
 				// add to list
-				path[ num++ ] = static_cast<idPathCorner *>( ent );
-				if ( num >= MAX_GENTITIES ) {
-					break;
-				}
+				path.AddGrow( static_cast<idPathCorner *>( ent ) );
 			}
 		}
 	}
@@ -445,7 +421,7 @@ idPathCorner *idPathCorner::RandomPath( const idEntity *source, const idEntity *
 	// probability comparison didn't return a path
 
 	// no path without chance spawn arg (chance sum is < 1)
-	if ( !num )
+	if ( path.Num() == 0 )
 	{
 		if (candidate)
 		{
@@ -456,7 +432,7 @@ idPathCorner *idPathCorner::RandomPath( const idEntity *source, const idEntity *
 	}
 
 	// choose one from the list
-	int which = gameLocal.random.RandomInt( num );
+	int which = gameLocal.random.RandomInt( path.Num() );
 	return path[ which ];
 }
 
@@ -2047,6 +2023,9 @@ void idTextEntity::Spawn( void )
 	text = spawnArgs.GetString( "text" );
 	playerOriented = spawnArgs.GetBool( "playerOriented" );
 
+	// stgatilov: fix \n to make it possible to show multiline text
+	text.Replace("\\n", "\n");
+
 	// grayman #3042 - this used to only start thinking if the "developer"
 	// boolean was set. I couldn't get that to work at map start, and changing
 	// it while playing wouldn't get the text to show, so I changed how it was done.
@@ -2087,7 +2066,7 @@ void idTextEntity::Think( void )
 {
 	if ( force || developer.GetBool() ) // grayman #3042
 	{
-		gameRenderWorld->DrawText( text, GetPhysics()->GetOrigin(), 0.25, colorWhite, playerOriented ? gameLocal.GetLocalPlayer()->viewAngles.ToMat3() : GetPhysics()->GetAxis().Transpose(), 1 );
+		gameRenderWorld->DebugText( text, GetPhysics()->GetOrigin(), 0.25, colorWhite, playerOriented ? gameLocal.GetLocalPlayer()->viewAngles.ToMat3() : GetPhysics()->GetAxis().Transpose(), 1 );
 		for ( int i = 0 ; i < targets.Num() ; i++ )
 		{
 			if ( targets[i].GetEntity() )
@@ -2154,7 +2133,7 @@ idVacuumSeparatorEntity::Spawn
 void idVacuumSeparatorEntity::Spawn() {
 	idBounds b;
 
-	b = idBounds( spawnArgs.GetVector( "origin" ) ).Expand( 16 );
+	b = idPortalEntity::GetBounds( spawnArgs.GetVector( "origin" ) );
 	portal = gameRenderWorld->FindPortal( b );
 	if ( !portal ) {
 		gameLocal.Warning( "VacuumSeparator '%s' didn't contact a portal", spawnArgs.GetString( "name" ) );
@@ -2204,12 +2183,21 @@ idPortalEntity::~idPortalEntity() {}
 
 /*
 ================
+idPortalEntity::GetBounds
+================
+*/
+idBounds idPortalEntity::GetBounds( const idVec3 &origin ) {
+	return idBounds( origin ).Expand( 16 );
+}
+
+/*
+================
 idPortalEntity::Spawn
 ================
 */
 void idPortalEntity::Spawn()
 {
-	idBounds b = idBounds( spawnArgs.GetVector( "origin" ) ).Expand( 16 );
+	idBounds b = GetBounds( spawnArgs.GetVector( "origin" ) );
 	m_Portal = gameRenderWorld->FindPortal( b );
 
 	if ( !m_Portal ) 
@@ -2259,9 +2247,9 @@ void idPortalEntity::Event_PostSpawn( void )
 
 	if ( !m_EntityLocationDone )
 	{
-		idBounds b = idBounds( spawnArgs.GetVector( "origin" ) ).Expand( 16 );
-		idClipModel* clipModelList[MAX_GENTITIES];
-		int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( b, CONTENTS_SOLID, clipModelList, MAX_GENTITIES );
+		idBounds b = GetBounds( spawnArgs.GetVector( "origin" ) );
+		idClip_ClipModelList clipModelList;
+		int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( b, CONTENTS_SOLID, clipModelList );
 
 		for ( int i = 0 ; i < numListedClipModels ; i++ ) 
 		{
@@ -3704,7 +3692,9 @@ void idPhantomObjects::Think( void ) {
 			}
 		} else {
 			// this is not the right way to set the angular velocity, but the effect is nice, so I'm keeping it. :)
-			ang.Set( gameLocal.random.CRandomFloat() * shake_ang.x, gameLocal.random.CRandomFloat() * shake_ang.y, gameLocal.random.CRandomFloat() * shake_ang.z );
+			ang.x = gameLocal.random.CRandomFloat() * shake_ang.x;
+			ang.y = gameLocal.random.CRandomFloat() * shake_ang.y;
+			ang.z = gameLocal.random.CRandomFloat() * shake_ang.z;
 			ang *= ( 1.0f - time / shake_time );
 			entPhys->SetAngularVelocity( ang );
 		}

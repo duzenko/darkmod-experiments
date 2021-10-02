@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __LIST_H__
@@ -20,6 +19,7 @@
 #ifdef __linux__
 #include <cassert>
 #endif
+#include <initializer_list>
 
 /*
 ===============================================================================
@@ -81,9 +81,11 @@ public:
 
 					idList( int newgranularity = 16 );
 					idList( const idList<type> &other );
-					~idList<type>( void );
+					idList( const std::initializer_list<type> &other );
+					~idList( void );
 
 	void			Clear( void );										// clear the list
+	void			ClearFree( void );									// clear the list and delete buffer
 	int				Num( void ) const;									// returns number of elements in list
 	int				NumAllocated( void ) const;							// returns number of elements allocated for
 	void			SetGranularity( int newgranularity );				// set new granularity
@@ -104,12 +106,14 @@ public:
 	void			AssureSize( int newSize);							// assure list has given number of elements, but leave them uninitialized
 	void			AssureSize( int newSize, const type &initValue );	// assure list has given number of elements and initialize any new elements
 	void			AssureSizeAlloc( int newSize, new_t *allocator );	// assure the pointer list has the given number of elements and allocate any new elements
+	void			Reserve( int newSize );								// resize list to newSize if it is smaller, don't change Num
 
 	type *			Ptr( void );										// returns a pointer to the list
 	const type *	Ptr( void ) const;									// returns a pointer to the list
 	type &			Alloc( void );										// returns reference to a new data element at the end of the list
 	int				Append( const type & obj );							// append element
 	int				Append( const idList<type> &other );				// append list
+	int				AddGrow( type obj );								// append with exponential growth (like std::vector::push_back)
 	int				AddUnique( const type & obj );						// add unique element
 	int				Insert( const type & obj, int index = 0 );			// insert the element at the given index
 	int				FindIndex( const type & obj ) const;				// find the index for the given element
@@ -119,11 +123,12 @@ public:
 	bool			RemoveIndex( const int index );						// remove the element at the given index and keep items sorted
 	bool			RemoveIndex( const int index, bool keepSorted );	// Tels: remove the element at the given index, keep sorted only if wanted
 	bool			Remove( const type & obj );							// remove the element
+	type			Pop();												// stgatilov: remove and return last element
 	void			Sort( cmp_t *compare = ( cmp_t * )&idListSortCompare<type> );
 	void			SortSubSection( int startIndex, int endIndex, cmp_t *compare = ( cmp_t * )&idListSortCompare<type> );
 	void			Reverse();											// stgatilov: reverse order of elements
 	void			Swap( idList<type> &other );						// swap the contents of the lists
-	void			DeleteContents( bool clear );						// delete the contents of the list
+	void			DeleteContents( bool clear = true );				// delete the contents of the list
 
 	//stgatilov: for "range-based for" from C++11
 	type *			begin();
@@ -148,8 +153,9 @@ ID_INLINE idList<type>::idList( int newgranularity ) {
 	assert( newgranularity > 0 );
 
 	list		= NULL;
+	num			= 0;
+	size		= 0;
 	granularity	= newgranularity;
-	Clear();
 }
 
 /*
@@ -165,23 +171,48 @@ ID_INLINE idList<type>::idList( const idList<type> &other ) {
 
 /*
 ================
+idList<type>::idList( const std::initializer_list<type> &other )
+================
+*/
+template< class type >
+ID_INLINE idList<type>::idList( const std::initializer_list<type> &other ) : idList() {
+	Resize( other.size() );
+	auto x = other.begin();
+	while ( x != other.end() )
+		Append( *x++ );
+}
+
+/*
+================
 idList<type>::~idList<type>
 ================
 */
 template< class type >
 ID_INLINE idList<type>::~idList( void ) {
-	Clear();
+	ClearFree();
 }
 
 /*
 ================
 idList<type>::Clear
 
-Frees up the memory allocated by the list.  Assumes that type automatically handles freeing up memory.
+//stgatilov #5593: Removes all elements from the list without freeing memory.
 ================
 */
 template< class type >
 ID_INLINE void idList<type>::Clear( void ) {
+	num		= 0;
+}
+
+/*
+================
+idList<type>::ClearFree
+
+Frees up the memory allocated by the list.  Assumes that type automatically handles freeing up memory.
+================
+*/
+template< class type >
+ID_INLINE void idList<type>::ClearFree( void ) {
 	if ( list ) {
 		delete[] list;
 	}
@@ -213,7 +244,7 @@ ID_INLINE void idList<type>::DeleteContents( bool clear ) {
 	}
 
 	if ( clear ) {
-		Clear();
+		ClearFree();
 	} else {
 		memset( list, 0, size * sizeof( type ) );
 	}
@@ -262,7 +293,7 @@ Note that this is NOT an indication of the memory allocated.
 ================
 */
 template< class type >
-ID_INLINE int idList<type>::Num( void ) const {
+ID_FORCE_INLINE int idList<type>::Num( void ) const {
 	return num;
 }
 
@@ -274,7 +305,7 @@ Returns the number of elements currently allocated for.
 ================
 */
 template< class type >
-ID_INLINE int idList<type>::NumAllocated( void ) const {
+ID_FORCE_INLINE int idList<type>::NumAllocated( void ) const {
 	return size;
 }
 
@@ -326,7 +357,7 @@ Get the current granularity.
 ================
 */
 template< class type >
-ID_INLINE int idList<type>::GetGranularity( void ) const {
+ID_FORCE_INLINE int idList<type>::GetGranularity( void ) const {
 	return granularity;
 }
 
@@ -343,7 +374,7 @@ ID_INLINE void idList<type>::Condense( void ) {
 		if ( num ) {
 			Resize( num );
 		} else {
-			Clear();
+			ClearFree();
 		}
 	}
 }
@@ -353,7 +384,7 @@ ID_INLINE void idList<type>::Condense( void ) {
 idList<type>::Resize
 
 Allocates memory for the amount of elements requested while keeping the contents intact.
-Contents are copied using their = operator so that data is correnctly instantiated.
+Contents are copied using their = operator so that data is correctly instantiated.
 ================
 */
 template< class type >
@@ -365,7 +396,7 @@ ID_INLINE void idList<type>::Resize( int newsize ) {
 
 	// free up the list if no data is being reserved
 	if ( newsize <= 0 ) {
-		Clear();
+		ClearFree();
 		return;
 	}
 
@@ -412,7 +443,7 @@ ID_INLINE void idList<type>::Resize( int newsize, int newgranularity ) {
 
 	// free up the list if no data is being reserved
 	if ( newsize <= 0 ) {
-		Clear();
+		ClearFree();
 		return;
 	}
 
@@ -524,6 +555,22 @@ ID_INLINE void idList<type>::AssureSizeAlloc( int newSize, new_t *allocator ) {
 
 /*
 ================
+idList<type>::Reserve
+
+Makes sure the list capacity can hold at least the given number of elements.
+================
+*/
+template< class type >
+ID_INLINE void idList<type>::Reserve( int newSize ) {
+	if (newSize > size) {
+		int tnum = num;
+		AssureSize( newSize );
+		num = tnum;
+	}
+}
+
+/*
+================
 idList<type>::operator=
 
 Copies the contents and size attributes of another list.
@@ -533,7 +580,7 @@ template< class type >
 ID_INLINE idList<type> &idList<type>::operator=( const idList<type> &other ) {
 	int	i;
 
-	Clear();
+	ClearFree();
 
 	num			= other.num;
 	size		= other.size;
@@ -558,9 +605,8 @@ Release builds do no range checking.
 ================
 */
 template< class type >
-ID_INLINE const type &idList<type>::operator[]( int index ) const {
-	assert( index >= 0 );
-	assert( index < num );
+ID_FORCE_INLINE const type &idList<type>::operator[]( int index ) const {
+	assert( unsigned(index) < unsigned(num) );
 
 	return list[ index ];
 }
@@ -574,9 +620,8 @@ Release builds do no range checking.
 ================
 */
 template< class type >
-ID_INLINE type &idList<type>::operator[]( int index ) {
-	assert( index >= 0 );
-	assert( index < num );
+ID_FORCE_INLINE type &idList<type>::operator[]( int index ) {
+	assert( unsigned(index) < unsigned(num) );
 
 	return list[ index ];
 }
@@ -593,7 +638,7 @@ FIXME: Create an iterator template for this kind of thing.
 ================
 */
 template< class type >
-ID_INLINE type *idList<type>::Ptr( void ) {
+ID_FORCE_INLINE type *idList<type>::Ptr( void ) {
 	return list;
 }
 
@@ -609,7 +654,7 @@ FIXME: Create an iterator template for this kind of thing.
 ================
 */
 template< class type >
-const ID_INLINE type *idList<type>::Ptr( void ) const {
+const ID_FORCE_INLINE type *idList<type>::Ptr( void ) const {
 	return list;
 }
 
@@ -671,6 +716,36 @@ ID_INLINE int idList<type>::Append( type const & obj ) {
 	return num - 1;
 }
 
+/*
+================
+idList<type>::AddGrow
+
+Increases the size of the list by one element and copies the supplied data into it.
+Returns the index of the new element.
+
+stgatilov: this method is different from Append, because it grows exponentially like std::vector.
+This allows to grow to size N in O(N) time.
+================
+*/
+template< class type >
+ID_INLINE int idList<type>::AddGrow( type obj ) {
+	if ( num == size ) {
+		int newsize;
+
+		if ( granularity == 0 ) {	// this is a hack to fix our memset classes
+			granularity = 16;
+		}
+		newsize = (size * 3) >> 1;			// + 50% size
+		newsize += granularity;				// round up to granularity
+		newsize -= newsize % granularity;	//
+		Resize( newsize );
+	}
+
+	list[ num ] = obj;
+	num++;
+
+	return num - 1;
+}
 
 /*
 ================
@@ -956,6 +1031,19 @@ ID_INLINE bool idList<type>::Remove( type const & obj ) {
 
 /*
 ================
+idList<type>::Pop
+
+Returns the last element of the list (by value), removing it at the same time.
+================
+*/
+template< class type >
+ID_INLINE type idList<type>::Pop( ) {
+	assert(num >= 0);
+	return list[--num];
+}
+
+/*
+================
 idList<type>::Sort
 
 Performs a qsort on the list using the supplied comparison function.  Note that the data is merely moved around the
@@ -1024,19 +1112,19 @@ ID_INLINE void idList<type>::Swap( idList<type> &other ) {
 
 
 template< class type >
-ID_INLINE type * idList<type>::begin() {
+ID_FORCE_INLINE type * idList<type>::begin() {
 	return list;
 }
 template< class type >
-ID_INLINE const type * idList<type>::begin() const {
+ID_FORCE_INLINE const type * idList<type>::begin() const {
 	return list;
 }
 template< class type >
-ID_INLINE type * idList<type>::end() {
+ID_FORCE_INLINE type * idList<type>::end() {
 	return list + num;
 }
 template< class type >
-ID_INLINE const type * idList<type>::end() const {
+ID_FORCE_INLINE const type * idList<type>::end() const {
 	return list + num;
 }
 

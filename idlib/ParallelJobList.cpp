@@ -1,31 +1,17 @@
-/*
-===========================================================================
+/*****************************************************************************
+The Dark Mod GPL Source Code
 
-Doom 3 BFG Edition GPL Source Code
-Copyright (C) 1993-2012 id Software LLC, a ZeniMax Media company. 
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
-This file is part of the Doom 3 BFG Edition GPL Source Code ("Doom 3 BFG Edition Source Code").  
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
-Doom 3 BFG Edition Source Code is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
-Doom 3 BFG Edition Source Code is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with Doom 3 BFG Edition Source Code.  If not, see <http://www.gnu.org/licenses/>.
-
-In addition, the Doom 3 BFG Edition Source Code is also subject to certain additional terms. You should have received a copy of these additional terms immediately following the terms and conditions of the GNU General Public License which accompanied the Doom 3 BFG Edition Source Code.  If not, please request a copy in writing from id Software at the address below.
-
-If you have questions concerning this license or the applicable additional terms, you may contact in writing id Software LLC, c/o ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
-
-===========================================================================
-*/
-#pragma hdrstop
+******************************************************************************/
 #include "precompiled.h"
 #include "ParallelJobList.h"
 
@@ -228,8 +214,8 @@ private:
 		void *		data;
 		int			executed;
 	};
-	idList< job_t, TAG_JOBLIST >		jobList;
-	idList< idSysInterlockedInteger, TAG_JOBLIST >	signalJobCount;
+	idList< job_t >		jobList;
+	idList< idSysInterlockedInteger >	signalJobCount;
 	idSysInterlockedInteger				currentJob;
 	idSysInterlockedInteger				fetchLock;
 	idSysInterlockedInteger				numThreadsExecuting;
@@ -289,6 +275,8 @@ idParallelJobList_Threads::~idParallelJobList_Threads() {
 	Wait();
 }
 
+static idCVarBool jobs_debugCheck( "jobs_debugCheck", "0", CVAR_TOOL, "check job data integrity" );
+
 /*
 ========================
 idParallelJobList_Threads::AddJob
@@ -296,20 +284,31 @@ idParallelJobList_Threads::AddJob
 */
 ID_INLINE void idParallelJobList_Threads::AddJob( jobRun_t function, void * data ) {
 	assert( done );
-#if defined( _DEBUG )
+	if ( int(maxJobs) == jobList.Num() ) {
+		static int runOnce = []() {
+			common->Warning( "idParallelJobList_Threads overflow\n" );
+			return 0;
+		} ( );
+		return;
+	}
 	// make sure there isn't already a job with the same function and data in the list
-	if ( jobList.Num() < 1000 ) {	// don't do this N^2 slow check on big lists
+	if ( jobs_debugCheck ) {	
 		for ( int i = 0; i < jobList.Num(); i++ ) {
-			assert( jobList[i].function != function || jobList[i].data != data );
+			//assert( jobList[i].function != function || jobList[i].data != data );
+			if ( jobList[i].function != function || jobList[i].data != data )
+				; // ok
+			else
+				common->Warning( "jobs_debugCheck failed\n" );
 		}
 	}
-#endif
-	if ( 1 ) { // JDC: this never worked in tech5!  !jobList.IsFull() ) {
+//	if ( 1 ) { // JDC: this never worked in tech5!  !jobList.IsFull() ) {
+#if 1
 		job_t & job = jobList.Alloc();
 		job.function = function;
 		job.data = data;
 		job.executed = 0;
-	} else {
+//	} else {
+#else
 		// debug output to show us what is overflowing
 		int currentJobCount[MAX_REGISTERED_JOBS] = {};
 		
@@ -330,7 +329,8 @@ ID_INLINE void idParallelJobList_Threads::AddJob( jobRun_t function, void * data
 			}
 		}
 		idLib::Error( "Can't add job '%s', too many jobs %d", GetJobName( function ), jobList.Num() );
-	}
+//	}
+#endif
 }
 
 /*
@@ -714,7 +714,7 @@ idParallelJobList::idParallelJobList
 */
 idParallelJobList::idParallelJobList( jobListId_t id, jobListPriority_t priority, unsigned int maxJobs, unsigned int maxSyncs, const idColor * color ) {
 	assert( priority > JOBLIST_PRIORITY_NONE );
-	this->jobListThreads = new (TAG_JOBLIST) idParallelJobList_Threads( id, priority, maxJobs, maxSyncs );
+	this->jobListThreads = new idParallelJobList_Threads( id, priority, maxJobs, maxSyncs );
 	this->color = color;
 }
 
@@ -761,6 +761,7 @@ idParallelJobList::Wait
 ========================
 */
 void idParallelJobList::Wait() {
+	TRACE_CPU_SCOPE_COLOR( "ParallelJobList::Wait", TRACE_COLOR_IDLE )
 	if ( jobListThreads != NULL ) {
 		jobListThreads->Wait();
 	}
@@ -1090,9 +1091,7 @@ extern void Sys_CPUCount( int & logicalNum, int & coreNum, int & packageNum );
 //
 // Hyperthreading is not dead yet.  Intel's Core i7 Processor is quad-core with HT for 8 logicals.
 
-// DOOM3: We don't have that many jobs, so just set this fairly low so we don't spin up a ton of idle threads
-#define MAX_JOB_THREADS		2
-#define NUM_JOB_THREADS		"2"
+#define MAX_JOB_THREADS		32
 #define JOB_THREAD_CORES	{	CORE_ANY, CORE_ANY, CORE_ANY, CORE_ANY,	\
 								CORE_ANY, CORE_ANY, CORE_ANY, CORE_ANY,	\
 								CORE_ANY, CORE_ANY, CORE_ANY, CORE_ANY,	\
@@ -1103,7 +1102,7 @@ extern void Sys_CPUCount( int & logicalNum, int & coreNum, int & packageNum );
 								CORE_ANY, CORE_ANY, CORE_ANY, CORE_ANY }
 
 
-idCVar jobs_numThreads( "jobs_numThreads", NUM_JOB_THREADS, CVAR_INTEGER | CVAR_NOCHEAT, "number of threads used to crunch through jobs", 0, MAX_JOB_THREADS );
+idCVar jobs_numThreads( "jobs_numThreads", "2", CVAR_INTEGER | CVAR_NOCHEAT | CVAR_ARCHIVE, "number of threads used to crunch through jobs", 0, MAX_JOB_THREADS );
 
 class idParallelJobManagerLocal : public idParallelJobManager {
 public:
@@ -1127,11 +1126,14 @@ public:
 
 private:
 	idJobThread						threads[MAX_JOB_THREADS];
-	unsigned int					maxThreads;
+	int								currentActiveThreads;
+	int								maxThreads;
 	int								numPhysicalCpuCores;
 	int								numLogicalCpuCores;
 	int								numCpuPackages;
 	idStaticList< idParallelJobList *, MAX_JOBLISTS >	jobLists;
+
+	void							RescaleThreadList();
 };
 
 idParallelJobManagerLocal parallelJobManagerLocal;
@@ -1146,23 +1148,30 @@ void SubmitJobList( idParallelJobList_Threads * jobList, int parallelism ) {
 	parallelJobManagerLocal.Submit( jobList, parallelism );
 }
 
+void idParallelJobManagerLocal::RescaleThreadList() {
+	// on consoles this will have specific cores for the threads, but on PC they will all be CORE_ANY
+	core_t cores[] = JOB_THREAD_CORES;
+	maxThreads = idMath::ClampInt( 0, MAX_JOB_THREADS, jobs_numThreads.GetInteger() );
+	while (currentActiveThreads < maxThreads) {
+		int idx = currentActiveThreads++;
+		threads[idx].Start( cores[idx], idx );
+	}
+	while (currentActiveThreads > maxThreads) {
+		int idx = --currentActiveThreads;
+		threads[idx].StopThread( false );
+	}
+}
+
 /*
 ========================
 idParallelJobManagerLocal::Init
 ========================
 */
 void idParallelJobManagerLocal::Init() {
-	// on consoles this will have specific cores for the threads, but on PC they will all be CORE_ANY
-	core_t cores[] = JOB_THREAD_CORES;
-	assert( sizeof( cores ) / sizeof( cores[0] ) >= MAX_JOB_THREADS );
-
-	for ( int i = 0; i < MAX_JOB_THREADS; i++ ) {
-		threads[i].Start( cores[i], i );
-	}
-	maxThreads = jobs_numThreads.GetInteger();
-
-	// ??? this function only exists as an extern
+	currentActiveThreads = 0;
+	RescaleThreadList();
 	Sys_CPUCount( numPhysicalCpuCores, numLogicalCpuCores, numCpuPackages );
+	assert(numLogicalCpuCores >= 0);
 }
 
 /*
@@ -1171,9 +1180,10 @@ idParallelJobManagerLocal::Shutdown
 ========================
 */
 void idParallelJobManagerLocal::Shutdown() {
-	for ( int i = 0; i < MAX_JOB_THREADS; i++ ) {
+	for ( int i = 0; i < currentActiveThreads; i++ ) {
 		threads[i].StopThread();
 	}
+	currentActiveThreads = 0;
 }
 
 /*
@@ -1187,7 +1197,7 @@ idParallelJobList * idParallelJobManagerLocal::AllocJobList( jobListId_t id, job
 			// idStudio may cause job lists to be allocated multiple times
 		}
 	}
-	idParallelJobList * jobList = new (TAG_JOBLIST) idParallelJobList( id, priority, maxJobs, maxSyncs, color );
+	idParallelJobList * jobList = new idParallelJobList( id, priority, maxJobs, maxSyncs, color );
 	jobLists.Append( jobList );
 	return jobList;
 }
@@ -1202,7 +1212,7 @@ void idParallelJobManagerLocal::FreeJobList( idParallelJobList * jobList ) {
 		return;
 	}
 	// wait for all job threads to finish because job list deletion is not thread safe
-	for ( unsigned int i = 0; i < maxThreads; i++ ) {
+	for ( int i = 0; i < maxThreads; i++ ) {
 		threads[i].WaitForThread();
 	}
 	int index = jobLists.FindIndex( jobList );
@@ -1267,23 +1277,22 @@ idParallelJobManagerLocal::Submit
 */
 void idParallelJobManagerLocal::Submit( idParallelJobList_Threads * jobList, int parallelism ) {
 	if ( jobs_numThreads.IsModified() ) {
-		maxThreads = idMath::ClampInt( 0, MAX_JOB_THREADS, jobs_numThreads.GetInteger() );
+		RescaleThreadList();
 		jobs_numThreads.ClearModified();
 	}
 
 	// determine the number of threads to use
-	int numThreads = maxThreads;
+	int numThreads;
 	if ( parallelism == JOBLIST_PARALLELISM_DEFAULT ) {
-		numThreads = maxThreads;
+		numThreads = jobs_numThreads.GetInteger();
 	} else if ( parallelism == JOBLIST_PARALLELISM_MAX_CORES ) {
 		numThreads = numLogicalCpuCores;
 	} else if ( parallelism == JOBLIST_PARALLELISM_MAX_THREADS ) {
-		numThreads = MAX_JOB_THREADS;
-	} else if ( parallelism > MAX_JOB_THREADS ) {
-		numThreads = MAX_JOB_THREADS;
+		numThreads = MAX_THREADS;
 	} else {
 		numThreads = parallelism;
 	}
+	numThreads = idMath::Imin(numThreads, maxThreads);
 
 	if ( numThreads <= 0 ) {
 		threadJobListState_t state( jobList->GetVersion() );

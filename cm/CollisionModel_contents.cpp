@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /*
@@ -377,68 +377,59 @@ bool idCollisionModelManagerLocal::TestTrmInPolygon( cm_traceWork_t *tw, cm_poly
 	return false;
 }
 
-/*
-================
-idCollisionModelManagerLocal::PointNode
-================
-*/
-cm_node_t *idCollisionModelManagerLocal::PointNode( const idVec3 &p, cm_model_t *model ) {
-	cm_node_t *node;
-
-	node = model->node;
-	while ( node->planeType != -1 ) {
-		if (p[node->planeType] > node->planeDist) {
-			node = node->children[0];
-		}
-		else {
-			node = node->children[1];
-		}
-
-		assert( node != NULL );
-	}
-	return node;
-}
+static idCVar cm_fixPointContentsQuery("cm_fixPointContentsQuery", "1", CVAR_BOOL | CVAR_SYSTEM, 
+	"If set to 0, then some of the brushes are sometimes ignored in \"contents\" point queries. "
+	"This usually affects water brushes, making them non-liquid. "
+	"This bug was fixed in TDM 2.08."
+);
 
 /*
 ================
 idCollisionModelManagerLocal::PointContents
 ================
 */
-int idCollisionModelManagerLocal::PointContents( const idVec3 p, cmHandle_t model ) {
-	int i;
-	float d;
-	cm_node_t *node;
-	cm_brushRef_t *bref;
-	cm_brush_t *b;
-	idPlane *plane;
+int idCollisionModelManagerLocal::PointContents( const idVec3 p, cmHandle_t hModel ) {
+	cm_model_t *model = idCollisionModelManagerLocal::models[hModel];
 
-	node = idCollisionModelManagerLocal::PointNode( p, idCollisionModelManagerLocal::models[model] );
-	for ( bref = node->brushes; bref; bref = bref->next ) {
-		b = bref->b;
-		// test if the point is within the brush bounds
-		for ( i = 0; i < 3; i++ ) {
-			if ( p[i] < b->bounds[0][i] ) {
-				break;
+	cm_node_t *node = model->node;
+	while ( 1 ) {
+
+		//stgatilov #5014: old and buggy behavior was to ignore all brushes in non-leaf nodes
+		if ( !cm_fixPointContentsQuery.GetBool() && node->planeType != -1 )
+			goto bug5014;
+
+		// check all against brushes in the current node
+		for ( cm_brushRef_t *bref = node->brushes; bref; bref = bref->next ) {
+			cm_brush_t *b = bref->b;
+			if ( !b->bounds.ContainsPoint(p) )
+				continue;
+
+			// test if the point is inside the brush
+			idPlane *plane = b->planes;
+			int i;
+			for ( i = 0; i < b->numPlanes; i++, plane++ ) {
+				float d = plane->Distance( p );
+				if ( d >= 0 ) {
+					break;
+				}
 			}
-			if ( p[i] > b->bounds[1][i] ) {
-				break;
+			if ( i >= b->numPlanes ) {
+				return b->contents;
 			}
 		}
-		if ( i < 3 ) {
-			continue;
-		}
-		// test if the point is inside the brush
-		plane = b->planes;
-		for ( i = 0; i < b->numPlanes; i++, plane++ ) {
-			d = plane->Distance( p );
-			if ( d >= 0 ) {
-				break;
-			}
-		}
-		if ( i >= b->numPlanes ) {
-			return b->contents;
-		}
+bug5014:
+
+		// don't go beyond leaf node
+		if ( node->planeType == -1 )
+			break;
+
+		if (p[node->planeType] > node->planeDist)
+			node = node->children[0];
+		else
+			node = node->children[1];
+		assert( node != NULL );
 	}
+
 	return 0;
 }
 
@@ -471,7 +462,8 @@ int idCollisionModelManagerLocal::ContentsTrm( trace_t *results, const idVec3 &s
 	bool model_rotated, trm_rotated;
 	idMat3 invModelAxis, tmpAxis;
 	idVec3 dir;
-	ALIGN16( cm_traceWork_t tw );
+	idRaw<cm_traceWork_t> twRaw;
+	cm_traceWork_t &tw = twRaw.Get();
 
 	// fast point case
 	if ( !trm || ( trm->bounds[1][0] - trm->bounds[0][0] <= 0.0f &&
@@ -488,11 +480,10 @@ int idCollisionModelManagerLocal::ContentsTrm( trace_t *results, const idVec3 &s
 
 	idCollisionModelManagerLocal::checkCount++;
 
+	memset(&tw.trace, 0, sizeof(tw.trace));
 	tw.trace.fraction = 1.0f;
 	tw.trace.c.contents = 0;
 	tw.trace.c.type = CONTACT_NONE;
-	tw.trace.c.material = NULL; // TDM: Don't leave things uninitialised
-	tw.trace.c.id = 0;			// TDM: Don't leave things uninitialised
 	tw.contents = contentMask;
 	tw.isConvex = true;
 	tw.rotation = false;

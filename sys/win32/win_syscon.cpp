@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -418,6 +418,28 @@ void Sys_ShowConsole( int visLevel, bool quitOnClose ) {
 			Sys_Error( "Invalid visLevel %d sent to Sys_ShowConsole\n", visLevel );
 		break;
 	}
+}
+
+/*
+** Sys_GetCurrentMonitorResolution
+*/
+bool Sys_GetCurrentMonitorResolution( int &width, int &height ) {
+	if ( win32.desktopWidth > 0 ) {
+		width = win32.desktopWidth;
+		height = win32.desktopHeight;
+	} else {
+		RECT desktop;
+		// Get a handle to the desktop window
+		const HWND hDesktop = GetDesktopWindow();
+		// Get the size of screen to the variable desktop
+		GetWindowRect( hDesktop, &desktop );
+		// The top left corner will have coordinates (0,0)
+		// and the bottom right corner will have coordinates
+		// (horizontal, vertical)
+		width = desktop.right - desktop.left;
+		height = desktop.bottom - desktop.top;
+	}
+	return true;
 }
 
 /*

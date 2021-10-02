@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -135,69 +135,7 @@ thread create and destroy
 ======================================================
 */
 
-// not a hard limit, just what we keep track of for debugging
-#define MAX_THREADS 10
-xthreadInfo *g_threads[MAX_THREADS];
-
-int g_thread_count = 0;
-
 typedef void *(*pthread_function_t) (void *);
-
-/*
-==================
-Sys_CreateThread
-==================
-*/
-void Sys_CreateThread( xthread_t function, void *parms, xthreadPriority priority, xthreadInfo& info, const char *name, xthreadInfo **threads, int *thread_count ) {
-	Sys_EnterCriticalSection( );		
-	pthread_attr_t attr;
-	pthread_attr_init( &attr );
-	if ( pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE ) != 0 ) {
-		common->Error( "ERROR: pthread_attr_setdetachstate %s failed\n", name );
-	}
-	if ( pthread_create( ( pthread_t* )&info.threadHandle, &attr, function, parms ) != 0 ) {
-		common->Error( "ERROR: pthread_create %s failed\n", name );
-	}
-	pthread_attr_destroy( &attr );
-	info.name = name;
-	if ( *thread_count < MAX_THREADS ) {
-		threads[ ( *thread_count )++ ] = &info;
-	} else {
-		common->DPrintf( "WARNING: MAX_THREADS reached\n" );
-	}
-	Sys_LeaveCriticalSection( );
-}
-
-/*
-==================
-Sys_DestroyThread
-==================
-*/
-void Sys_DestroyThread( xthreadInfo& info ) {
-	// the target thread must have a cancelation point, otherwise pthread_cancel is useless
-	assert( info.threadHandle );
-	if ( pthread_cancel( ( pthread_t )info.threadHandle ) != 0 ) {
-		common->Error( "ERROR: pthread_cancel %s failed\n", info.name );
-	}
-	if ( pthread_join( ( pthread_t )info.threadHandle, NULL ) != 0 ) {
-		common->Error( "ERROR: pthread_join %s failed\n", info.name );
-	}
-	info.threadHandle = 0;
-	Sys_EnterCriticalSection( );
-	for( int i = 0 ; i < g_thread_count ; i++ ) {
-		if ( &info == g_threads[ i ] ) {
-			g_threads[ i ] = NULL;
-			int j;
-			for( j = i+1 ; j < g_thread_count ; j++ ) {
-				g_threads[ j-1 ] = g_threads[ j ];
-			}
-			g_threads[ j-1 ] = NULL;
-			g_thread_count--;
-            break;
-		}
-	}
-	Sys_LeaveCriticalSection( );
-}
 
 /*
 ==================
@@ -205,23 +143,22 @@ Sys_GetThreadName
 find the name of the calling thread
 ==================
 */
-const char* Sys_GetThreadName( int *index ) {
-	Sys_EnterCriticalSection( );
-	pthread_t thread = pthread_self();
-	for( int i = 0 ; i < g_thread_count ; i++ ) {
-		if ( thread == (pthread_t)g_threads[ i ]->threadHandle ) {
-			if ( index ) {
-				*index = i;
-			}
-			Sys_LeaveCriticalSection( );
-			return g_threads[ i ]->name;
-		}
-	}
-	if ( index ) {
-		*index = -1;
-	}
-	Sys_LeaveCriticalSection( );
-	return "main";
+static int Sys_GetThreadName( pthread_t handle, char* namebuf, size_t buflen )
+{
+	int ret = 0;
+#ifdef __linux__
+	ret = pthread_getname_np( handle, namebuf, buflen );
+	if( ret != 0 )
+		idLib::common->Printf( "Getting threadname failed, reason: %s (%i)\n", strerror( errno ), errno );
+#elif defined(__FreeBSD__)
+	// seems like there is no pthread_getname_np equivalent on FreeBSD
+	idStr::snPrintf( namebuf, buflen, "Can't read threadname on this platform!" );
+#endif
+	/* TODO: OSX:
+		// int pthread_getname_np(pthread_t, char*, size_t);
+	*/
+	
+	return ret;
 }
 
 /*
@@ -230,7 +167,8 @@ Async Thread
 =========================================================
 */
 
-xthreadInfo asyncThread;
+uintptr_t asyncThread;
+volatile bool asyncThreadShutdown;
 
 /*
 =================
@@ -238,8 +176,8 @@ Posix_StartAsyncThread
 =================
 */
 void Posix_StartAsyncThread() {
-	if ( asyncThread.threadHandle == 0 ) {
-		Sys_CreateThread( Sys_AsyncThread, NULL, THREAD_NORMAL, asyncThread, "Async", g_threads, &g_thread_count );
+	if ( asyncThread == 0 ) {
+		asyncThread = Sys_CreateThread( (xthread_t) Sys_AsyncThread, NULL, THREAD_NORMAL, "Async" );
 	} else {
 		common->Printf( "Async thread already running\n" );
 	}
@@ -270,9 +208,9 @@ void Posix_InitPThreads( ) {
 		waiting[i] = false;
 	}
 
+	/* stgatilov: this was removed by duzenko
 	// init threads table
 	for ( i = 0; i < MAX_THREADS; i++ ) {
 		g_threads[ i ] = NULL;
-	}	
+	}*/
 }
-

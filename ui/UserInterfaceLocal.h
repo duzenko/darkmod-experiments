@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 class idWindow;
@@ -24,7 +24,7 @@ public:
 	virtual const char *		Name() const;
 	virtual const char *		Comment() const;
 	virtual bool				IsInteractive() const;
-	virtual bool				InitFromFile( const char *qpath, bool rebuild = true, bool cache = true );
+	virtual bool				InitFromFile( const char *qpath, bool rebuild = true ) override;
 	virtual const char *		HandleEvent( const sysEvent_t *event, int time, bool *updateVisuals );
 	virtual void				HandleNamedEvent( const char* namedEvent );
 	virtual void				Redraw( int time );
@@ -56,6 +56,9 @@ public:
 
 	virtual float				CursorX() { return cursorX; }
 	virtual float				CursorY() { return cursorY; }
+	virtual const char*			RunGuiScript(const char *windowName, int scriptNum);
+	virtual bool				ResetWindowTime(const char *windowName, int startTime = 0);
+	virtual void				UpdateSubtitles();
 
 	size_t						Size();
 
@@ -84,6 +87,8 @@ private:
 	bool						interactive;
 	bool						uniqued;
 
+	idDict						presetDefines;
+	idDict						defines;
 	idDict						state;
 	idWindow *					desktop;
 	idWindow *					bindHandler;
@@ -100,6 +105,11 @@ private:
 	int							time;
 
 	int							refs;
+
+	//stgatilov #2454: We can show several active subtitles simultaneously.
+	// Each of them gets into one of few "slots".
+	// Here we store information about slots between updates.
+	idList<SubtitleMatch>		subtitleSlots;
 };
 
 class idUserInterfaceManagerLocal : public idUserInterfaceManager {
@@ -118,10 +128,11 @@ public:
 	virtual bool				CheckGui( const char *qpath ) const;
 	virtual idUserInterface *	Alloc( void ) const;
 	virtual void				DeAlloc( idUserInterface *gui );
-	virtual idUserInterface *	FindGui( const char *qpath, bool autoLoad = false, bool needInteractive = false, bool forceUnique = false );
+	virtual idUserInterface *	FindGui( const char *qpath, bool autoLoad = false, bool needInteractive = false, bool forceUnique = false, idDict presetDefines = {} ) override;
 	virtual idUserInterface *	FindDemoGui( const char *qpath );
 	virtual	idListGUI *			AllocListGUI( void ) const;
 	virtual void				FreeListGUI( idListGUI *listgui );
+	virtual bool				IsBindHandlerActive() const override;
 
 private:
 	idRectangle					screenRect;

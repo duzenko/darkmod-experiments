@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MODEL_LOCAL_H__
@@ -78,6 +78,7 @@ public:
 	bool						LoadLWO( const char *fileName );
 	bool						LoadFLT( const char *fileName );
 	bool						LoadMA( const char *filename );
+	bool						LoadProxy( const char *filename );
 
 	bool						ConvertASEToModelSurfaces( const struct aseModel_s *ase );
 	bool						ConvertLWOToModelSurfaces( const struct st_lwObject *lwo );
@@ -85,6 +86,7 @@ public:
 
 	struct aseModel_s *			ConvertLWOToASE( const struct st_lwObject *obj, const char *fileName );
 
+	void						TransformModel( const idRenderModelStatic *sourceModel, const idMat3 &rotation );
 	bool						DeleteSurfaceWithId( int id );
 	void						DeleteSurfacesWithNegativeId( void );
 	bool						FindSurfaceWithId( int id, int &surfaceNum );
@@ -107,6 +109,7 @@ protected:
 	bool						reloadable;				// if not, reloadModels won't check timestamp
 	bool						levelLoadReferenced;	// for determining if it needs to be freed
 	ID_TIME_T					timeStamp;
+	idStr						proxySourceName;		// stgatilov #4970: name of the source model (only for proxy models)
 
 	static idCVar				r_mergeModelSurfaces;	// combine model surfaces with the same material
 	static idCVar				r_slopVertex;			// merge xyz coordinates this far apart
@@ -194,6 +197,7 @@ struct md3Surface_s;
 
 class idRenderModelMD3 : public idRenderModelStatic {
 public:
+	idRenderModelMD3() : md3( nullptr ) {}
 	virtual void				InitFromFile( const char *fileName );
 	virtual dynamicModel_t		IsDynamicModel() const;
 	virtual idRenderModel *		InstantiateDynamicModel( const struct renderEntity_s *ent, const struct viewDef_s *view, idRenderModel *cachedModel );
@@ -237,6 +241,8 @@ private:
 	int							verts_y;
 	float						scale_x;
 	float						scale_y;
+	float						tile_x;
+	float						tile_y;
 	int							time;
 	int							liquid_type;
 	int							update_tics;

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -19,6 +19,7 @@
 
 
 #include "Session_local.h"
+#include "../game/Missions/MissionManager.h"
 
 idCVar	idSessionLocal::gui_configServerRate( "gui_configServerRate", "0", CVAR_GUI | CVAR_ARCHIVE | CVAR_ROM | CVAR_INTEGER, "" );
 
@@ -35,11 +36,78 @@ idUserInterface *idSessionLocal::GetActiveMenu( void ) {
 
 /*
 ==============
+idSessionLocal::ResetMainMenu
+==============
+*/
+void idSessionLocal::ResetMainMenu() {
+	if (guiMainMenu) {
+		DM_LOG(LC_MAINMENU, LT_INFO)LOGSTRING("Destroying main menu GUI");
+		if (guiActive == guiMainMenu) {
+			SetGUI(NULL, NULL);
+			assert(guiActive != guiMainMenu);
+		}
+		uiManager->DeAlloc(guiMainMenu);
+		guiMainMenu = NULL;
+	}
+}
+
+/*
+==============
+idSessionLocal::SetMainMenuStartAtBriefing
+==============
+*/
+void idSessionLocal::SetMainMenuStartAtBriefing() {
+	mainMenuStartState = MMSS_BRIEFING;
+}
+
+/*
+==============
+idSessionLocal::CreateMainMenu
+==============
+*/
+void idSessionLocal::CreateMainMenu() {
+	if (guiMainMenu) {
+		//we won't recreate main menu GUI until someone calls ResetMainMenu
+		return;
+	}
+
+	DM_LOG(LC_MAINMENU, LT_INFO)LOGSTRING("Recreating main menu GUI");
+
+	idDict presetDefines;
+	// flag for in-game menu
+	presetDefines.SetBool("MM_INGAME", mapSpawned);
+	int missionIdx = gameLocal.m_MissionManager->GetCurrentMissionIndex() + 1;
+	presetDefines.SetInt("MM_CURRENTMISSION", missionIdx);
+	guiMainMenu = uiManager->FindGui( "guis/mainmenu.gui", true, false, true, presetDefines );
+
+	guiMainMenu->SetStateInt( "inGame", presetDefines.GetInt("MM_INGAME") );
+	guiMainMenu->SetStateInt("CurrentMission", presetDefines.GetInt("MM_CURRENTMISSION") );
+	// switch to initial state
+	guiMainMenu->SetStateInt("mode", guiMainMenu->GetStateInt("#MM_STATE_NONE"));
+	if ( mainMenuStartState == MMSS_MAINMENU ) {
+		guiMainMenu->SetStateInt("targetmode", guiMainMenu->GetStateInt("#MM_STATE_MAINMENU"));
+	} else if ( mainMenuStartState == MMSS_SUCCESS ) {
+		// simulate switch forward into DEBRIEFING_VIDEO, so that state skipping works properly
+		guiMainMenu->SetStateInt("mode", guiMainMenu->GetStateInt("#MM_STATE_FINISHED"));
+		guiMainMenu->SetStateInt("targetmode", guiMainMenu->GetStateInt("#MM_STATE_FORWARD"));
+	} else if ( mainMenuStartState == MMSS_FAILURE ) {
+		guiMainMenu->SetStateInt("targetmode", guiMainMenu->GetStateInt("#MM_STATE_FAILURE"));
+	} else if ( mainMenuStartState == MMSS_BRIEFING ) {
+		guiMainMenu->SetStateInt("targetmode", guiMainMenu->GetStateInt("#MM_STATE_BRIEFING_VIDEO"));
+	} else {
+		assert(false);
+	}
+	// note: MainMenuStartUp takes the state and handles it
+	mainMenuStartState = MMSS_MAINMENU;
+}
+
+/*
+==============
 idSessionLocal::StartMainMenu
 ==============
 */
 void idSessionLocal::StartMenu( bool playIntro ) {
-	if ( guiActive == guiMainMenu ) {
+	if ( guiActive && guiActive == guiMainMenu ) {
 		return;
 	}
 
@@ -56,13 +124,31 @@ void idSessionLocal::StartMenu( bool playIntro ) {
 	// start playing the menu sounds
 	soundSystem->SetPlayingSoundWorld( menuSoundWorld );
 
+	// make sure guiMainMenu is alive
+	CreateMainMenu();
+
 	SetGUI( guiMainMenu, NULL );
 	guiMainMenu->HandleNamedEvent( playIntro ? "playIntro" : "noIntro" );
 
 	guiMainMenu->SetStateString("game_list", common->Translate( "#str_07212" ));
 
 	console->Close();
+}
 
+/*
+=================
+idSessionLocal::GetGUI
+=================
+*/
+idUserInterface *idSessionLocal::GetGui(GuiType type) const {
+	if (type == gtActive)
+		return guiActive;
+	if (type == gtMainMenu)
+		return guiMainMenu;
+	if (type == gtLoading)
+		return guiLoading;
+	//TODO: do we ever need other cases?
+	return NULL;
 }
 
 /*
@@ -85,8 +171,6 @@ void idSessionLocal::SetGUI( idUserInterface *gui, HandleGuiCommand_t handle ) {
 	if ( guiActive == guiMainMenu ) {
 		SetSaveGameGuiVars();
 		SetMainMenuGuiVars();
-	} else if ( guiActive == guiRestartMenu ) {
-		SetSaveGameGuiVars();
 	}
 
 	sysEvent_t  ev;
@@ -95,6 +179,17 @@ void idSessionLocal::SetGUI( idUserInterface *gui, HandleGuiCommand_t handle ) {
 
 	guiActive->HandleEvent( &ev, com_frameTime );
 	guiActive->Activate( true, com_frameTime );
+}
+
+bool idSessionLocal::RunGuiScript(const char *windowName, int scriptNum) {
+	idUserInterface *ui = guiActive;
+	if (!ui)
+		return false;
+	const char *command = ui->RunGuiScript(windowName, scriptNum);
+	if (!command)
+		return false;
+	DispatchCommand(ui, command);
+	return true;
 }
 
 /*
@@ -284,17 +379,6 @@ void idSessionLocal::SetMainMenuGuiVars( void ) {
 	// key bind names
 	guiMainMenu->SetKeyBindingNames();
 
-	// flag for in-game menu
-	if ( mapSpawned ) {
-		guiMainMenu->SetStateString( "inGame", 
-#ifdef MULTIPLAYER
-			IsMultiplayer() ? "2" : 
-#endif
-			"1" );
-	} else {
-		guiMainMenu->SetStateString( "inGame", "0" );
-	}
-
 	guiMainMenu->SetStateString( "browser_levelshot", "guis/assets/splash/pdtempa" );
 
 	SetMainMenuSkin();
@@ -322,7 +406,17 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 		}
 		return true;
 	}
-
+	
+	if (!idStr::Icmp(cmd, "loadgameforced")) {
+		sessLocal.LoadGame("", idSessionLocal::eSaveConflictHandling_Ignore);
+		return true;
+	}
+	
+	if (!idStr::Icmp(cmd, "loadgameinitialized")) {
+		sessLocal.LoadGame("", idSessionLocal::eSaveConflictHandling_LoadMapStart);
+		return true;
+	}
+	
 	if ( !idStr::Icmp( cmd, "saveGame" ) ) {
 		const char *saveGameName = guiActive->State().GetString("saveGameName");
 		if ( saveGameName && saveGameName[0] ) {
@@ -369,7 +463,7 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 			guiActive->StateChanged( com_frameTime );
 		}
 		return true;
-	}
+	} 
 
 	if ( !idStr::Icmp( cmd, "deleteGame" ) ) {
 		int choice = guiActive->State().GetInt( "loadgame_sel_0" );
@@ -383,7 +477,7 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 		}
 		return true;
 	}
-
+	
 	if ( !idStr::Icmp( cmd, "updateSaveGameInfo" ) ) {
 		int choice = guiActive->State().GetInt( "loadgame_sel_0" );
 		if ( choice >= 0 && choice < loadGameList.Num() ) {
@@ -546,10 +640,6 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		if ( !idStr::Icmp( cmd, "UpdateServers" ) ) {
 			if ( guiActive->State().GetBool( "lanSet" ) ) {
 				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "LANScan" );
-			} else {
-#ifdef MULTIPLAYER
-				idAsyncNetwork::GetNETServers();
-#endif
 			}
 			continue;
 		}
@@ -557,55 +647,9 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		if ( !idStr::Icmp( cmd, "RefreshServers" ) ) {
 			if ( guiActive->State().GetBool( "lanSet" ) ) {
 				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "LANScan" );
-			} else {
-#ifdef MULTIPLAYER
-				idAsyncNetwork::client.serverList.NetScan();
-#endif
 			}
 			continue;
 		}
-
-#ifdef MULTIPLAYER
-		if (!idStr::Icmp( cmd, "FilterServers" )) {
-			idAsyncNetwork::client.serverList.ApplyFilter( );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortServerName" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_SERVERNAME );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortGame" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_GAME );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortPlayers" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_PLAYERS );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortPing" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_PING );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortGameType" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_GAMETYPE );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "sortMap" ) ) {
-			idAsyncNetwork::client.serverList.SetSorting( SORT_MAP );
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "serverList" ) ) {
-			idAsyncNetwork::client.serverList.GUIUpdateSelected();
-			continue;
-		}
-#endif
 
 		if (!idStr::Icmp( cmd, "LANConnect" )) {
 			int sel = guiActive->State().GetInt( "serverList_selid_0" ); 
@@ -910,18 +954,6 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 			guiActive->HandleNamedEvent( "cvar read sound" );
 			continue;
 		}
-
-#ifdef MULTIPLAYER
-		if (!idStr::Icmp( cmd, "CheckUpdate" )) {
-			idAsyncNetwork::client.SendVersionCheck();
-			continue;
-		}
-
-		if ( !idStr::Icmp( cmd, "CheckUpdate2" ) ) {
-			idAsyncNetwork::client.SendVersionCheck( true );
-			continue;
-		}
-#endif
 	}
 }
 
@@ -1000,11 +1032,10 @@ void idSessionLocal::DispatchCommand( idUserInterface *gui, const char *menuComm
 
 	if ( gui == guiMainMenu ) {
 		HandleMainMenuCommands( menuCommand );
+		//TODO on restart screen: HandleRestartMenuCommands( menuCommand ); 
 		return;
 	} else if ( gui == guiMsg ) {
 		HandleMsgCommands( menuCommand );
-	} else if ( gui == guiRestartMenu ) {
-		HandleRestartMenuCommands( menuCommand );
 	} else if ( game && guiActive && guiActive->State().GetBool( "gameDraw" ) ) {
 		const char *cmd = game->HandleGuiCommands( menuCommand );
 		if ( !cmd ) {
@@ -1190,7 +1221,8 @@ const char* idSessionLocal::MessageBox( msgBoxType_t type, const char *message, 
 	msgFireBack[ 1 ] = fire_no ? fire_no : "";
 	guiMsgRestore = guiActive;
 	// 4725: Hide the cursor behind the prompt (Obsttorte)
-	guiMsgRestore->SetCursor(325,290);
+	if (guiMsgRestore)
+		guiMsgRestore->SetCursor(325,290);
 
 	guiActive = guiMsg;
 	guiMsg->SetCursor( 325, 290 );

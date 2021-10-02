@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -23,7 +23,7 @@
 #include "XYWnd.h"
 #include "CamWnd.h"
 #include "splines.h"
-#include <GL/glu.h>
+//#include <GL/glu.h>
 
 #include "../../renderer/tr_local.h"
 #include "../../renderer/model_local.h"	// for idRenderModelMD5
@@ -202,7 +202,7 @@ void CCamWnd::OnPaint() {
 
 		Cam_Draw();
 		QE_CheckOpenGLForErrors();
-		qwglSwapBuffers(dc.m_hDC);
+		SwapBuffers(dc.m_hDC);
 	}
 }
 
@@ -343,11 +343,14 @@ int CCamWnd::OnCreate(LPCREATESTRUCT lpCreateStruct) {
 
 	HFONT hOldFont = (HFONT)SelectObject(hDC, hfont);
 
-	wglMakeCurrent (hDC, win32.hGLRC);
+	qwglMakeCurrent (hDC, win32.hGLRC);
 
 	if ((g_qeglobals.d_font_list = qglGenLists(256)) == 0) {
 		common->Warning( "couldn't create font dlists" );
 	}
+
+//	PFNWGLUSEFONTBITMAPSPROC qwglUseFontBitmaps = (PFNWGLUSEFONTBITMAPSPROC)GLimp_AnyPointer("wglUseFontBitmapsA");
+//	PFNWGLUSEFONTOUTLINESPROC qwglUseFontOutlines = (PFNWGLUSEFONTOUTLINESPROC)GLimp_AnyPointer("wglUseFontBitmapsA");
 
 	// create the bitmap display lists we're making images of glyphs 0 thru 255
 	if ( !qwglUseFontBitmaps(hDC, 0, 255, g_qeglobals.d_font_list) ) {
@@ -803,14 +806,16 @@ void CCamWnd::DrawLightRadius(brush_t *pBrush) {
  =======================================================================================================================
  */
 void setGLMode(int mode) {
+	GLColorOverride scopedColor;
+	float color[4] = {1, 1, 1, 1};
+
 	switch (mode)
 	{
 		case cd_wire:
 			qglPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-			globalImages->BindNull();
 			qglDisable(GL_BLEND);
 			qglDisable(GL_DEPTH_TEST);
-			GL_FloatColor( 1.0f, 1.0f, 1.0f );
+			scopedColor.Enable( color );
 			break;
 
 		case cd_solid:
@@ -818,7 +823,6 @@ void setGLMode(int mode) {
 			qglEnable(GL_CULL_FACE);
 			qglShadeModel(GL_FLAT);
 			qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-			globalImages->BindNull();
 			qglDisable(GL_BLEND);
 			qglEnable(GL_DEPTH_TEST);
 			qglDepthFunc(GL_LEQUAL);
@@ -951,8 +955,8 @@ void CCamWnd::Cam_Draw() {
 	if (renderMode) {
 		Cam_Render();
 	}
-	GL_Viewport(0, 0, m_Camera.width, m_Camera.height);
-	GL_Scissor(0, 0, m_Camera.width, m_Camera.height);
+	GL_ViewportVidSize(0, 0, m_Camera.width, m_Camera.height);
+	GL_ScissorVidSize(0, 0, m_Camera.width, m_Camera.height);
 	qglClearColor(g_qeglobals.d_savedinfo.colors[COLOR_CAMERABACK][0], g_qeglobals.d_savedinfo.colors[COLOR_CAMERABACK][1], g_qeglobals.d_savedinfo.colors[COLOR_CAMERABACK][2], 0);
 
 	if (!renderMode) {
@@ -1019,7 +1023,6 @@ void CCamWnd::Cam_Draw() {
 	qglEnable(GL_BLEND);
 	qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	qglBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	globalImages->BindNull();
 	for (brush = pList->next; brush != pList; brush = brush->next) {
 		if (brush->pPatch || brush->modelHandle > 0) {
 			Brush_Draw(brush, true);
@@ -1028,7 +1031,6 @@ void CCamWnd::Cam_Draw() {
 			qglEnable(GL_BLEND);
 			qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 			qglColor4f( g_qeglobals.d_savedinfo.colors[COLOR_SELBRUSHES][0],g_qeglobals.d_savedinfo.colors[COLOR_SELBRUSHES][1],g_qeglobals.d_savedinfo.colors[COLOR_SELBRUSHES][2], 0.25f );
-			globalImages->BindNull();
 			continue;
 		}
 
@@ -1121,7 +1123,6 @@ void CCamWnd::Cam_Draw() {
 	// bind back to the default texture so that we don't have problems elsewhere
 	// using/modifying texture maps between contexts
 	//
-	globalImages->BindNull();
 
 	qglFinish();
 	QE_CheckOpenGLForErrors();
@@ -1294,7 +1295,7 @@ void CCamWnd::BuildEntityRenderState( entity_t *ent, bool update) {
 			modelSurface_t	surf;
 			for ( int i = 0 ; i < tris.Num() ; i++ ) {
 				surf.geometry = tris[i];
-				surf.shader = mats[i];
+				surf.material = mats[i];
 				bmodel->AddSurface( surf );
 			}
 
@@ -1478,7 +1479,7 @@ int Brush_TransformModel(brush_t *brush, idTriList *tris, idMatList *mats) {
 					tri2->verts[j].xyz = v;
 				}
 				tris->Append(tri2);
-				mats->Append( surf->shader );
+				mats->Append( surf->material );
 			}
 			return model->NumSurfaces();
 		}
@@ -1738,7 +1739,7 @@ void CCamWnd::BuildRendererState() {
 			modelSurface_t	surf;
 			for ( int i = 0 ; i < tris.Num() ; i++ ) {
 				surf.geometry = tris[i];
-				surf.shader = mats[i];
+				surf.material = mats[i];
 				worldModel->AddSurface( surf );
 			}
 
@@ -2001,7 +2002,6 @@ void CCamWnd::DrawEntityData() {
 	qglDisable(GL_BLEND);
 	qglDisable(GL_DEPTH_TEST);
 	qglPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	globalImages->BindNull();
 	idVec3 color(0, 1, 0);
 	qglColor3fv( color.ToFloatPtr() );
 
@@ -2059,7 +2059,7 @@ void CCamWnd::Cam_Render() {
 	// save the editor state
 	//qglPushAttrib( GL_ALL_ATTRIB_BITS );
 	qglClearColor( 0.1f, 0.1f, 0.1f, 0.0f );
-	GL_Scissor( 0, 0, m_Camera.width, m_Camera.height );
+	GL_ScissorVidSize( 0, 0, m_Camera.width, m_Camera.height );
 	qglClear( GL_COLOR_BUFFER_BIT );
 
 	//	qwglSwapBuffers(dc.m_hDC);

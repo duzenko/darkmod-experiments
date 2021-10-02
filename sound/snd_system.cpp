@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -20,15 +20,11 @@
 
 #include "snd_local.h"
 
-#ifdef ID_DEDICATED
-idCVar idSoundSystemLocal::s_noSound( "s_noSound", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ROM, "" );
-#else
 idCVar idSoundSystemLocal::s_noSound( "s_noSound", "0", CVAR_SOUND | CVAR_BOOL | CVAR_NOCHEAT, "" );
-#endif
 idCVar idSoundSystemLocal::s_diffractionMax( "s_diffractionMax", "10", CVAR_SOUND | CVAR_FLOAT | CVAR_ARCHIVE, "max vol loss (dB) at 180 degrees diffraction" ); // grayman #4219
 idCVar idSoundSystemLocal::s_device("s_device", "default", CVAR_SOUND | CVAR_NOCHEAT | CVAR_ARCHIVE, "the audio device to use ('default' for the default audio device)");
 idCVar idSoundSystemLocal::s_quadraticFalloff( "s_quadraticFalloff", "1", CVAR_SOUND | CVAR_BOOL, "" );
-idCVar idSoundSystemLocal::s_drawSounds( "s_drawSounds", "0", CVAR_SOUND | CVAR_INTEGER, "1 = draw audible sounds (within max distance), 2 = draw all", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
+idCVar                     s_drawSounds( "s_drawSounds", "0", CVAR_SOUND | CVAR_INTEGER, "1 = draw audible sounds (within max distance), 2 = draw all", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar idSoundSystemLocal::s_showStartSound( "s_showStartSound", "0", CVAR_SOUND | CVAR_BOOL, "" );
 idCVar idSoundSystemLocal::s_useOcclusion( "s_useOcclusion", "1", CVAR_SOUND | CVAR_BOOL, "" );
 idCVar idSoundSystemLocal::s_maxSoundsPerShader( "s_maxSoundsPerShader", "0", CVAR_SOUND | CVAR_ARCHIVE, "", 0, 10, idCmdSystem::ArgCompletion_Integer<0,10> );
@@ -39,7 +35,7 @@ idCVar idSoundSystemLocal::s_dotbias6( "s_dotbias6", "0.8", CVAR_SOUND | CVAR_FL
 idCVar idSoundSystemLocal::s_minVolume2( "s_minVolume2", "0.25", CVAR_SOUND | CVAR_FLOAT, "" );
 idCVar idSoundSystemLocal::s_dotbias2( "s_dotbias2", "1.1", CVAR_SOUND | CVAR_FLOAT, "" );
 idCVar idSoundSystemLocal::s_spatializationDecay( "s_spatializationDecay", "2", CVAR_SOUND | CVAR_ARCHIVE | CVAR_FLOAT, "" );
-idCVar idSoundSystemLocal::s_reverse( "s_reverse", "0", CVAR_SOUND | CVAR_ARCHIVE | CVAR_BOOL, "" );
+idCVar idSoundSystemLocal::s_reverse( "s_reverse", "0", CVAR_SOUND | CVAR_ARCHIVE | CVAR_BOOL, "No longer works! (reverse left and right channels)" );
 idCVar idSoundSystemLocal::s_meterTopTime( "s_meterTopTime", "2000", CVAR_SOUND | CVAR_ARCHIVE | CVAR_INTEGER, "" );
 idCVar idSoundSystemLocal::s_volume( "s_volume_dB", "0", CVAR_SOUND | CVAR_ARCHIVE | CVAR_FLOAT, "volume in dB" ); // Controlled by "SFX Volume" slider on Audio Menu
 idCVar idSoundSystemLocal::s_playDefaultSound( "s_playDefaultSound", "0", CVAR_SOUND | CVAR_ARCHIVE | CVAR_BOOL, "play a beep for missing sounds" ); // grayman - turn default OFF to keep beeping from being heard in existing maps
@@ -47,7 +43,7 @@ idCVar idSoundSystemLocal::s_subFraction( "s_subFraction", "0.75", CVAR_SOUND | 
 idCVar idSoundSystemLocal::s_globalFraction( "s_globalFraction", "0.8", CVAR_SOUND | CVAR_ARCHIVE | CVAR_FLOAT, "volume to all speakers when not spatialized" );
 idCVar idSoundSystemLocal::s_doorDistanceAdd( "s_doorDistanceAdd", "450", CVAR_SOUND | CVAR_ARCHIVE | CVAR_FLOAT, "reduce sound volume with this distance when going through a door" );
 idCVar idSoundSystemLocal::s_singleEmitter( "s_singleEmitter", "0", CVAR_SOUND | CVAR_INTEGER, "mute all sounds but this emitter" );
-idCVar idSoundSystemLocal::s_numberOfSpeakers( "s_numberOfSpeakers", "2", CVAR_SOUND | CVAR_ARCHIVE, "number of speakers" );
+idCVar idSoundSystemLocal::s_numberOfSpeakers( "s_numberOfSpeakers", "2", CVAR_SOUND | CVAR_ARCHIVE, "No longer works! (number of speakers)" );
 idCVar idSoundSystemLocal::s_force22kHz( "s_force22kHz", "0", CVAR_SOUND | CVAR_BOOL, ""  );
 idCVar idSoundSystemLocal::s_clipVolumes( "s_clipVolumes", "1", CVAR_SOUND | CVAR_BOOL, ""  );
 idCVar idSoundSystemLocal::s_realTimeDecoding( "s_realTimeDecoding", "1", CVAR_SOUND | CVAR_BOOL | CVAR_INIT, "" );
@@ -61,8 +57,11 @@ idCVar idSoundSystemLocal::s_enviroSuitVolumeScale( "s_enviroSuitVolumeScale", "
 idCVar idSoundSystemLocal::s_skipHelltimeFX( "s_skipHelltimeFX", "0", CVAR_SOUND | CVAR_BOOL, "" );
 
 #if ID_OPENAL
-idCVar idSoundSystemLocal::s_useEAXReverb( "s_useEAXReverb", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use EAX reverb" );
+idCVar idSoundSystemLocal::s_useEAXReverb( "s_useEAXReverb", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use EFX reverb effects (also formerly known as EAX)" );
+idCVar idSoundSystemLocal::s_useHRTF( "s_useHRTF", "1", CVAR_SOUND | CVAR_ARCHIVE, "use HRTF for better positional sound on headphones.\nvalue -1 means automatic choice." );
 idCVar idSoundSystemLocal::s_decompressionLimit( "s_decompressionLimit", "6", CVAR_SOUND | CVAR_INTEGER | CVAR_ARCHIVE, "specifies maximum uncompressed sample length in seconds" );
+// nbohr1more: #5587 Reverb volume control
+idCVar idSoundSystemLocal::s_alReverbGain( "s_alReverbGain", "1.0", CVAR_SOUND | CVAR_FLOAT | CVAR_ARCHIVE, "reduce reverb strength (0.0 to 1.0)", 0.0f, 1.0f );
 #else
 idCVar idSoundSystemLocal::s_useEAXReverb( "s_useEAXReverb", "0", CVAR_SOUND | CVAR_BOOL | CVAR_ROM, "EAX not available in this build" );
 idCVar idSoundSystemLocal::s_decompressionLimit( "s_decompressionLimit", "6", CVAR_SOUND | CVAR_INTEGER | CVAR_ROM, "specifies maximum uncompressed sample length in seconds" );
@@ -70,6 +69,9 @@ idCVar idSoundSystemLocal::s_decompressionLimit( "s_decompressionLimit", "6", CV
 
 bool idSoundSystemLocal::useEFXReverb = false;
 int idSoundSystemLocal::EFXAvailable = -1;
+
+bool idSoundSystemLocal::useHRTF = false;
+bool idSoundSystemLocal::HRTFAvailable = false;
 
 idSoundSystemLocal	soundSystemLocal;
 idSoundSystem	*soundSystem  = &soundSystemLocal;
@@ -98,6 +100,18 @@ void SoundReloadSounds_f( const idCmdArgs &args ) {
 	}
 	soundSystem->SetMute( false );
 	common->Printf( "sound: changed sounds reloaded\n" );
+}
+
+/*
+===============
+SoundReloadSubtitles
+===============
+*/
+void SoundReloadSubtitles() {
+	if ( !soundSystemLocal.soundCache ) {
+		return;
+	}
+	soundSystemLocal.soundCache->ReloadSubtitles();
 }
 
 /*
@@ -314,21 +328,23 @@ void idSoundSystemLocal::Init() {
 
 	common->Printf("Setup OpenAL device and context\n");
 
-	const char *device = s_device.GetString();
-	if (strlen(device) < 1)
-		device = NULL;
-	else if (!idStr::Icmp(device, "default"))
-		device = NULL;
+	const char *queriedDeviceName = s_device.GetString();
+	if (strlen(queriedDeviceName) < 1)
+		queriedDeviceName = NULL;
+	else if (!idStr::Icmp(queriedDeviceName, "default"))
+		queriedDeviceName = NULL;
 
 	if (alcIsExtensionPresent(NULL, "ALC_ENUMERATE_ALL_EXT")) {
+		if (!queriedDeviceName)
+			queriedDeviceName = alcGetString(NULL, ALC_DEFAULT_ALL_DEVICES_SPECIFIER);
+
 		const char *devs = alcGetString(NULL, ALC_ALL_DEVICES_SPECIFIER);
 		bool found = false;
-
 		while (devs && *devs) {
 			common->Printf("OpenAL: found device '%s'", devs);
 
-			if (device && !idStr::Icmp(devs, device)) {
-				common->Printf(" (ACTIVE)\n");
+			if (queriedDeviceName && !idStr::Icmp(devs, queriedDeviceName)) {
+				common->Printf(" [ACTIVE]\n");
 				found = true;
 			}
 			else {
@@ -338,26 +354,47 @@ void idSoundSystemLocal::Init() {
 			devs += strlen(devs) + 1;
 		}
 
-		if (device && !found) {
-			common->Printf("OpenAL: device %s not found, using default\n", device);
-			device = NULL;
+		if (queriedDeviceName && !found) {
+			common->Printf("OpenAL: device '%s' not found, using default\n", queriedDeviceName);
+			queriedDeviceName = NULL;
 		}
 	}
 
-	openalDevice = alcOpenDevice(device);
-	if (!openalDevice && device) {
-		common->Printf("OpenAL: failed to open device '%s' (0x%x), using default\n", device, alGetError());
+	openalDevice = alcOpenDevice(queriedDeviceName);
+	if (!openalDevice && queriedDeviceName) {
+		common->Printf("OpenAL: failed to open device '%s' (0x%x), using default\n", queriedDeviceName, alGetError());
 		openalDevice = alcOpenDevice(NULL);
 	}
 	
 	if (openalDevice)
-		common->Printf("OpenAL: using '%s'\n", alcGetString(openalDevice, ALC_DEVICE_SPECIFIER));
+		common->Printf("OpenAL: device '%s' opened successfully\n", (queriedDeviceName ? queriedDeviceName : "[NULL]"));
 	else {
 		common->Printf("OpenAL: no device found, sound disabled\n");
 		s_noSound.SetBool(true);
+		return;
 	}
 
-	openalContext = alcCreateContext(openalDevice, NULL);
+	idList<ALCint> attribs;
+
+	if (alcIsExtensionPresent(openalDevice, "ALC_SOFT_HRTF")) {
+		HRTFAvailable = true;
+		attribs.Append(ALC_HRTF_SOFT);
+		int value = s_useHRTF.GetInteger() < 0 ? ALC_DONT_CARE_SOFT : (s_useHRTF.GetInteger() ? ALC_TRUE : ALC_FALSE);
+		attribs.Append(value);
+	}
+	else {
+		HRTFAvailable = false;
+	}
+	common->Printf("OpenAL: HRTF is %s\n", (HRTFAvailable ? "available" : "NOT available"));
+
+
+	attribs.Append(0);
+	openalContext = alcCreateContext(openalDevice, attribs.Ptr());
+	if (!openalContext) {
+		common->Warning("OpenAL: failed to create context. Sound disabled");
+		s_noSound.SetBool(true);
+		return;
+	}
 	alcMakeContextCurrent(openalContext);
 
 
@@ -386,6 +423,8 @@ void idSoundSystemLocal::Init() {
 		alDeleteAuxiliaryEffectSlots = (LPALDELETEAUXILIARYEFFECTSLOTS)alGetProcAddress("alDeleteAuxiliaryEffectSlots");
 		alIsAuxiliaryEffectSlot = (LPALISAUXILIARYEFFECTSLOT)alGetProcAddress("alIsAuxiliaryEffectSlot");;
 		alAuxiliaryEffectSloti = (LPALAUXILIARYEFFECTSLOTI)alGetProcAddress("alAuxiliaryEffectSloti");
+		// nbohr1more: #5587 Reverb volume control
+		alAuxiliaryEffectSlotf = (LPALAUXILIARYEFFECTSLOTF)alGetProcAddress("alAuxiliaryEffectSlotf");
 	}
 	else {
 		common->Printf("OpenAL: EFX extension not found\n");
@@ -407,6 +446,27 @@ void idSoundSystemLocal::Init() {
 		alDeleteAuxiliaryEffectSlots = NULL;
 		alIsAuxiliaryEffectSlot = NULL;
 		alAuxiliaryEffectSloti = NULL;
+		// nbohr1more: #5587 Reverb volume control
+		alAuxiliaryEffectSlotf = NULL;
+	}
+
+	if (HRTFAvailable) {
+		ALCint value = -1;
+		alcGetIntegerv(openalDevice, ALC_HRTF_SOFT, 1, &value);
+		useHRTF = (value == ALC_TRUE);
+		alcGetIntegerv(openalDevice, ALC_HRTF_STATUS_SOFT, 1, &value);
+		const char *status = "unknown";
+		if (value == ALC_HRTF_DISABLED_SOFT) status = "ALC_HRTF_DISABLED_SOFT";
+		if (value == ALC_HRTF_ENABLED_SOFT) status = "ALC_HRTF_ENABLED_SOFT";
+		if (value == ALC_HRTF_DENIED_SOFT) status = "ALC_HRTF_DENIED_SOFT";
+		if (value == ALC_HRTF_REQUIRED_SOFT) status = "ALC_HRTF_REQUIRED_SOFT";
+		if (value == ALC_HRTF_HEADPHONES_DETECTED_SOFT) status = "ALC_HRTF_HEADPHONES_DETECTED_SOFT";
+		if (value == ALC_HRTF_UNSUPPORTED_FORMAT_SOFT) status = "ALC_HRTF_UNSUPPORTED_FORMAT_SOFT";
+		common->Printf("OpenAL: HRTF is %s (reason: %d = %s)\n", (useHRTF ? "enabled" : "disabled"), value, status);
+	}
+	else {
+		useHRTF = false;
+		common->Printf("OpenAL: HRTF is %s (reason: not supported)\n", (useHRTF ? "enabled" : "disabled"));
 	}
 
 	ALuint handle;
@@ -447,6 +507,9 @@ void idSoundSystemLocal::Init() {
 	if ( !s_noSound.GetBool() ) {
 		idSampleDecoder::Init();
 		soundCache = new idSoundCache();
+	}
+	else {
+		common->Printf("Sound disabled by s_noSound\n");
 	}
 
 	cmdSystem->AddCommand( "listSounds", ListSounds_f, CMD_FL_SOUND, "lists all sounds" );

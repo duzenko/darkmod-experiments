@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -22,6 +22,8 @@
 #include "PathSitTask.h"
 #include "PathTurnTask.h"
 #include "../Library.h"
+
+#define		WARNING_DELAY 10000 // grayman #5164 - ms delay between "unreachable" WARNINGs
 
 namespace ai
 {
@@ -48,6 +50,32 @@ void PathSitTask::Init(idAI* owner, Subsystem& subsystem)
 	PathTask::Init(owner, subsystem);
 
 	idPathCorner* path = _path.GetEntity();
+
+	// grayman #5164 - Am I too far away to sit?
+
+	idPathCorner* lastPath = owner->GetMemory().lastPath.GetEntity(); // path_corner preceding path_sit
+	if ( lastPath )
+	{
+		idVec3 aiOrigin = owner->GetPhysics()->GetOrigin();
+		idVec3 sitLocation = lastPath->GetPhysics()->GetOrigin();
+		sitLocation.z = aiOrigin.z; // remove z vector
+		float dist = (sitLocation - aiOrigin).LengthFast();
+
+		// if dist is too far, terminate the sit.
+
+		float accuracy = 16; // default
+
+		if ( dist > idMath::Sqrt(2 * accuracy*accuracy) ) // grayman #5265 extend the required distance
+		{
+			if ( gameLocal.time >= owner->m_nextWarningTime )
+			{
+				gameLocal.Warning("%s (%s) can't sit: too far from sitting location %s (%s)\n", owner->GetName(), aiOrigin.ToString(), lastPath->GetName(), lastPath->GetPhysics()->GetOrigin().ToString());
+				owner->m_nextWarningTime = gameLocal.time + WARNING_DELAY;
+			}
+			subsystem.FinishTask();
+			return;
+		}
+	}
 
 	// Parse animation spawnargs here
 	

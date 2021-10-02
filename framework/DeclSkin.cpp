@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -34,7 +34,7 @@ idDeclSkin::FreeData
 ================
 */
 void idDeclSkin::FreeData( void ) {
-	mappings.Clear();
+	mappings.ClearFree();
 }
 
 /*
@@ -47,7 +47,7 @@ bool idDeclSkin::Parse( const char *text, const int textLength ) {
 	idToken	token, token2;
 
 	src.LoadMemory( text, textLength, GetFileName(), GetLineNum() );
-	src.SetFlags( DECL_LEXER_FLAGS );
+	src.SetFlags( DECL_LEXER_FLAGS | LEXFL_ONLYSTRINGS );
 	src.SkipUntilString( "{" );
 
 	associatedModels.Clear();
@@ -67,7 +67,10 @@ bool idDeclSkin::Parse( const char *text, const int textLength ) {
 		} else {
 			skinMapping_t	map;
 
-			if ( !token.Icmp( "*" ) ) {
+			if ( !token.Icmp( "-" ) ) {
+				//stgatilov: there is stupid tradition to write paths onquoted in skins =(
+				src.Warning("Path with hyphens must be surrounded in double quotes");
+			} else if ( !token.Icmp( "*" ) ) {
 				map.from = NULL; // wildcard
 			} else {
 				map.from = declManager->FindMaterial( token );

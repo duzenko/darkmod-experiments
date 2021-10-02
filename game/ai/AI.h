@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __AI_H__
@@ -1197,6 +1197,11 @@ public: // greebo: Made these public for now, I didn't want to write an accessor
 	bool					m_InConversation;
 
 	/**
+	 * grayman #5164 - the next time a warning can be issued about an AI not being able to reach its starting sit/sleep location
+	 */
+	int						m_nextWarningTime;
+
+	/**
 	 * grayman #2706: is set true when the move prior to door handling is saved
 	 */
 	bool					m_RestoreMove;
@@ -1318,7 +1323,7 @@ public: // greebo: Made these public for now, I didn't want to write an accessor
 	bool m_canResolveBlock;		// grayman #2345 - whether we can resolve a block if asked
 	bool m_leftQueue;			// grayman #2345 - if we timed out waiting in a door queue
 	bool m_performRelight;		// grayman #2603 - set to TRUE by a script function when it's time to relight a light
-	idEntity* m_bloodMarker;	// grayman #3075
+	idEntityPtr<idEntity> m_bloodMarker;	// grayman #3075
 	bool m_ReactingToHit;		// grayman #2816 - reaction after being hit by something
 	idEntityPtr<idActor> m_lastKilled; // grayman #2816 - the last enemy we killed
 	bool m_justKilledSomeone;	// grayman #2816 - remember just killing someone so correct bark is emitted when alert level comes down
@@ -1988,7 +1993,7 @@ public:
 	// grayman #3857 - bark stuff
 	idStr					m_barkName; // The name of the bark
 	int						m_barkEndTime; // When the bark will end
-	
+
 	bool					DrawWeapon(ECombatType type); // grayman #3331 // grayman #3775
 	void					SheathWeapon();
 
@@ -2306,6 +2311,9 @@ public:
 	// grayman #2920
 	void Event_RestartPatrol();
 
+	// grayman #5056
+	void Event_StopPatrol();
+
 	void Event_OnDeadPersonEncounter(idActor* person); // grayman #3317
 	void Event_OnUnconsciousPersonEncounter(idActor* person); // grayman #3317
 
@@ -2323,6 +2331,8 @@ public:
 	void Event_HitByDoor(idEntity* door); // grayman #3756
 
 	void Event_PlayCustomAnim( const char* animName ); // SteveL #3597
+
+	void Event_GetVectorToIdealOrigin(); // grayman #3989
 
 #ifdef TIMING_BUILD
 private:

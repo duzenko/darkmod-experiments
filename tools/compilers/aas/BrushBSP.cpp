@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -25,7 +25,6 @@
 #define BSP_GRID_SIZE					512.0f
 #define SPLITTER_EPSILON				0.1f
 #define VERTEX_MELT_EPSILON				0.1f
-#define VERTEX_MELT_HASH_SIZE			32
 
 #define PORTAL_PLANE_NORMAL_EPSILON		0.00001f
 #define PORTAL_PLANE_DIST_EPSILON		0.01f
@@ -318,21 +317,20 @@ idBrushBSPNode::Split
 */
 bool idBrushBSPNode::Split( const idPlane &splitPlane, int splitPlaneNum ) {
 	int s, i;
-	idWinding *mid;
 	idBrushBSPPortal *p, *midPortal, *newPortals[2];
 	idBrushBSPNode *newNodes[2];
 
-	mid = new idWinding( splitPlane.Normal(), splitPlane.Dist() );
-
-	for ( p = portals; p && mid; p = p->next[s] ) {
+	idList<idPlane> cuttingPlanes;
+	for ( p = portals; p ; p = p->next[s] ) {
 		s = (p->nodes[1] == this);
 		if ( s ) {
-			mid = mid->Clip( -p->plane, 0.1f, false );
+			cuttingPlanes.AddGrow( -p->plane );
 		}
 		else {
-			mid = mid->Clip( p->plane, 0.1f, false );
+			cuttingPlanes.AddGrow( p->plane );
 		}
 	}
+	idWinding *mid = idWinding::CreateTrimmedPlane( splitPlane, cuttingPlanes.Num(), cuttingPlanes.Ptr(), 0.1f );
 
 	if ( !mid ) {
 		return false;
@@ -813,14 +811,10 @@ idBrushBSPNode *idBrushBSP::BuildBrushBSP_r( idBrushBSPNode *node, const idPlane
 	node->children[1] = new idBrushBSPNode();
 
 	// split node volume and brush list for children
-	node->volume->Split( node->plane, -1, &node->children[0]->volume, &node->children[1]->volume );
-	node->brushList.Split( node->plane, -1, node->children[0]->brushList, node->children[1]->brushList, true );
-	node->children[0]->parent = node->children[1]->parent = node;
-
-	// free node memory
-	node->brushList.Free();
-	delete node->volume;
+	node->volume->SplitDestroy( node->plane, -1, node->children[0]->volume, node->children[1]->volume );
 	node->volume = NULL;
+	node->brushList.SplitFree( node->plane, -1, node->children[0]->brushList, node->children[1]->brushList, true );
+	node->children[0]->parent = node->children[1]->parent = node;
 
 	// process children
 	node->children[0] = BuildBrushBSP_r( node->children[0], planeList, testedPlanes, skipContents );
@@ -855,8 +849,11 @@ idBrushBSPNode *idBrushBSP::ProcessGridCell( idBrushBSPNode *node, int skipConte
 
 	numGridCellSplits = 0;
 
-	// chop away all brush overlap
-	node->brushList.Chop( BrushChopAllowed );
+	{
+		TRACE_CPU_SCOPE_FORMAT( "BrushList:Chop", "num = %d", node->brushList.Num() )
+		// chop away all brush overlap
+		node->brushList.Chop( BrushChopAllowed );
+	}
 
 	// merge brushes if possible
 	//node->brushList.Merge( BrushMergeAllowed );
@@ -870,7 +867,10 @@ idBrushBSPNode *idBrushBSP::ProcessGridCell( idBrushBSPNode *node, int skipConte
 
 	testedPlanes = new bool[planeList.Num()];
 
-	BuildBrushBSP_r( node, planeList, testedPlanes, skipContents );
+	{
+		TRACE_CPU_SCOPE_FORMAT( "BrushList:BSP", "num = %d", node->brushList.Num() )
+		BuildBrushBSP_r( node, planeList, testedPlanes, skipContents );
+	}
 
 	delete testedPlanes;
 
@@ -929,16 +929,12 @@ void idBrushBSP::BuildGrid_r( idList<idBrushBSPNode *> &gridCells, idBrushBSPNod
 	node->children[1] = new idBrushBSPNode();
 
 	// split volume and brush list for children
-	node->volume->Split( node->plane, -1, &node->children[0]->volume, &node->children[1]->volume );
-	node->brushList.Split( node->plane, -1, node->children[0]->brushList, node->children[1]->brushList );
+	node->volume->SplitDestroy( node->plane, -1, node->children[0]->volume, node->children[1]->volume );
+	node->volume = NULL;
+	node->brushList.SplitFree( node->plane, -1, node->children[0]->brushList, node->children[1]->brushList );
 	node->children[0]->brushList.SetFlagOnFacingBrushSides( node->plane, SFL_USED_SPLITTER );
 	node->children[1]->brushList.SetFlagOnFacingBrushSides( node->plane, SFL_USED_SPLITTER );
 	node->children[0]->parent = node->children[1]->parent = node;
-
-	// free node memory
-	node->brushList.Free();
-	delete node->volume;
-	node->volume = NULL;
 
 	// process children
 	BuildGrid_r( gridCells, node->children[0] );
@@ -957,6 +953,7 @@ void idBrushBSP::Build( idBrushList brushList, int skipContents,
 	int i;
 	idList<idBrushBSPNode *> gridCells;
 
+	TRACE_CPU_SCOPE("BuildBrushBSP")
 	common->Printf( "[Brush BSP]\n" );
 	common->Printf( "%6d brushes\n", brushList.Num() );
 
@@ -971,24 +968,25 @@ void idBrushBSP::Build( idBrushList brushList, int skipContents,
 	root->volume->FromBounds( treeBounds );
 	root->parent = NULL;
 
-	BuildGrid_r( gridCells, root );
-
-	common->Printf( "\r%6d grid cells\n", gridCells.Num() );
-
-#ifdef OUPUT_BSP_STATS_PER_GRID_CELL
-	for ( i = 0; i < gridCells.Num(); i++ ) {
-		ProcessGridCell( gridCells[i], skipContents );
+	{
+		TRACE_CPU_SCOPE("BuildGrid")
+		BuildGrid_r( gridCells, root );
+		common->Printf( "\r%6d grid cells\n", gridCells.Num() );
+		TRACE_ATTACH_FORMAT("%d cells", gridCells.Num())
 	}
-#else
-	common->Printf( "\r%6d %%", 0 );
-	for ( i = 0; i < gridCells.Num(); i++ ) {
-		DisplayRealTimeString( "\r%6d", i * 100 / gridCells.Num() );
-		ProcessGridCell( gridCells[i], skipContents );
-	}
-	common->Printf( "\r%6d %%\n", 100 );
-#endif
 
-	common->Printf( "\r%6d splits\n", numSplits );
+	{
+		TRACE_CPU_SCOPE("ProcessGrid")
+		common->Printf( "\r%6d %%", 0 );
+		for ( i = 0; i < gridCells.Num(); i++ ) {
+			TRACE_CPU_SCOPE_FORMAT( "Process:Cell", gridCells[i]->volume->GetBounds().ToString().c_str() );
+			DisplayRealTimeString( "\r%6d", i * 100 / gridCells.Num() );
+			ProcessGridCell( gridCells[i], skipContents );
+		}
+		common->Printf( "\r%6d %%\n", 100 );
+		common->Printf( "\r%6d splits\n", numSplits );
+	}
+
 
 	if ( brushMap ) {
 		delete brushMap;
@@ -1064,35 +1062,7 @@ void idBrushBSP::PruneTree( int contents ) {
 	common->Printf( "%6d splits pruned\n", numPrunedSplits );
 }
 
-/*
-============
-idBrushBSP::BaseWindingForNode
-============
-*/
 #define	BASE_WINDING_EPSILON		0.001f
-
-idWinding *idBrushBSP::BaseWindingForNode( idBrushBSPNode *node ) {
-	idWinding *w;
-	idBrushBSPNode *n;
-
-	w = new idWinding( node->plane.Normal(), node->plane.Dist() );
-
-	// clip by all the parents
-	for ( n = node->parent; n && w; n = n->parent ) {
-
-		if ( n->children[0] == node ) {
-			// take front
-			w = w->Clip( n->plane, BASE_WINDING_EPSILON );
-		}
-		else {
-			// take back
-			w = w->Clip( -n->plane, BASE_WINDING_EPSILON );
-		}
-		node = n;
-	}
-
-	return w;
-}
 
 /*
 ============
@@ -1103,27 +1073,39 @@ idBrushBSP::MakeNodePortal
 ============
 */
 void idBrushBSP::MakeNodePortal( idBrushBSPNode *node ) {
-	idBrushBSPPortal *newPortal, *p;
-	idWinding *w;
-	int side = 0;
+	idList<idPlane> cuttingPlanes;
 
-	w = BaseWindingForNode( node );
+	// clip by all the parents
+	for ( idBrushBSPNode *curr = node, *n = node->parent; n; n = n->parent ) {
+
+		if ( n->children[0] == curr ) {
+			// take front
+			cuttingPlanes.AddGrow(n->plane);
+		}
+		else {
+			// take back
+			cuttingPlanes.AddGrow(-n->plane);
+		}
+		curr = n;
+	}
 
 	// clip the portal by all the other portals in the node
-	for ( p = node->portals; p && w; p = p->next[side] ) {
+	int side = 0;
+	for ( idBrushBSPPortal *p = node->portals; p; p = p->next[side] ) {
 		if ( p->nodes[0] == node ) {
 			side = 0;
-			w = w->Clip( p->plane, 0.1f );
+			cuttingPlanes.AddGrow(p->plane);
 		}
 		else if ( p->nodes[1] == node ) {
 			side = 1;
-			w = w->Clip( -p->plane, 0.1f );
+			cuttingPlanes.AddGrow(-p->plane);
 		}
 		else {
 			common->Error( "MakeNodePortal: mislinked portal" );
 		}
 	}
 
+	idWinding *w = idWinding::CreateTrimmedPlane( node->plane, cuttingPlanes.Num(), cuttingPlanes.Ptr(), BASE_WINDING_EPSILON );
 	if ( !w ) {
 		return;
 	}
@@ -1133,7 +1115,7 @@ void idBrushBSP::MakeNodePortal( idBrushBSPNode *node ) {
 		return;
 	}
 
-	newPortal = new idBrushBSPPortal();
+	idBrushBSPPortal *newPortal = new idBrushBSPPortal();
 	newPortal->plane = node->plane;
 	newPortal->winding = w;
 	newPortal->AddToNodes( node->children[0], node->children[1] );
@@ -1333,6 +1315,7 @@ idBrushBSP::Portalize
 ============
 */
 void idBrushBSP::Portalize( void ) {
+	TRACE_CPU_SCOPE("PortalizeBSP")
 	common->Printf( "[Portalize BSP]\n" );
 	common->Printf( "%6d nodes\n", (numSplits - numPrunedSplits) * 2 + 1 );
 	numPortals = 0;
@@ -1578,6 +1561,7 @@ idBrushBSP::RemoveOutside
 ============
 */
 bool idBrushBSP::RemoveOutside( const idMapFile *mapFile, int contents, const idStrList &classNames ) {
+	TRACE_CPU_SCOPE("RemoveOutside")
 	common->Printf( "[Remove Outside]\n" );
 
 	solidLeafNodes = outsideLeafNodes = insideLeafNodes = 0;
@@ -1801,6 +1785,7 @@ idBrushBSP::MergePortals
 */
 void idBrushBSP::MergePortals( int skipContents ) {
 	numMergedPortals = 0;
+	TRACE_CPU_SCOPE("MergePortals")
 	common->Printf( "[Merge Portals]\n" );
 	SetPortalPlanes();
 	MergePortals_r( root, skipContents );
@@ -1818,6 +1803,24 @@ void idBrushBSP::PruneMergedTree_r( idBrushBSPNode *node ) {
 
 	if ( !node ) {
 		return;
+	}
+	// stgatilov #5212: moved here from explicit call to RemoveFlagRecurse in idAASBuild::MergeLeafNodes
+	node->RemoveFlag( NODE_DONE );
+
+	// stgatilov #5212: replace references to zombies with references to merged nodes
+	for ( int i = 0; i < 2; i++ ) {
+		idBrushBSPNode *&child = node->children[i];
+		if ( child && ( child->GetFlags() & NODE_ZOMBIE ) ) {
+			idBrushBSPNode *x;
+			// find out where this chain ends
+			for ( x = child; x->GetFlags() & NODE_ZOMBIE; x = x->parent );
+			idBrushBSPNode *head = x;
+			// path compression: direct every node in chain directly fo the head
+			for ( x = child; x != head; x = x->parent )
+				x->parent = head;
+			// replace child link with the merged node
+			child = head;
+		}
 	}
 
 	PruneMergedTree_r( node->children[0] );
@@ -1880,7 +1883,7 @@ idBrushBSP::TryMergeLeafNodes
   NOTE: multiple brances of the BSP tree might point to the same leaf node after merging
 ============
 */
-bool idBrushBSP::TryMergeLeafNodes( idBrushBSPPortal *portal, int side ) {
+bool idBrushBSP::TryMergeLeafNodes( idBrushBSPPortal *portal, int side, idList<idBrushBSPNode*> &zombieNodes ) {
 	int i, j, k, s1, s2, s;
 	idBrushBSPNode *nodes[2], *node1, *node2;
 	idBrushBSPPortal *p1, *p2, *p, *nextp;
@@ -1959,10 +1962,21 @@ bool idBrushBSP::TryMergeLeafNodes( idBrushBSPPortal *portal, int side ) {
 		bounds += b;
 	}
 
+#if 0
 	// replace every reference to node2 by a reference to node1
+	// stgatilov: this is unreliable since it uses numeric pruning to find references!
+	// sometimes a reference go unnoticed, which result in crash from accessing deleted memory later
 	UpdateTreeAfterMerge_r( root, bounds, node2, node1 );
-
 	delete node2;
+#else
+	// stgatilov #5212: mark node as "zombie" for now, and remember its parent
+	// whenever we get into this node in BSP tree traversal, we'll redirect to the parent
+	node2->~idBrushBSPNode();
+	memset(node2, 0, sizeof(*node2));
+	node2->flags = NODE_ZOMBIE;
+	node2->parent = node1;
+	zombieNodes.Append(node2);
+#endif
 
 	return true;
 }
@@ -2020,6 +2034,12 @@ void idBrushBSP::MeltFlood_r( idBrushBSPNode *node, int skipContents, idBounds &
 	}
 }
 
+idCVar dmap_fasterAasMeltPortals(
+	"dmap_fasterAasMeltPortals", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"Use hash table of small size in idBrushBSP::MeltLeafNodePortals during AAS compilation. "
+	"This is performance improvement in TDM 2.10."
+);
+
 /*
 ============
 idBrushBSP::MeltLeafNodePortals
@@ -2044,8 +2064,15 @@ void idBrushBSP::MeltLeafNodePortals( idBrushBSPNode *node, int skipContents, id
 			continue;
 		}
 
+		//note: number of hash cells is 4*4*4 = 64 !
+		int VERTEX_MELT_HASH_SIZE = 4;
+		if (!dmap_fasterAasMeltPortals.GetBool())
+			VERTEX_MELT_HASH_SIZE = 32;	//32 x 32 x 32 = 65536 cells (256 KB to clear per portal!)
+
 		p1->winding->GetBounds( bounds );
 		bounds.ExpandSelf( 2 * VERTEX_MELT_HASH_SIZE * VERTEX_MELT_EPSILON );
+		//stgatilov: only the first Init allocates memory
+		//all the rest should reuse old memory buffers, only clearing their contents
 		vertexList.Init( bounds[0], bounds[1], VERTEX_MELT_HASH_SIZE, 128 );
 
 		// get all vertices to be considered
@@ -2129,6 +2156,7 @@ idBrushBSP::MeltPortals
 ============
 */
 void idBrushBSP::MeltPortals( int skipContents ) {
+	TRACE_CPU_SCOPE("MeltPortals")
 	idVectorSet<idVec3,3> vertexList;
 
 	numInsertedPoints = 0;

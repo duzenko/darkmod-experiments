@@ -1,22 +1,20 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __CVARSYSTEM_H__
 #define __CVARSYSTEM_H__
-
-#include <functional>
 
 /*
 ===============================================================================
@@ -83,7 +81,6 @@ typedef enum {
 	CVAR_SERVERINFO			= BIT(10),	// sent from servers, available to menu
 	CVAR_NETWORKSYNC		= BIT(11),	// cvar is synced from the server to clients
 	CVAR_STATIC				= BIT(12),	// statically declared, not user created
-	CVAR_CHEAT				= BIT(13),	// variable is considered a cheat
 	CVAR_NOCHEAT			= BIT(14),	// variable is not considered a cheat
 	CVAR_INIT				= BIT(15),	// can only be set from the command-line
 	CVAR_ROM				= BIT(16),	// display only, cannot be set by user at all
@@ -115,22 +112,22 @@ public:
 
 	virtual					~idCVar( void ) {}
 
-	const char *			GetName( void ) const { return internalVar->name; }
-	int						GetFlags( void ) const { return internalVar->flags; }
-	const char *			GetDescription( void ) const { return internalVar->description; }
-	float					GetMinValue( void ) const { return internalVar->valueMin; }
-	float					GetMaxValue( void ) const { return internalVar->valueMax; }
-	const char **			GetValueStrings( void ) const { return valueStrings; }
-	argCompletion_t			GetValueCompletion( void ) const { return valueCompletion; }
+	ID_FORCE_INLINE const char *		GetName( void ) const { return internalVar->name; }
+	ID_FORCE_INLINE int					GetFlags( void ) const { return internalVar->flags; }
+	ID_FORCE_INLINE const char *		GetDescription( void ) const { return internalVar->description; }
+	ID_FORCE_INLINE float				GetMinValue( void ) const { return internalVar->valueMin; }
+	ID_FORCE_INLINE float				GetMaxValue( void ) const { return internalVar->valueMax; }
+	ID_FORCE_INLINE const char **		GetValueStrings( void ) const { return valueStrings; }
+	ID_FORCE_INLINE argCompletion_t		GetValueCompletion( void ) const { return valueCompletion; }
 
-	bool					IsModified( void ) const { return ( internalVar->flags & CVAR_MODIFIED ) != 0; }
+	ID_FORCE_INLINE bool					IsModified( void ) const { return ( internalVar->flags & CVAR_MODIFIED ) != 0; }
 	void					SetModified( void ) { internalVar->flags |= CVAR_MODIFIED; }
 	void					ClearModified( void ) { internalVar->flags &= ~CVAR_MODIFIED; }
 
-	const char *			GetString( void ) const { return internalVar->value; }
-	bool					GetBool( void ) const { return ( internalVar->integerValue != 0 ); }
-	int						GetInteger( void ) const { return internalVar->integerValue; }
-	float					GetFloat( void ) const { return internalVar->floatValue; }
+	ID_FORCE_INLINE const char *			GetString( void ) const { return internalVar->value; }
+	ID_FORCE_INLINE bool					GetBool( void ) const { return ( internalVar->integerValue != 0 ); }
+	ID_FORCE_INLINE int						GetInteger( void ) const { return internalVar->integerValue; }
+	ID_FORCE_INLINE float					GetFloat( void ) const { return internalVar->floatValue; }
 
 	void					SetString( const char *value ) { internalVar->InternalSetString( value ); }
 	void					SetBool( const bool value ) { internalVar->InternalSetBool( value ); }
@@ -140,15 +137,6 @@ public:
 	void					SetInternalVar( idCVar *cvar ) { internalVar = cvar; }
 
 	static void				RegisterStaticVars( void );
-
-	// Function signature for modification signals, e.g. void OnCVarModified()
-	typedef std::function<void ()> OnModifiedFunc;
-
-	// greebo: Registers a function to get notified on modifications. Is called on all subsequent CVAR modifications. 
-	// Callbacks are called in the order they've been registered. A non-negative integer is returned which can be used
-	// to de-register callbacks again
-	int						AddOnModifiedCallback(const OnModifiedFunc& callback) { return internalVar->InternalAddOnModifiedCallback(callback); }
-	void					RemoveOnModifiedCallback(int handle) { internalVar->InternalRemoveOnModifiedCallback(handle); }
 
 protected:
 	const char *			name;					// name
@@ -172,10 +160,24 @@ private:
 	virtual void			InternalSetBool( const bool newValue ) {}
 	virtual void			InternalSetInteger( const int newValue ) {}
 	virtual void			InternalSetFloat( const float newValue ) {}
-	virtual int				InternalAddOnModifiedCallback(const OnModifiedFunc& callback) { return -1; }
-	virtual void			InternalRemoveOnModifiedCallback(int handle) {}
 
 	static idCVar *			staticVars;
+};
+
+class idCVarInt : public idCVar {
+public:
+	idCVarInt( const char *name, const char *value, int flags, const char *description )
+		: idCVar( name, value, flags | CVAR_INTEGER, description ) {}
+	operator				int() { return GetInteger(); }
+	void operator			= ( int newValue ) { SetInteger( newValue ); }
+};
+
+class idCVarBool : public idCVar {
+public:
+	idCVarBool( const char *name, const char *value, int flags, const char *description )
+		: idCVar( name, value, flags | CVAR_BOOL, description ) {}
+	operator				bool() { return GetBool(); }
+	void operator			= ( bool newValue ) { SetBool( newValue ); }
 };
 
 ID_INLINE idCVar::idCVar( const char *name, const char *value, int flags, const char *description,

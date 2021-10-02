@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /*
@@ -411,6 +411,7 @@ void idCollisionModelManagerLocal::FreeMap( void ) {
 	FreeTrmModelStructure();
 
 	Mem_Free( models );
+	modelsHash.ClearFree();
 
 	Clear();
 
@@ -2668,6 +2669,13 @@ void idCollisionModelManagerLocal::ConvertBrushSides( cm_model_t *model, const i
 	}
 }
 
+static idCVar cm_fixBrushContentsIgnoreLastSide("cm_fixBrushContentsIgnoreLastSide", "1", CVAR_BOOL | CVAR_SYSTEM, 
+	"If set to 0, then the last side of a brush is ignored when determining brush contents. "
+	"This usually affects water brushes, making them non-liquid. "
+	"Takes effect during dmap, and only if you have deleted .cm file beforehand! "
+	"This bug was fixed in TDM 2.08."
+);
+
 /*
 ================
 idCollisionModelManagerLocal::ConvertBrush
@@ -2692,9 +2700,11 @@ void idCollisionModelManagerLocal::ConvertBrush( cm_model_t *model, const idMapB
 		planes[i].FixDegeneracies( DEGENERATE_DIST_EPSILON );
 	}
 
-	// we are only getting the bounds for the brush so there's no need
-	// to create a winding for the last brush side
-	for ( i = 0; i < mapBrush->GetNumSides() - 1; i++ ) {
+	// stgatilov #5014: unlike what original D3 said,
+	// we MUST include the last brush too, because we are looking for "contents" here!
+	for ( i = 0; i < mapBrush->GetNumSides(); i++ ) {
+		if ( !cm_fixBrushContentsIgnoreLastSide.GetBool() && i == mapBrush->GetNumSides() - 1 )
+			continue;
 		mapSide = mapBrush->GetSide(i);
 		material = declManager->FindMaterial( mapSide->GetMaterial() );
 		contents |= ( material->GetContentFlags() & CONTENTS_REMOVE_UTIL );
@@ -2992,7 +3002,7 @@ cm_model_t *idCollisionModelManagerLocal::LoadRenderModel( const char *fileName,
 
 	// only load ASE and LWO models
 	idStr( fileName ).ExtractFileExtension( extension );
-	if ( ( extension.Icmp( "ase" ) != 0 ) && ( extension.Icmp( "lwo" ) != 0 ) && ( extension.Icmp( "ma" ) != 0 ) ) {
+	if ( ( extension.Icmp( "ase" ) != 0 ) && ( extension.Icmp( "lwo" ) != 0 ) && ( extension.Icmp( "ma" ) != 0 ) && ( extension.Icmp( "proxy" ) != 0 ) ) {
 		return NULL;
 	}
 
@@ -3018,7 +3028,7 @@ cm_model_t *idCollisionModelManagerLocal::LoadRenderModel( const char *fileName,
 	collisionSurface = false;
 	for ( i = 0; i < renderModel->NumSurfaces(); i++ ) {
 		surf = renderModel->Surface( i );
-		const idMaterial* shader = GetSkinnedShader( surf->shader, skin ); // #4232
+		const idMaterial* shader = GetSkinnedShader( surf->material, skin ); // #4232
 		if ( shader->GetSurfaceFlags() & SURF_COLLISION ) {
 			collisionSurface = true;
 		}
@@ -3026,7 +3036,7 @@ cm_model_t *idCollisionModelManagerLocal::LoadRenderModel( const char *fileName,
 
 	for ( i = 0; i < renderModel->NumSurfaces(); i++ ) {
 		surf = renderModel->Surface( i );
-		const idMaterial* shader = GetSkinnedShader( surf->shader, skin ); // #4232
+		const idMaterial* shader = GetSkinnedShader( surf->material, skin ); // #4232
 		// if this surface has no contents
 		if ( ! ( shader->GetContentFlags() & CONTENTS_REMOVE_UTIL ) ) {
 			continue;
@@ -3053,7 +3063,7 @@ cm_model_t *idCollisionModelManagerLocal::LoadRenderModel( const char *fileName,
 
 	for ( i = 0; i < renderModel->NumSurfaces(); i++ ) {
 		surf = renderModel->Surface( i );
-		const idMaterial* shader = GetSkinnedShader( surf->shader, skin ); // #4232
+		const idMaterial* shader = GetSkinnedShader( surf->material, skin ); // #4232
 		// if this surface has no contents
 		if ( ! ( shader->GetContentFlags() & CONTENTS_REMOVE_UTIL ) ) {
 			continue;
@@ -3064,10 +3074,15 @@ cm_model_t *idCollisionModelManagerLocal::LoadRenderModel( const char *fileName,
 		}
 
 		for ( j = 0; j < surf->geometry->numIndexes; j += 3 ) {
+			idVec3 v2 = surf->geometry->verts[ surf->geometry->indexes[ j + 2 ] ].xyz;
+			idVec3 v1 = surf->geometry->verts[ surf->geometry->indexes[ j + 1 ] ].xyz;
+			idVec3 v0 = surf->geometry->verts[ surf->geometry->indexes[ j + 0 ] ].xyz;
+			if (idWinding::TriangleAreaDbl(v2, v0, v1) == 0.0)
+				continue;	//avoid singular triangles with NaN plane
 			w.Clear();
-			w += surf->geometry->verts[ surf->geometry->indexes[ j + 2 ] ].xyz;
-			w += surf->geometry->verts[ surf->geometry->indexes[ j + 1 ] ].xyz;
-			w += surf->geometry->verts[ surf->geometry->indexes[ j + 0 ] ].xyz;
+			w += v2;
+			w += v1;
+			w += v0;
 			w.GetPlane( plane );
 			plane = -plane;
 			PolygonFromWinding( model, &w, plane, shader, 1 );
@@ -3187,22 +3202,44 @@ cm_model_t *idCollisionModelManagerLocal::CollisionModelForMapEntity( const idMa
 
 /*
 ================
+idCollisionModelManagerLocal::AddModel
+================
+*/
+cmHandle_t idCollisionModelManagerLocal::AddModel( cm_model_t *model ) {
+	if ( numModels >= MAX_SUBMODELS ) {
+		common->Warning( "AddModel: no free slots" );
+		// since we don't get ownership over model as usual, delete it right now
+		delete model;
+		return -1;
+	}
+	// add both to array of models and to hash table by name
+	int idx = numModels++;
+	models[idx] = model;
+	modelsHash.Add( modelsHash.GenerateKey( model->name, false ), idx );
+	return idx;
+}
+
+/*
+================
 idCollisionModelManagerLocal::FindModel
 ================
 */
 cmHandle_t idCollisionModelManagerLocal::FindModel( const char *name ) {
-	int i;
-
 	// check if this model is already loaded
-	for ( i = 0; i < numModels; i++ ) {
+	int hash = modelsHash.GenerateKey( name, false );
+	for ( int i = modelsHash.First( hash ); i != -1; i = modelsHash.Next( i ) ) {
 		if ( !models[i]->name.Icmp( name ) ) {
-			break;
+			// the model is already loaded
+			return i;
 		}
 	}
-	// if the model is already loaded
-	if ( i < numModels ) {
-		return i;
+
+#if _DEBUG	//make sure hash index is correct
+	for ( int i = 0; i < numModels; i++ ) {
+		assert( models[i]->name.Icmp( name ) != 0);
 	}
+#endif
+
 	return -1;
 }
 
@@ -3320,13 +3357,12 @@ void idCollisionModelManagerLocal::BuildModels( const idMapFile *mapFile ) {
 		for ( i = 0; i < mapFile->GetNumEntities(); i++ ) {
 			mapEnt = mapFile->GetEntity(i);
 
-			if ( numModels >= MAX_SUBMODELS ) {
-				common->Error( "idCollisionModelManagerLocal::BuildModels: more than %d collision models", MAX_SUBMODELS );
-				break;
-			}
-			models[numModels] = CollisionModelForMapEntity( mapEnt );
-			if ( models[ numModels] ) {
-				numModels++;
+			cm_model_t *model = CollisionModelForMapEntity( mapEnt );
+			if ( model ) {
+				cmHandle_t hdl = AddModel( model );
+				if ( hdl == -1 ) {
+					common->Error( "idCollisionModelManagerLocal::BuildModels: more than %d collision models", MAX_SUBMODELS );
+				}
 			}
 		}
 
@@ -3383,6 +3419,8 @@ void idCollisionModelManagerLocal::LoadMap( const idMapFile *mapFile ) {
 	maxModels = MAX_SUBMODELS;
 	numModels = 0;
 	models = (cm_model_t **) Mem_ClearedAlloc( (maxModels+1) * sizeof(cm_model_t *) );
+	modelsHash.ClearFree(1024, 1024);
+	modelsHash.SetGranularity(1024);
 
 	// setup hash to speed up finding shared vertices and edges
 	SetupHash();
@@ -3522,17 +3560,14 @@ idCollisionModelManagerLocal::LoadModel
 */
 cmHandle_t idCollisionModelManagerLocal::LoadModel( const char *modelName, const bool precache, const idDeclSkin* skin ) // skin added #4232 SteveL
 {
+	idStr skinnedName = GetSkinnedName( modelName, skin);
+	TRACE_CPU_SCOPE_STR("Load:CM", skinnedName)
 	int handle;
 
-	handle = FindModel( GetSkinnedName( modelName, skin) );
+	handle = FindModel( skinnedName );
 	if ( handle >= 0 )
 	{
 		return handle;
-	}
-
-	if ( numModels >= MAX_SUBMODELS ) {
-		common->Error( "idCollisionModelManagerLocal::LoadModel: no free slots\n" );
-		return 0;
 	}
 
 	// try to load a .cm file, if the model isn't skinned
@@ -3547,17 +3582,17 @@ cmHandle_t idCollisionModelManagerLocal::LoadModel( const char *modelName, const
 
 	// if only precaching .cm files do not waste memory converting render models
 	if ( precache ) {
-		return 0;
+		return -1;
 	}
 
 	// try to load a .ASE or .LWO model and convert it to a collision model
-	models[numModels] = LoadRenderModel( modelName, skin );
-	if ( models[numModels] != NULL ) {
-		numModels++;
-		return ( numModels - 1 );
+	cm_model_t *model = LoadRenderModel( modelName, skin );
+	if ( model ) {
+		cmHandle_t hdl = AddModel( model );
+		return hdl;
 	}
 
-	return 0;
+	return -1;
 }
 
 /*
@@ -3706,7 +3741,7 @@ bool idCollisionModelManagerLocal::TrmFromModel( const char *modelName, idTraceM
 	cmHandle_t handle;
 
 	handle = LoadModel( modelName, false );
-	if ( !handle ) {
+	if ( handle == -1 ) {
 		common->Printf( "idCollisionModelManagerLocal::TrmFromModel: model %s not found.\n", modelName );
 		return false;
 	}

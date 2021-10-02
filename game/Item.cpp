@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /**
@@ -72,7 +72,6 @@ idItem::idItem()
 	shellMaterial = NULL;
 	orgOrigin.Zero();
 	canPickUp = true;
-	fl.networkSync = true;
 
 	m_FrobActionScript = "frob_item";
 
@@ -343,7 +342,7 @@ void idItem::Spawn( void )
 		PostEventMS( &EV_Touch, 0, ent, 0 );
 	}
 
-	if ( spawnArgs.GetBool( "spin" ) || gameLocal.isMultiplayer )
+	if ( spawnArgs.GetBool( "spin" ) )
 	{
 		spin = true;
 		BecomeActive( TH_THINK );
@@ -532,11 +531,6 @@ bool idItem::Pickup( idPlayer *player )
 		return false;
 	}
 
-	if ( gameLocal.isServer )
-	{
-		ServerSendEvent( EVENT_PICKUP, NULL, false, -1 );
-	}
-
 	// play pickup sound
 	StartSound( "snd_acquire", SND_CHANNEL_ITEM, 0, false, NULL );
 
@@ -562,10 +556,6 @@ bool idItem::Pickup( idPlayer *player )
 	float respawn = spawnArgs.GetFloat( "respawn" );
 	bool dropped = spawnArgs.GetBool( "dropped" );
 	bool no_respawn = spawnArgs.GetBool( "no_respawn" );
-
-	if ( gameLocal.isMultiplayer && respawn == 0.0f ) {
-		respawn = 20.0f;
-	}
 
 	if ( respawn && !dropped && !no_respawn ) {
 		const char *sfx = spawnArgs.GetString( "fxRespawn" );
@@ -716,9 +706,6 @@ idItem::Event_Respawn
 ================
 */
 void idItem::Event_Respawn( void ) {
-	if ( gameLocal.isServer ) {
-		ServerSendEvent( EVENT_RESPAWN, NULL, false, -1 );
-	}
 	BecomeActive( TH_THINK );
 	Show();
 	inViewTime = -1000;
@@ -739,9 +726,6 @@ idItem::Event_RespawnFx
 ================
 */
 void idItem::Event_RespawnFx( void ) {
-	if ( gameLocal.isServer ) {
-		ServerSendEvent( EVENT_RESPAWNFX, NULL, false, -1 );
-	}
 	const char *sfx = spawnArgs.GetString( "fxRespawn" );
 	if ( sfx && *sfx ) {
 		idEntityFx::StartFx( sfx, NULL, NULL, this, true );

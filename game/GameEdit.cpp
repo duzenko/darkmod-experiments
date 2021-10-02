@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -264,10 +264,10 @@ void idDragEntity::Update( idPlayer *player ) {
 		if ( joint != INVALID_JOINT && renderEntity && dragAnimator ) {
 			dragAnimator->GetJointTransform( joint, gameLocal.time, cursor->draggedPosition, axis );
 			cursor->draggedPosition = renderEntity->origin + cursor->draggedPosition * renderEntity->axis;
-			gameRenderWorld->DrawText( va( "%s\n%s\n%s, %s", drag->GetName(), drag->GetType()->classname, dragAnimator->GetJointName( joint ), bodyName.c_str() ), cursor->GetPhysics()->GetOrigin(), 0.1f, colorWhite, viewAxis, 1 );
+			gameRenderWorld->DebugText( va( "%s\n%s\n%s, %s", drag->GetName(), drag->GetType()->classname, dragAnimator->GetJointName( joint ), bodyName.c_str() ), cursor->GetPhysics()->GetOrigin(), 0.1f, colorWhite, viewAxis, 1 );
 		} else {
 			cursor->draggedPosition = cursor->GetPhysics()->GetOrigin();
-			gameRenderWorld->DrawText( va( "%s\n%s\n%s", drag->GetName(), drag->GetType()->classname, bodyName.c_str() ), cursor->GetPhysics()->GetOrigin(), 0.1f, colorWhite, viewAxis, 1 );
+			gameRenderWorld->DebugText( va( "%s\n%s\n%s", drag->GetName(), drag->GetType()->classname, bodyName.c_str() ), cursor->GetPhysics()->GetOrigin(), 0.1f, colorWhite, viewAxis, 1 );
 		}
 	}
 
@@ -621,28 +621,28 @@ void idEditEntities::DisplayEntities( void ) {
 			idVec3 start = ent->GetPhysics()->GetOrigin();
 			idVec3 end = start + idVec3( 1, 0, 0 ) * 20.0f;
 			gameRenderWorld->DebugArrow( colorWhite, start, end, 2 );
-			gameRenderWorld->DrawText( "x+", end + idVec3( 4, 0, 0 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "x+", end + idVec3( 4, 0, 0 ), 0.15f, colorWhite, axis );
 			end = start + idVec3( 1, 0, 0 ) * -20.0f;
 			gameRenderWorld->DebugArrow( colorWhite, start, end, 2 );
-			gameRenderWorld->DrawText( "x-", end + idVec3( -4, 0, 0 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "x-", end + idVec3( -4, 0, 0 ), 0.15f, colorWhite, axis );
 			end = start + idVec3( 0, 1, 0 ) * +20.0f;
 			gameRenderWorld->DebugArrow( colorGreen, start, end, 2 );
-			gameRenderWorld->DrawText( "y+", end + idVec3( 0, 4, 0 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "y+", end + idVec3( 0, 4, 0 ), 0.15f, colorWhite, axis );
 			end = start + idVec3( 0, 1, 0 ) * -20.0f;
 			gameRenderWorld->DebugArrow( colorGreen, start, end, 2 );
-			gameRenderWorld->DrawText( "y-", end + idVec3( 0, -4, 0 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "y-", end + idVec3( 0, -4, 0 ), 0.15f, colorWhite, axis );
 			end = start + idVec3( 0, 0, 1 ) * +20.0f;
 			gameRenderWorld->DebugArrow( colorBlue, start, end, 2 );
-			gameRenderWorld->DrawText( "z+", end + idVec3( 0, 0, 4 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "z+", end + idVec3( 0, 0, 4 ), 0.15f, colorWhite, axis );
 			end = start + idVec3( 0, 0, 1 ) * -20.0f;
 			gameRenderWorld->DebugArrow( colorBlue, start, end, 2 );
-			gameRenderWorld->DrawText( "z-", end + idVec3( 0, 0, -4 ), 0.15f, colorWhite, axis );
+			gameRenderWorld->DebugText( "z-", end + idVec3( 0, 0, -4 ), 0.15f, colorWhite, axis );
 		}
 
 		if ( textKey.Length() ) {
 			const char *text = ent->spawnArgs.GetString( textKey );
 			if ( viewTextBounds.ContainsPoint( ent->GetPhysics()->GetOrigin() ) ) {
-				gameRenderWorld->DrawText( text, ent->GetPhysics()->GetOrigin() + idVec3(0, 0, 12), 0.25, colorWhite, axis, 1 );
+				gameRenderWorld->DebugText( text, ent->GetPhysics()->GetOrigin() + idVec3(0, 0, 12), 0.25, colorWhite, axis, 1 );
 			}
 		}
 	}
@@ -734,7 +734,15 @@ const idDict *idGameEdit::FindEntityDefDict( const char *name, bool makeDefault 
 idGameEdit::SpawnEntityDef
 ================
 */
-void idGameEdit::SpawnEntityDef( const idDict &args, idEntity **ent ) {
+void idGameEdit::SpawnEntityDef( const idDict &args, idEntity **ent, int flags ) {
+	if (flags & sedRespawn) {
+		assert(ent && *ent);
+		EntityDelete(*ent, false);
+	}
+	if ((flags & sedRespectInhibit) && gameLocal.InhibitEntitySpawn(args))
+		return;	//inhibited
+	if (flags & sedCacheMedia)
+		gameLocal.CacheDictionaryMedia(&args);
 	gameLocal.SpawnEntityDef( args, ent );
 }
 
@@ -800,7 +808,11 @@ idGameEdit::EntitySetOrigin
 */
 void idGameEdit::EntitySetOrigin( idEntity *ent, const idVec3 &org ) {
 	if ( ent ) {
-		ent->SetOrigin( org );
+		if ( ent->IsType(CBinaryFrobMover::Type) ) {
+			((CBinaryFrobMover*)ent)->SetMapOriginAxis( &org, NULL );
+		} else {
+			ent->SetOrigin( org );
+		}
 	}
 }
 
@@ -811,7 +823,11 @@ idGameEdit::EntitySetAxis
 */
 void idGameEdit::EntitySetAxis( idEntity *ent, const idMat3 &axis ) {
 	if ( ent ) {
-		ent->SetAxis( axis );
+		if ( ent->IsType(CBinaryFrobMover::Type) ) {
+			((CBinaryFrobMover*)ent)->SetMapOriginAxis( NULL, &axis );
+		} else {
+			ent->SetAxis( axis );
+		}
 	}
 }
 
@@ -918,8 +934,69 @@ void idGameEdit::EntityStopSound( idEntity *ent ) {
 idGameEdit::EntityDelete
 ================
 */
-void idGameEdit::EntityDelete( idEntity *ent ) {
-	delete ent;
+void idGameEdit::EntityDelete( idEntity *ent, bool safe ) {
+	//stgatilov: entity destructor marks sound emitter for removal, but does not remove it immediately
+	//when we are deleting entity during map edit, we definitely want its sound to stop
+	//otherwise doing reloadMap after removing looping "speaker"-s has no effect (sound continues playing)
+	EntityStopSound(ent);
+
+	if (safe)
+		ent->PostEventMS(&EV_Remove, 0);
+	else {
+		//force-remove bound entities right NOW
+		//otherwise, their removal will be scheduled for next frame...
+		//if this is called in case of respawning, we want to have bound stuff killed before we recreate it
+		ent->RemoveBinds(true);
+
+		ent->Event_Remove();
+	}
+}
+
+/*
+================
+idGameEdit::EntityUpdateLOD
+================
+*/
+void idGameEdit::EntityUpdateLOD( idEntity *ent ) {
+	//delete old memory for LOD info
+	if ( ent->m_LODHandle )
+		gameLocal.m_ModelGenerator->UnregisterLODData( ent->m_LODHandle );
+
+	//reparse LOD spawnargs again, getting new handle
+	//note: new handle can be zero if user has removed LOD!
+	ent->m_LODHandle = ent->ParseLODSpawnargs( &ent->spawnArgs, gameLocal.random.RandomFloat() );
+
+	//recompute LOD level and reset all settings accordingly
+	//note: we cannot rely on this method being called from idEntity::Think
+	//because user could have disabled/removed LOD (e.g. m_LODHandle = 0)
+	ent->SwitchLOD();
+
+	//probably not necessary
+	ent->BecomeActive( TH_THINK );
+}
+
+/*
+================
+idGameEdit::EntityUpdateShaderParms
+================
+*/
+void idGameEdit::EntityUpdateShaderParms( idEntity *ent ) {
+	//copy/pasted from idGameEdit::ParseSpawnArgsToRenderEntity
+	renderEntity_t *renderEntity = ent->GetRenderEntity();
+	const idDict *args = &ent->spawnArgs;
+	idVec3 color = args->GetVector( "_color", "1 1 1" );
+	renderEntity->shaderParms[ SHADERPARM_RED ]		= color[0];
+	renderEntity->shaderParms[ SHADERPARM_GREEN ]	= color[1];
+	renderEntity->shaderParms[ SHADERPARM_BLUE ]	= color[2];
+	renderEntity->shaderParms[ 3 ]					= args->GetFloat( "shaderParm3", "1" );
+	renderEntity->shaderParms[ 4 ]					= args->GetFloat( "shaderParm4", "0" );
+	renderEntity->shaderParms[ 5 ]					= args->GetFloat( "shaderParm5", "0" );
+	renderEntity->shaderParms[ 6 ]					= args->GetFloat( "shaderParm6", "0" );
+	renderEntity->shaderParms[ 7 ]					= args->GetFloat( "shaderParm7", "0" );
+	renderEntity->shaderParms[ 8 ]					= args->GetFloat( "shaderParm8", "0" );
+	renderEntity->shaderParms[ 9 ]					= args->GetFloat( "shaderParm9", "0" );
+	renderEntity->shaderParms[ 10 ]					= args->GetFloat( "shaderParm10", "0" );
+	renderEntity->shaderParms[ 11 ]					= args->GetFloat( "shaderParm11", "0" );
 }
 
 /*

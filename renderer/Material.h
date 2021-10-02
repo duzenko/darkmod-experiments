@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MATERIAL_H__
@@ -29,6 +29,8 @@ class idCinematic;
 class idUserInterface;
 class idMegaTexture;
 
+class GLSLProgram;
+
 // moved from image.h for default parm
 typedef enum {
 	TF_LINEAR,
@@ -39,8 +41,6 @@ typedef enum {
 typedef enum {
 	TR_REPEAT,
 	TR_CLAMP,
-	TR_CLAMP_TO_BORDER,		// this should replace TR_CLAMP_TO_ZERO and TR_CLAMP_TO_ZERO_ALPHA,
-							// but I don't want to risk changing it right now
 	TR_CLAMP_TO_ZERO,		// guarantee 0,0,0,255 edge for projected textures,
 	// set AFTER image format selection
 	TR_CLAMP_TO_ZERO_ALPHA	// guarantee 0 alpha edge for projected textures,
@@ -175,17 +175,15 @@ static const int	MAX_FRAGMENT_IMAGES = 8;
 static const int	MAX_VERTEX_PARMS = 4;
 
 typedef struct {
-	int					vertexProgram;
 	int					numVertexParms;
 	int					vertexParms[MAX_VERTEX_PARMS][4];	// evaluated register indexes
 
-	int					fragmentProgram;
 	int					numFragmentProgramImages;
 	idImage *			fragmentProgramImages[MAX_FRAGMENT_IMAGES];
 
-	idMegaTexture		*megaTexture;		// handles all the binding and parameter setting 
+	//idMegaTexture		*megaTexture;		// handles all the binding and parameter setting 
 
-	bool				GLSL;
+	GLSLProgram			*glslProgram;
 } newShaderStage_t;
 
 typedef struct {
@@ -231,7 +229,9 @@ typedef enum {
 
 	SS_AFTER_FOG = 90,
 
-	SS_POST_PROCESS = 100	// after a screen copy to texture
+	SS_POST_PROCESS = 100,	// after a screen copy to texture
+
+	SS_LAST = 200		// e.g. a fake glow that we might want draw after postProcess/water
 } materialSort_t;
 
 typedef enum {
@@ -385,13 +385,17 @@ public:
 						// a mirror or dynamic rendered image
 	bool				HasSubview( void ) const { return hasSubview; }
 
+						// stgatilov: true if some texture stage works like mirror surface
+	bool				HasMirrorLikeStage() const;
+
 						// returns true if the material will generate shadows, not making a
 						// distinction between global and no-self shadows
 	bool				SurfaceCastsShadow( void ) const { return TestMaterialFlag( MF_FORCESHADOWS ) || !TestMaterialFlag( MF_NOSHADOWS ); }
 
 						// returns true if the material will generate interactions with fog/blend lights
 						// All non-translucent surfaces receive fog unless they are explicitly noFog
-	bool				ReceivesFog( void ) const { return ( IsDrawn() && !noFog && coverage != MC_TRANSLUCENT ); }
+						//nbohr1more: #3662 fix the noFog material flag. translucent materials should be fogged
+	bool				ReceivesFog( void ) const { return ( IsDrawn() && !noFog /* && coverage != MC_TRANSLUCENT */ ); }
 
 						// returns true if the material will generate interactions with normal lights
 						// Many special effect surfaces don't have any bump/diffuse/specular
@@ -538,6 +542,7 @@ public:
 	int					GetEntityGui( void ) const { return entityGui; }
 
 	decalInfo_t			GetDecalInfo( void ) const { return decalInfo; }
+	const idStr&		GetMaterialImage( void ) const { return materialImage; }
 
 						// spectrums are used for "invisible writing" that can only be
 						// illuminated by a light of matching spectrum
@@ -545,12 +550,8 @@ public:
 	
 		                // nbohr1more: #4379 lightgem culling
 	bool				IsLightgemSurf( void ) const { return isLightgemSurf; }
-	void				GetAmbientRimColor( idVec4 &color ) const { 
-		if ( ambientRimColor.registers[0] )
-			color.Set( expressionRegisters[ambientRimColor.registers[0]], expressionRegisters[ambientRimColor.registers[1]], expressionRegisters[ambientRimColor.registers[2]], 1 );
-		else
-			color.Zero();
-	}
+	colorStage_t const& GetAmbientRimColor() const { return ambientRimColor; }
+	float				FogAlpha() const { return fogAlpha; }
 
 	float				GetPolygonOffset( void ) const { return polygonOffset; }
 	float				GetShadowMapOffset( void ) const { return shadowmapOffset; }
@@ -643,6 +644,7 @@ private:
 	mutable idUserInterface	*gui;			// non-custom guis are shared by all users of a material
 
 	bool				noFog;				// surface does not create fog interactions
+	float				fogAlpha;			// fog intensity for translucent surfaces
 
 	int					spectrum;			// for invisible writing, used for both lights and surfaces
 
@@ -652,6 +654,7 @@ private:
 	int					contentFlags;		// content flags
 	int					surfaceFlags;		// surface flags	
 	mutable int			materialFlags;		// material flags
+	idStr				materialImage;
 	
 	decalInfo_t			decalInfo;
 	colorStage_t		ambientRimColor;

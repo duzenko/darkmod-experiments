@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -33,7 +33,7 @@ tdmEAS::tdmEAS(idAASLocal* aas) :
 
 void tdmEAS::Clear()
 {
-	_elevators.Clear();
+	_elevators.ClearFree();
 	_clusterInfo.clear();
 	_elevatorStations.clear();
 }
@@ -105,6 +105,7 @@ void tdmEAS::SetupClusterInfoStructures()
         _clusterInfo[i]->clusterNum = static_cast<int>(i);
 		// Make sure each ClusterInfo structure can hold RouteInfo pointers to every other cluster
 		_clusterInfo[i]->routeToCluster.resize(_clusterInfo.size());
+		_clusterInfo[i]->visitedToCluster.assign(_clusterInfo.size(), false);
 	}
 }
 
@@ -264,9 +265,14 @@ void tdmEAS::SetupRoutesBetweenClusters()
 
 	// Clear routing lists.
 
+	//stgatilov #4755: precompute areas for clusters to improve asymptotic time complexity
+	std::vector<int> areaOfCluster(_clusterInfo.size());
+	for (size_t cluster = 0; cluster < _clusterInfo.size(); cluster++)
+		areaOfCluster[cluster] = _aas->GetAreaInCluster(cluster);
+
 	for ( std::size_t startCluster = 0 ; startCluster < _clusterInfo.size() ; startCluster++ )
 	{
-        int startArea = _aas->GetAreaInCluster(static_cast<int>(startCluster));
+		int startArea = areaOfCluster[startCluster];
 
 		if (startArea <= 0)
 		{
@@ -283,7 +289,7 @@ void tdmEAS::SetupRoutesBetweenClusters()
 
 	for ( std::size_t startCluster = 0 ; startCluster < _clusterInfo.size() ; startCluster++ )
 	{
-        int startArea = _aas->GetAreaInCluster(static_cast<int>(startCluster));
+		int startArea = areaOfCluster[startCluster];
 
 		if (startArea <= 0)
 		{
@@ -302,14 +308,14 @@ void tdmEAS::SetupRoutesBetweenClusters()
 				continue;
 			}
 
-            int goalArea = _aas->GetAreaInCluster(static_cast<int>(goalCluster));
+			int goalArea = areaOfCluster[goalCluster];
 			if ( goalArea <= 0 )
 			{
 				continue;
 			}
 			
 			_routingIterations = 0;
-            FindRoutesToCluster(static_cast<int>(startCluster), startArea, static_cast<int>(goalCluster), goalArea);
+			FindRoutesToCluster(static_cast<int>(startCluster), startArea, static_cast<int>(goalCluster), goalArea);
 		}
 
 		common->PacifierUpdate(LOAD_KEY_ROUTING_INTERIM,(int)startCluster + 1); // grayman #3763
@@ -442,13 +448,13 @@ void tdmEAS::SetupReachableElevatorStations()
 			/*idBounds areaBounds = _aas->GetAreaBounds(areaNum);
 			idVec3 areaCenter = _aas->AreaCenter(areaNum);
 
-			gameRenderWorld->DrawText(va("%d", areaNum), areaCenter, 0.2f, colorRed, idAngles(0,0,0).ToMat3(), 1, 50000);
+			gameRenderWorld->DebugText(va("%d", areaNum), areaCenter, 0.2f, colorRed, idAngles(0,0,0).ToMat3(), 1, 50000);
 			gameRenderWorld->DebugBox(colorRed, idBox(areaBounds), 50000);
 
 			areaBounds = _aas->GetAreaBounds(_elevatorStations[e]->areaNum);
 			idVec3 areaCenter2 = _aas->AreaCenter(_elevatorStations[e]->areaNum);
 
-			gameRenderWorld->DrawText(va("%d", _elevatorStations[e]->areaNum), areaCenter2, 0.2f, colorBlue, idAngles(0,0,0).ToMat3(), 1, 50000);
+			gameRenderWorld->DebugText(va("%d", _elevatorStations[e]->areaNum), areaCenter2, 0.2f, colorBlue, idAngles(0,0,0).ToMat3(), 1, 50000);
 			gameRenderWorld->DebugBox(colorBlue, idBox(areaBounds), 50000);*/
 
 			idReachability* reach;
@@ -586,7 +592,7 @@ RouteInfoList tdmEAS::FindRoutesToCluster(int startCluster, int startArea, int g
 	{
 		// Do nothing for start == goal
 	}
-	else if (_clusterInfo[startCluster]->routeToCluster[goalCluster].size() > 0)
+	else if (_clusterInfo[startCluster]->visitedToCluster[goalCluster])
 	{
 		// Routing information to the goal cluster is right there, return it
 		DM_LOG(LC_AI, LT_INFO)LOGSTRING("We already tried to find a route from cluster %d to %d.\r", startCluster, goalCluster);
@@ -595,9 +601,8 @@ RouteInfoList tdmEAS::FindRoutesToCluster(int startCluster, int startArea, int g
 	{
 		DM_LOG(LC_AI, LT_INFO)LOGSTRING("Route from cluster %d to %d doesn't exist yet, check walk path.\r", startCluster, goalCluster);
 
-		// Insert a dummy route into the _clusterInfo matrix, so that we don't come here again
-		RouteInfoPtr dummyRoute(new RouteInfo(ROUTE_DUMMY, goalCluster));
-		_clusterInfo[startCluster]->routeToCluster[goalCluster].push_back(dummyRoute);
+		// Remember that we have computed this info in _clusterInfo matrix, so that we don't come here again
+		_clusterInfo[startCluster]->visitedToCluster[goalCluster] = true;
 
 		// No routing information, check walk path to the goal cluster
 		idReachability* reach;
@@ -750,13 +755,6 @@ RouteInfoList tdmEAS::FindRoutesToCluster(int startCluster, int startArea, int g
 
 	// Purge all empty RouteInfo nodes
 	CleanRouteInfo(startCluster, goalCluster);
-
-	// Keep one dummy node anyway, to signal that we already traversed this combination
-	if (_clusterInfo[startCluster]->routeToCluster[goalCluster].empty())
-	{
-		RouteInfoPtr dummyRoute(new RouteInfo(ROUTE_DUMMY, goalCluster));
-		_clusterInfo[startCluster]->routeToCluster[goalCluster].push_back(dummyRoute);
-	}
 
 	assert(_routingIterations > 0);
 	_routingIterations--;

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __LIB_H__
@@ -46,6 +46,7 @@ public:
 	static void					ShutDown( void );
 
 	// wrapper to idCommon functions 
+	static void					Printf( const char* fmt, ... );
 	static void					Error( const char *fmt, ... );
 	static void					Warning( const char *fmt, ... );
 };
@@ -128,23 +129,53 @@ void	SixtetsForInt( byte *out, int src);
 int		IntForSixtets( byte *in );
 
 
-#ifdef _DEBUG
-void AssertFailed( const char *file, int line, const char *expression );
-#undef assert
-#define assert( X )		if ( X ) { } else AssertFailed( __FILE__, __LINE__, #X )
-#endif
 
-//anon begin
-#define assert_16_byte_aligned( ptr )		assert( ( ((uintptr_t)(ptr)) & 15 ) == 0 ) //anon
 
-#define compile_time_assert( x ) static_assert( x, "Assertion failure" )
-//anon end
+template<class Context, class MethodPtr> struct LambdaToFuncPtr_detail {};
+template<class Context, class Lambda, class Ret, class... Args> struct LambdaToFuncPtr_detail<Context, Ret (Lambda::*)(Args...) const> {
+	// Oh crap! Why are they doing this to my beloved language?! =)))
+	static inline Ret thunk(Context context, Args... args) {
+		return ((Lambda*)context)->operator()(args...);
+	}
+};
+//stgatilov: converts C++11 lambda into function pointer with void* context as first argument
+//note: if you need function pointer without context, just assign a noncapturing lambda to function pointer (C++ allows that)
+template<class Lambda> inline auto LambdaToFuncPtr(Lambda &lambda) -> auto {
+	return &LambdaToFuncPtr_detail<void*, decltype(&Lambda::operator())>::thunk;
+}
+
 
 class idException {
 public:
 	char error[MAX_STRING_CHARS];
 
+	// this really, really should be a const function, but it's referenced too many places to change right now
+	const char* GetError() {
+		return error;
+	}	
+
 	idException( const char *text = "" ) { strcpy( error, text ); }
+};
+
+//stgatilov: hack which can be used to avoid costly initialization, e.g. for large arrays of idVec3
+//use with extreme caution! (do not apply to nontrivial objects)
+template<class T> struct idRaw {
+	alignas(T) char bytes[sizeof(T)];
+
+	ID_FORCE_INLINE T &Get() { return *(T*)bytes; }
+	ID_FORCE_INLINE const T &Get() const { return *(const T*)bytes; }
+	ID_FORCE_INLINE T *Ptr() { return (T*)bytes; }
+	ID_FORCE_INLINE const T *Ptr() const { return (const T*)bytes; }
+
+	void destructor() {
+		((T*)bytes)->~T();
+	}
+	void constructor() {
+		new(bytes) T();
+	}
+	template<class... Args> void constructor(Args&&... args) {
+		new(bytes) T(static_cast<Args&&>(args)...);
+	}
 };
 
 /*
@@ -154,6 +185,10 @@ public:
 
 ===============================================================================
 */
+
+// System
+#include "sys/sys_assert.h"
+#include "sys/sys_threading.h"
 
 // memory management and arrays
 #include "Heap.h"
@@ -202,7 +237,7 @@ public:
 #include "Token.h"
 #include "Lexer.h"
 #include "Parser.h"
-#include "Base64.h"
+//#include "Base64.h"
 #include "CmdArgs.h"
 
 // containers
@@ -210,6 +245,7 @@ public:
 #include "containers/BinSearch.h"
 #include "containers/HashIndex.h"
 #include "containers/HashTable.h"
+#include "containers/HashMap.h"
 #include "containers/StaticList.h"
 #include "containers/LinkList.h"
 #include "containers/Hierarchy.h"
@@ -221,7 +257,7 @@ public:
 #include "containers/PlaneSet.h"
 
 // hashing
-#include "hashing/CRC32.h"
+//#include "hashing/CRC32.h"
 #include "hashing/MD4.h"
 #include "hashing/MD5.h"
 
@@ -231,7 +267,8 @@ public:
 #include "BitMsg.h"
 #include "MapFile.h"
 #include "Timer.h"
-#include "Image.h"
+#include "Thread.h"
 #include "RevisionTracker.h"
+#include "ParallelJobList.h"
 
 #endif	/* !__LIB_H__ */

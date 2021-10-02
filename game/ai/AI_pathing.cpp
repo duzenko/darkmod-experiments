@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -451,8 +451,8 @@ int GetObstacles( const idPhysics *physics, const idAAS *aas, const idEntity *ig
 	}
 
 	// find all obstacles touching the clip bounds
-	static idClipModel* clipModelList[ MAX_GENTITIES ];
-	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, clipMask, clipModelList, MAX_GENTITIES );
+	idClip_ClipModelList clipModelList;
+	int numListedClipModels = gameLocal.clip.ClipModelsTouchingBounds( clipBounds, clipMask, clipModelList );
 
 	int numObstacles = 0; // no obstacles so far
 
@@ -1197,7 +1197,7 @@ float PathLength( idVec2 optimizedPath[MAX_OBSTACLE_PATH], int numPathPoints, co
 	}
 
 	// add penalty if this path does not go in the current direction
-	if ( curDir * ( optimizedPath[1] - optimizedPath[0] ) < 0.0f ) {
+	if ( numPathPoints >= 2 && curDir * ( optimizedPath[1] - optimizedPath[0] ) < 0.0f ) {
 		pathLength += 100.0f;
 	}
 	return pathLength;

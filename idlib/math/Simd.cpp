@@ -1,40 +1,35 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 
 #include "precompiled.h"
 #pragma hdrstop
 
-#ifdef __linux__
-#include <cpuid.h>
-#endif
-
 #include "Simd_Generic.h"
-#include "Simd_MMX.h"
 #include "Simd_SSE.h"
 #include "Simd_SSE2.h"
-#include "Simd_SSE3.h"
+#include "Simd_SSSE3.h"
 #include "Simd_AVX.h"
 #include "Simd_AVX2.h"
-#if defined(_MSC_VER) && defined(_WIN64)
-#include <intrin.h>
-#endif
+#include "Simd_IdAsm.h"
 
 idSIMDProcessor	*	processor = NULL;			// pointer to SIMD processor
 idSIMDProcessor *	generic = NULL;				// pointer to generic SIMD implementation
 idSIMDProcessor *	SIMDProcessor = NULL;
+
+
+idSIMDProcessor::~idSIMDProcessor() {}
 
 /*
 ================
@@ -53,61 +48,26 @@ void idSIMD::Init( void ) {
 idSIMD::InitProcessor
 ============
 */
-void idSIMD::InitProcessor( const char *module, bool forceGeneric ) {
-	idSIMDProcessor *newProcessor;
-
-	cpuid_t cpuid = idLib::sys->GetProcessorId();
-
-	/*
-	* Tels: Bug #2413: Under Linux, cpuid_t is 0, so use inline assembly to get
-	*       the correct flags:
-	*/
-#ifdef __linux__
-	int cores = 0;
-	unsigned int a, b, c, d, result;
-
-	// greebo: Use the cpuid function as provided by gcc
-	__get_cpuid( 0, &a, &b, &c, &d );
-
-	//idLib::common->Printf( "cpuid result is a=%x, c=%x, d=%x\n", a,c,d );
-
-	result = CPUID_GENERIC;
-	// "AuthenticAMD"
-	if ( ( 0x68747541l == a ) && ( 0x444d4163l == c ) && ( 0x69746e65l == d ) ) {
-		result = CPUID_AMD;
-	} else {
-		// "GenuineIntel"
-		if ( ( 0x756e6547l == a ) && ( 0x6c65746el == c ) && ( 0x49656e69l == d ) ) {
-			result = CPUID_INTEL;
-		}
-	}
-	__get_cpuid( 1, &a, &b, &c, &d );
-
-	// The calculation how many physical/logical CPUs the machine has is rather
-	// convuluted and differes between AMD and Intel, so we don't attempt it, we
-	// only check bits 16..23 of EBX to see if it is > 1:
-	cores = ( a >> 16 ) & 0xFF;
-
-	// These tests are the same for AMD and Intel
-	if ( ( d >> 23 ) & 0x1 ) {
-		result += CPUID_MMX;
-	}
-	if ( ( d >> 25 ) & 0x1 ) {
-		result += CPUID_SSE;
-	}
-	if ( ( d >> 26 ) & 0x1 ) {
-		result += CPUID_SSE2;
-	}
-	if ( c & 0x1 ) {
-		result += CPUID_SSE3;
+void idSIMD::InitProcessor( const char *module, const char *forceImpl ) {
+	if (processor != generic) {
+		delete processor;
+		processor = nullptr;
+		SIMDProcessor = generic;
 	}
 
-	//idLib::common->Printf( "cpuid result is %i (c = %i d = %i)\n", result, c, d);
-	cpuid = ( cpuid_t )result;
-#endif
+	int cpuid = idLib::sys->GetProcessorId();
+
+	//stgatilov: force cpuid bits for SIMD choice if compiler macros are set
+	//this is used for Elbrus compiler, which can cross-compile SSE intrinsics but has no CPUID instruction
+	#ifdef __SSE__
+		cpuid |= CPUID_SSE;
+	#endif
+	#ifdef __SSE2__
+		cpuid |= CPUID_SSE2;
+	#endif
 
 	// Print what we found to console
-	idLib::common->Printf( "Found %s CPU, features:%s%s%s%s%s%s%s%s%s\n",
+	idLib::common->Printf( "Found %s CPU, features:%s%s%s%s%s%s%s%s\n",
 	                       // Vendor
 	                       cpuid & CPUID_AMD ? "AMD" :
 	                       cpuid & CPUID_INTEL ? "Intel" :
@@ -118,7 +78,6 @@ void idSIMD::InitProcessor( const char *module, bool forceGeneric ) {
 	                       //			cores,
 	                       //		   	cores > 1 ? "cores" : "core",
 	                       // Flags
-	                       cpuid & CPUID_MMX ? " MMX" : "",
 	                       cpuid & CPUID_SSE ? " SSE" : "",
 	                       cpuid & CPUID_SSE2 ? " SSE2" : "",
 	                       cpuid & CPUID_SSE3 ? " SSE3" : "",
@@ -127,54 +86,41 @@ void idSIMD::InitProcessor( const char *module, bool forceGeneric ) {
 	                       cpuid & CPUID_AVX ? " AVX" : "",
 	                       cpuid & CPUID_AVX2 ? " AVX2" : "",
 	                       cpuid & CPUID_FMA3 ? " FMA3" : "" );
-	if ( forceGeneric ) {
 
-		newProcessor = generic;
+	bool upToSSE = ( cpuid & CPUID_SSE );
+	bool upToSSE2 = upToSSE && ( cpuid & CPUID_SSE2 );
+	bool upToSSE3 = upToSSE2 && ( cpuid & CPUID_SSE3 );
+	bool upToSSSE3 = upToSSE3 && ( cpuid & CPUID_SSSE3 );
+	bool upToSSE41 = upToSSSE3 && ( cpuid & CPUID_SSE41 );
+	bool upToAVX = upToSSE41 && ( cpuid & CPUID_AVX );
+	bool upToAVX2 = upToAVX && ( cpuid & CPUID_AVX2 ) && ( cpuid & CPUID_FMA3 );
 
+	if (false) {
+#ifdef ENABLE_SSE_PROCESSORS
+	} else if ( upToAVX2 && (!forceImpl || idStr::Icmp(forceImpl, "AVX2") == 0) ) {
+		processor = new idSIMD_AVX2;
+	} else if ( upToAVX && (!forceImpl || idStr::Icmp(forceImpl, "AVX") == 0) ) {
+		processor = new idSIMD_AVX;
+#if defined(_MSC_VER) && defined(_M_IX86)	//stgatilov: this processor is defined only on MSVC 32-bit
+	} else if ( upToSSE3 && (forceImpl && idStr::Icmp(forceImpl, "IdAsm") == 0) ) {
+		processor = new idSIMD_IdAsm;
+#endif
+	} else if ( upToSSSE3 && (!forceImpl || idStr::Icmp(forceImpl, "SSSE3") == 0) ) {
+		processor = new idSIMD_SSSE3;
+	} else if ( upToSSE2 && (!forceImpl || idStr::Icmp(forceImpl, "SSE2") == 0) ) {
+		processor = new idSIMD_SSE2;
+	} else if ( upToSSE && (!forceImpl || idStr::Icmp(forceImpl, "SSE") == 0) ) {
+		processor = new idSIMD_SSE;
+#endif
 	} else {
-
-		if ( !processor ) {
-			bool upToMMX = ( cpuid & CPUID_MMX ) ? true : false;
-			bool upToSSE = upToMMX && ( cpuid & CPUID_SSE );
-			bool upToSSE2 = upToSSE && ( cpuid & CPUID_SSE2 );
-			bool upToSSE3 = upToSSE2 && ( cpuid & CPUID_SSE3 );
-			bool upToSSSE3 = upToSSE3 && ( cpuid & CPUID_SSSE3 );
-			bool upToSSE41 = upToSSSE3 && ( cpuid & CPUID_SSE41 );
-			bool upToAVX = upToSSE41 && ( cpuid & CPUID_AVX );
-			bool upToAVX2 = upToAVX && ( cpuid & CPUID_AVX2 ) && ( cpuid & CPUID_FMA3 );
-			if ( upToAVX2 ) {
-				processor = new idSIMD_AVX2;
-			} else if ( upToAVX ) {
-				processor = new idSIMD_AVX;
-			} else if ( upToSSE3 ) {
-				processor = new idSIMD_SSE3;
-			} else if ( upToSSE2 ) {
-				processor = new idSIMD_SSE2;
-			} else if ( upToSSE ) {
-				processor = new idSIMD_SSE;
-			} else if ( upToMMX ) {
-				processor = new idSIMD_MMX;
-			} else {
-				processor = generic;
-			}
-			processor->cpuid = cpuid;
-		}
-		newProcessor = processor;
+		processor = generic;
 	}
+	processor->cpuid = (cpuid_t)cpuid;
 
-	if ( newProcessor != SIMDProcessor ) {
-		SIMDProcessor = newProcessor;
+	if ( processor != SIMDProcessor ) {
+		SIMDProcessor = processor;
 	}
 	idLib::common->Printf( "%s using %s for SIMD processing.\n", module, SIMDProcessor->GetName() );
-
-	if ( cpuid & CPUID_FTZ ) {
-		idLib::sys->FPU_SetFTZ( true );
-		idLib::common->Printf( "enabled Flush-To-Zero mode\n" );
-	}
-	if ( cpuid & CPUID_DAZ ) {
-		idLib::sys->FPU_SetDAZ( true );
-		idLib::common->Printf( "enabled Denormals-Are-Zero mode\n" );
-	}
 }
 
 /*
@@ -208,179 +154,9 @@ idSIMDProcessor *p_simd;
 idSIMDProcessor *p_generic;
 int baseClocks = 0;
 
-#if defined(_MSC_VER) && defined(_M_IX86)
-
-#define TIME_TYPE int
-
-#pragma warning(disable : 4731)     // frame pointer register 'ebx' modified by inline assembly code
-
-int saved_ebx = 0;
-
-#define StartRecordTime( start )			\
-	__asm mov saved_ebx, ebx				\
-	__asm xor eax, eax						\
-	__asm cpuid								\
-	__asm rdtsc								\
-	__asm mov start, eax					\
-	__asm xor eax, eax						\
-	__asm cpuid
-
-#define StopRecordTime( end )				\
-	__asm xor eax, eax						\
-	__asm cpuid								\
-	__asm rdtsc								\
-	__asm mov end, eax						\
-	__asm mov ebx, saved_ebx				\
-	__asm xor eax, eax						\
-	__asm cpuid
-
-#elif MACOS_X
-
-#include <stdlib.h>
-#include <unistd.h>			// this is for sleep()
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <mach/mach_time.h>
-
-double ticksPerNanosecond;
-
-#define TIME_TYPE uint64_t
-
-#ifdef __MWERKS__ //time_in_millisec is missing
-/*
-
-    .text
-	.align 2
-	.globl _GetTB
-_GetTB:
-
-loop:
-	        mftbu   r4	;  load from TBU
-	        mftb    r5	;  load from TBL
-	        mftbu   r6	;  load from TBU
-	        cmpw    r6, r4	;  see if old == new
-	        bne     loop	;  if not, carry occured, therefore loop
-
-	        stw     r4, 0(r3)
-	        stw     r5, 4(r3)
-
-done:
-	        blr		;  return
-
-*/
-typedef struct {
-	unsigned int hi;
-	unsigned int lo;
-} U64;
-
-
-asm void GetTB( U64 *in ) {
-	nofralloc			// suppress prolog
-	machine 603			// allows the use of mftb & mftbu functions
-
-loop:
-	mftbu	r5			// grab the upper time base register (TBU)
-	mftb	r4			// grab the lower time base register (TBL)
-	mftbu	r6			// grab the upper time base register (TBU) again
-
-	cmpw	r6, r5		// see if old TBU == new TBU
-	bne -	loop		// loop if carry occurred (predict branch not taken)
-
-	stw  	r4, 4( r3 )	// store TBL in the low 32 bits of the return value
-	stw  	r5, 0( r3 )	// store TBU in the high 32 bits of the return value
-
-	blr
-}
-
-double TBToDoubleNano( U64 startTime, U64 stopTime, double ticksPerNanosecond );
-
-#if __MWERKS__
-asm void GetTB( U64 * );
-#else
-void GetTB( U64 * );
-#endif
-
-double TBToDoubleNano( U64 startTime, U64 stopTime, double ticksPerNanosecond ) {
-#define K_2POWER32 4294967296.0
-#define TICKS_PER_NANOSECOND 0.025
-	double nanoTime;
-	U64 diffTime;
-
-	// calc the difference in TB ticks
-	diffTime.hi = stopTime.hi - startTime.hi;
-	diffTime.lo = stopTime.lo - startTime.lo;
-
-	// convert TB ticks into time
-	nanoTime = ( double )( diffTime.hi ) * ( ( double )K_2POWER32 ) + ( double )( diffTime.lo );
-	nanoTime = nanoTime / ticksPerNanosecond;
-	return ( nanoTime );
-}
-
-TIME_TYPE time_in_millisec( void ) {
-#define K_2POWER32 4294967296.0
-#define TICKS_PER_NANOSECOND 0.025
-
-	U64 the_time;
-	double nanoTime, milliTime;
-
-	GetTB( &the_time );
-
-	// convert TB ticks into time
-	nanoTime = ( double )( the_time.hi ) * ( ( double )K_2POWER32 ) + ( double )( the_time.lo );
-	nanoTime = nanoTime / ticksPerNanosecond;
-
-	// nanoseconds are 1 billionth of a second. I want milliseconds
-	milliTime = nanoTime * 1000000.0;
-
-	printf( "ticks per nanosec -- %lf\n", ticksPerNanosecond );
-	printf( "nanoTime is %lf -- milliTime is %lf -- as int is %i\n", nanoTime, milliTime, ( int )milliTime );
-
-	return ( int )milliTime;
-}
-
-#define StartRecordTime( start )			\
-	start = time_in_millisec();
-
-#define StopRecordTime( end )				\
-	end = time_in_millisec();
-
-
-#else
-#define StartRecordTime( start )			\
-	start = mach_absolute_time();
-
-#define StopRecordTime( end )				\
-	end = mach_absolute_time();
-#endif
-
-#elif defined(_MSC_VER)		//MSVC, but e.g. 64-bit
-
-#define TIME_TYPE int
-
-#define StartRecordTime( start ) {\
-	int temp[4];\
-	__cpuid(temp, 0);\
-	start = (TIME_TYPE)__rdtsc();\
-}
-
-#define StopRecordTime( end ) {\
-	int temp[4];\
-	__cpuid(temp, 0);\
-	end = (TIME_TYPE)__rdtsc();\
-}
-
-#else
-
-#define TIME_TYPE int
-
-#define StartRecordTime( start )			\
-	start = 0;
-
-#define StopRecordTime( end )				\
-	end = 1;
-
-#endif
-
+#define TIME_TYPE double
+#define StartRecordTime( start ) start = sys->GetClockTicks();
+#define StopRecordTime( end ) StartRecordTime( end )
 #define GetBest( start, end, best )			\
 	if ( !best || end - start < best ) {	\
 		best = end - start;					\
@@ -392,7 +168,7 @@ TIME_TYPE time_in_millisec( void ) {
 PrintClocks
 ============
 */
-void PrintClocks( const char *string, const int dataCount, int clocks, int otherClocks = 0 ) {
+void PrintClocks( const char *string, const int dataCount, TIME_TYPE clocks, TIME_TYPE otherClocks = 0 ) {
 	int i;
 
 	idLib::common->Printf( string );
@@ -403,9 +179,9 @@ void PrintClocks( const char *string, const int dataCount, int clocks, int other
 	if ( otherClocks && clocks ) {
 		otherClocks -= baseClocks;
 		int p = ( int )( ( float )( otherClocks - clocks ) * 100.0f / ( float ) otherClocks );
-		idLib::common->Printf( "c = %4d, clcks = %5d, %d%%\n", dataCount, clocks, p );
+		idLib::common->Printf( "c = %4d, clcks = %5d, %d%%\n", int(dataCount), int(clocks), p );
 	} else {
-		idLib::common->Printf( "c = %4d, clcks = %5d\n", dataCount, clocks );
+		idLib::common->Printf( "c = %4d, clcks = %5d\n", int(dataCount), int(clocks) );
 	}
 }
 
@@ -722,6 +498,10 @@ void TestDiv( void ) {
 	PrintClocks( va( "   simd->Div( float[] * float[] ) %s", result ), COUNT, bestClocksSIMD, bestClocksGeneric );
 }
 
+#define TEST_VECTOR_LENGTH_START	16
+#define TEST_VECTOR_LENGTH_END		25
+#define TEST_VECTOR_LENGTH_STEP		3
+
 /*
 ============
 TestMulAdd
@@ -742,7 +522,7 @@ void TestMulAdd( void ) {
 	}
 	idLib::common->Printf( "====================================\n" );
 
-	for ( j = 0; j < 50 && j < COUNT; j++ ) {
+	for ( j = TEST_VECTOR_LENGTH_START; j < TEST_VECTOR_LENGTH_END && j < COUNT; j += TEST_VECTOR_LENGTH_STEP ) {
 
 		bestClocksGeneric = 0;
 		for ( i = 0; i < NUMTESTS; i++ ) {
@@ -797,7 +577,7 @@ void TestMulSub( void ) {
 	}
 	idLib::common->Printf( "====================================\n" );
 
-	for ( j = 0; j < 50 && j < COUNT; j++ ) {
+	for ( j = TEST_VECTOR_LENGTH_START; j < TEST_VECTOR_LENGTH_END && j < COUNT; j += TEST_VECTOR_LENGTH_STEP ) {
 
 		bestClocksGeneric = 0;
 		for ( i = 0; i < NUMTESTS; i++ ) {
@@ -1052,7 +832,7 @@ void TestDot( void ) {
 	idLib::common->Printf( "====================================\n" );
 
 	float dot1 = 0.0f, dot2 = 0.0f;
-	for ( j = 0; j < 50 && j < COUNT; j++ ) {
+	for ( j = TEST_VECTOR_LENGTH_START; j < TEST_VECTOR_LENGTH_END && j < COUNT; j += TEST_VECTOR_LENGTH_STEP ) {
 
 		bestClocksGeneric = 0;
 		for ( i = 0; i < NUMTESTS; i++ ) {
@@ -2158,7 +1938,9 @@ void TestMatXTransposeMultiplyMatX( void ) {
 }
 
 #define MATX_LTS_SIMD_EPSILON		1.0f
-#define MATX_LTS_SOLVE_SIZE			100
+#define MATX_LTS_SOLVE_SIZE			25
+#define MATX_LTS_SOLVE_START		1
+#define MATX_LTS_SOLVE_STEP			7
 
 /*
 ============
@@ -2178,7 +1960,7 @@ void TestMatXLowerTriangularSolve( void ) {
 	x.SetSize( MATX_LTS_SOLVE_SIZE );
 	b.Random( MATX_LTS_SOLVE_SIZE, 0, -1.0f, 1.0f );
 
-	for ( i = 1; i < MATX_LTS_SOLVE_SIZE; i++ ) {
+	for ( i = MATX_LTS_SOLVE_START; i < MATX_LTS_SOLVE_SIZE; i += MATX_LTS_SOLVE_STEP ) {
 
 		x.Zero( i );
 
@@ -2224,7 +2006,7 @@ void TestMatXLowerTriangularSolveTranspose( void ) {
 	x.SetSize( MATX_LTS_SOLVE_SIZE );
 	b.Random( MATX_LTS_SOLVE_SIZE, 0, -1.0f, 1.0f );
 
-	for ( i = 1; i < MATX_LTS_SOLVE_SIZE; i++ ) {
+	for ( i = MATX_LTS_SOLVE_START; i < MATX_LTS_SOLVE_SIZE; i += MATX_LTS_SOLVE_STEP ) {
 
 		x.Zero( i );
 
@@ -2273,7 +2055,7 @@ void TestMatXLDLTFactor( void ) {
 	src.Random( MATX_LDLT_FACTOR_SOLVE_SIZE, MATX_LDLT_FACTOR_SOLVE_SIZE, 0, -1.0f, 1.0f );
 	src.TransposeMultiply( original, src );
 
-	for ( i = 1; i < MATX_LDLT_FACTOR_SOLVE_SIZE; i++ ) {
+	for ( i = MATX_LTS_SOLVE_START; i < MATX_LTS_SOLVE_SIZE; i += MATX_LTS_SOLVE_STEP ) {
 
 		bestClocksGeneric = 0;
 		for ( j = 0; j < NUMTESTS; j++ ) {
@@ -3233,6 +3015,87 @@ void TestCreateShadowCache( void ) {
 
 /*
 ============
+TestConvertRGTCFromRGBA8
+============
+*/
+void TestConvertRGTCFromRGBA8() {
+	idRandom rnd(RANDOM_SEED);
+
+	static const int SIZE = 64;
+	idList<byte> inputData, outputGeneric, outputSIMD;
+	inputData.SetNum(SIZE * SIZE * 4);
+	outputGeneric.SetNum(SIZE * SIZE);
+	outputSIMD.SetNum(SIZE * SIZE);
+	for (int i = 0; i < inputData.Num(); i++)
+		inputData[i] = rnd.RandomInt(256);
+
+	TIME_TYPE start, end;
+	TIME_TYPE bestClocksGeneric = 0;
+	for ( int i = 0; i < NUMTESTS; i++ ) {
+		StartRecordTime( start );
+		p_generic->CompressRGTCFromRGBA8((const byte*)inputData.Ptr(), SIZE, SIZE, 4 * SIZE, outputGeneric.Ptr());
+		StopRecordTime( end );
+		GetBest( start, end, bestClocksGeneric );
+	}
+	PrintClocks( va( "generic->CompressRGTCFromRGBA8( %d )", SIZE ), SIZE * SIZE, bestClocksGeneric );
+
+	TIME_TYPE bestClocksSIMD = 0;
+	for ( int i = 0; i < NUMTESTS; i++ ) {
+		StartRecordTime( start );
+		p_simd->CompressRGTCFromRGBA8((const byte*)inputData.Ptr(), SIZE, SIZE, 4 * SIZE, outputSIMD.Ptr());
+		StopRecordTime( end );
+		GetBest( start, end, bestClocksSIMD );
+	}
+
+	int diffPos = -1;
+	for (int i = 0; i < outputGeneric.Num(); i++)
+		if (outputGeneric[i] != outputSIMD[i]) {
+			diffPos = i;
+			break;
+		}
+	const char *result = diffPos < 0 ? "ok" : S_COLOR_RED"X";
+	PrintClocks( va( "   simd->CompressRGTCFromRGBA8( %d ) %s", SIZE, result ), SIZE * SIZE, bestClocksSIMD, bestClocksGeneric );
+
+	// Additional tests: various image sizes, better value distributions
+
+	for (int h = 1; h <= 43; h++) {
+		for (int w = 1; w <= 43; w++) {
+			int stride = w + rnd.RandomInt(10);
+			idList<dword> rgbaPixels;
+			rgbaPixels.SetNum(h * stride);
+
+			idVec2 avg;
+			avg.x = rnd.RandomFloat();
+			avg.y = rnd.RandomFloat();
+			for (int i = 0; i < h; i++)
+				for (int j = 0; j < w; j++) {
+					float radius = float(i + j) / (h + w);
+					idVec2 val;
+					val.x = idMath::ClampFloat(0, 1, avg.x + radius * rnd.CRandomFloat());
+					val.y = idMath::ClampFloat(0, 1, avg.y + radius * rnd.CRandomFloat());
+					dword red = idMath::Rint(val.x * 255.0f);
+					dword green = idMath::Rint(val.y * 255.0f);
+					dword blue = rnd.RandomInt(256);
+					dword alpha = rnd.RandomInt(256);
+					rgbaPixels[i * stride + j] = red + (green << 8) + (blue << 16) + (alpha << 24);
+				}
+
+			int outSize = ((h + 3) / 4) * ((w + 3) / 4) * 16;
+			idList<byte> outputGen, outputFast;
+			outputGen.SetNum(outSize);
+			outputFast.SetNum(outSize);
+
+			p_generic->CompressRGTCFromRGBA8((const byte*)rgbaPixels.Ptr(), w, h, 4 * stride, outputGen.Ptr());
+			p_simd->CompressRGTCFromRGBA8((const byte*)rgbaPixels.Ptr(), w, h, 4 * stride, outputFast.Ptr());
+
+			if (memcmp(outputGen.Ptr(), outputFast.Ptr(), outSize) != 0)
+				common->Error("TestConvertRGTCFromRGBA8 output mismatch");
+		}
+	}
+}
+
+/*
+============
 TestSoundUpSampling
 ============
 */
@@ -3857,7 +3720,7 @@ void TestMath( void ) {
 	}
 	PrintClocks( "  idMath::Log16( tst )", 1, bestClocks );
 
-	idLib::common->Printf( "testvar = %f\n", testvar );
+	//idLib::common->Printf( "testvar = %f\n", testvar );
 
 	idMat3 resultMat3;
 	idQuat fromQuat, toQuat, resultQuat;
@@ -3985,105 +3848,74 @@ void idSIMD::Test_f( const idCmdArgs &args ) {
 	p_simd = processor;
 	p_generic = generic;
 
+	int testBits = -1;
 	if ( idStr::Length( args.Argv( 1 ) ) != 0 ) {
-		cpuid_t cpuid = idLib::sys->GetProcessorId();
-		idStr argString = args.Args();
-
-		argString.Remove( ' ' );
-
-		if ( idStr::Icmp( argString, "MMX" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) ) {
-				common->Printf( "CPU does not support MMX\n" );
-				return;
-			}
-			p_simd = new idSIMD_MMX;
-		} else if ( idStr::Icmp( argString, "SSE" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) || !( cpuid & CPUID_SSE ) ) {
-				common->Printf( "CPU does not support MMX & SSE\n" );
-				return;
-			}
-			p_simd = new idSIMD_SSE;
-		} else if ( idStr::Icmp( argString, "SSE2" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) || !( cpuid & CPUID_SSE ) || !( cpuid & CPUID_SSE2 ) ) {
-				common->Printf( "CPU does not support MMX & SSE & SSE2\n" );
-				return;
-			}
-			p_simd = new idSIMD_SSE2;
-		} else if ( idStr::Icmp( argString, "SSE3" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) || !( cpuid & CPUID_SSE ) || !( cpuid & CPUID_SSE2 ) || !( cpuid & CPUID_SSE3 ) ) {
-				common->Printf( "CPU does not support MMX & SSE & SSE2 & SSE3\n" );
-				return;
-			}
-			p_simd = new idSIMD_SSE3();
-		} else if ( idStr::Icmp( argString, "AVX" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) || !( cpuid & CPUID_SSE ) || !( cpuid & CPUID_SSE2 ) || !( cpuid & CPUID_SSE3 ) || !( cpuid & CPUID_SSSE3 ) || !( cpuid & CPUID_SSE41 ) || !( cpuid & CPUID_AVX ) ) {
-				common->Printf( "CPU does not support MMX & SSE* & AVX\n" );
-				return;
-			}
-			p_simd = new idSIMD_AVX();
-		} else if ( idStr::Icmp( argString, "AVX2" ) == 0 ) {
-			if ( !( cpuid & CPUID_MMX ) || !( cpuid & CPUID_SSE ) || !( cpuid & CPUID_SSE2 ) || !( cpuid & CPUID_SSE3 ) || !( cpuid & CPUID_SSSE3 ) || !( cpuid & CPUID_SSE41 ) || !( cpuid & CPUID_AVX ) || !( cpuid & CPUID_AVX2 ) || !( cpuid & CPUID_FMA3 ) ) {
-				common->Printf( "CPU does not support MMX & SSE* & AVX & AVX2 & FMA3\n" );
-				return;
-			}
-			p_simd = new idSIMD_AVX2();
-		} else {
-			common->Printf( "invalid argument, use: MMX, SSE, SSE2, SSE3, AVX, AVX2\n" );
-			return;
-		}
+		idStr argString = args.Argv( 1 );
+		if ( argString.IsNumeric() )
+			testBits = atoi( argString.c_str() );
 	}
+
 	idLib::common->SetRefreshOnPrint( true );
 
 	idLib::common->Printf( "using %s for SIMD processing\n", p_simd->GetName() );
 
 	GetBaseClocks();
 
-	TestMath();
-	TestAdd();
-	TestSub();
-	TestMul();
-	TestDiv();
-	TestMulAdd();
-	TestMulSub();
-	TestDot();
-	TestCompare();
-	TestMinMax();
-	TestClamp();
-	TestMemcpy();
-	TestMemset();
-	TestNegate();
+	if ( testBits & 1 ) {
+		TestMath();
+		TestAdd();
+		TestSub();
+		TestMul();
+		TestDiv();
+		TestMulAdd();
+		TestMulSub();
+		TestDot();
+		TestCompare();
+		TestMinMax();
+		TestClamp();
+		TestMemcpy();
+		TestMemset();
+		TestNegate();
+	}
 
-	TestMatXMultiplyVecX();
-	TestMatXMultiplyAddVecX();
-	TestMatXTransposeMultiplyVecX();
-	TestMatXTransposeMultiplyAddVecX();
-	TestMatXMultiplyMatX();
-	TestMatXTransposeMultiplyMatX();
-	TestMatXLowerTriangularSolve();
-	TestMatXLowerTriangularSolveTranspose();
-	TestMatXLDLTFactor();
+	if ( testBits & 2 ) {
+		TestMatXMultiplyVecX();
+		TestMatXMultiplyAddVecX();
+		TestMatXTransposeMultiplyVecX();
+		TestMatXTransposeMultiplyAddVecX();
+		TestMatXMultiplyMatX();
+		TestMatXTransposeMultiplyMatX();
+		TestMatXLowerTriangularSolve();
+		TestMatXLowerTriangularSolveTranspose();
+		TestMatXLDLTFactor();
+	}
 
-	idLib::common->Printf( "====================================\n" );
+	if ( testBits & 4 ) {
+		idLib::common->Printf( "====================================\n" );
 
-	TestBlendJoints();
-	TestConvertJointQuatsToJointMats();
-	TestConvertJointMatsToJointQuats();
-	TestTransformJoints();
-	TestUntransformJoints();
-	TestTransformVerts();
-	TestTracePointCull();
-	TestDecalPointCull();
-	TestOverlayPointCull();
-	TestDeriveTriPlanes();
-	TestDeriveTangents();
-	TestDeriveUnsmoothedTangents();
-	TestNormalizeTangents();
-	TestCreateShadowCache();
+		TestBlendJoints();
+		TestConvertJointQuatsToJointMats();
+		TestConvertJointMatsToJointQuats();
+		TestTransformJoints();
+		TestUntransformJoints();
+		TestTransformVerts();
+		TestTracePointCull();
+		TestDecalPointCull();
+		TestOverlayPointCull();
+		TestDeriveTriPlanes();
+		TestDeriveTangents();
+		TestDeriveUnsmoothedTangents();
+		TestNormalizeTangents();
+		TestCreateShadowCache();
+		TestConvertRGTCFromRGBA8();
+	}
 
-	idLib::common->Printf( "====================================\n" );
+	if ( testBits & 8 ) {
+		idLib::common->Printf( "====================================\n" );
 
-	TestSoundUpSampling();
-	TestSoundMixing();
+		TestSoundUpSampling();
+		TestSoundMixing();
+	}
 
 	idLib::common->SetRefreshOnPrint( false );
 

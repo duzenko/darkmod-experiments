@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -50,6 +50,37 @@ const idStr& PathSleepTask::GetName() const
 void PathSleepTask::Init(idAI* owner, Subsystem& subsystem)
 {
 	PathTask::Init(owner, subsystem);
+
+	idPathCorner* lastPath = owner->GetMemory().lastPath.GetEntity(); // grayman #5164
+
+	// grayman #5164 - Am I too far away to sleep?
+
+	// grayman #5265 - if already sitting, there's no problem going to sleep
+
+	if ( owner->GetMoveType() != MOVETYPE_SIT )
+	{
+		if ( lastPath )
+		{
+			idVec3 aiOrigin = owner->GetPhysics()->GetOrigin();
+			idVec3 sleepLocation = lastPath->GetPhysics()->GetOrigin();
+			sleepLocation.z = aiOrigin.z; // remove z vector
+			float dist = (sleepLocation - aiOrigin).LengthFast();
+
+			// if dist is too far, terminate the sleep.
+
+			float accuracy = 16; // default
+
+			if ( dist > idMath::Sqrt(2 * accuracy*accuracy) ) // grayman #5265 extend the required distance
+			{
+				gameLocal.Warning("PathSleepTask::Init %s (%s) can't sleep: too far from sleeping location %s (%s)\n", owner->GetName(), aiOrigin.ToString(), lastPath->GetName(), lastPath->GetPhysics()->GetOrigin().ToString()); // grayman #5164
+				_activateTargets = false; // don't activate targets if you didn't sleep
+				subsystem.FinishTask();
+				return;
+			}
+		}
+	}
+
+	_activateTargets = true; // grayman #5164 - activate targets after you sleep
 
 	// grayman #3820 - AI can fall asleep on the floor, on a bed, or on a chair.
 	// This is defined by the 'sleep_location' spawnarg on the path_sleep entity.
@@ -119,12 +150,15 @@ bool PathSleepTask::Perform(Subsystem& subsystem)
 
 void PathSleepTask::OnFinish(idAI* owner)
 {
-	// grayman #3670 - fire targets
-	idPathCorner* path = _path.GetEntity();
+	if ( _activateTargets ) // grayman #5164 - activate targets if allowed to sleep
+	{
+		// grayman #3670 - fire targets
+		idPathCorner* path = _path.GetEntity();
 
-	// This task may not be performed with an empty path pointer
-	assert( path != NULL );
-	path->ActivateTargets(owner);
+		// This task may not be performed with an empty path pointer
+		assert( path != NULL );
+		path->ActivateTargets(owner);
+	}
 }
 
 PathSleepTaskPtr PathSleepTask::CreateInstance()

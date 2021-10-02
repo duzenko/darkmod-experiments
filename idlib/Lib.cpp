@@ -1,28 +1,20 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
 #pragma hdrstop
-
-#if defined( MACOS_X )
-#include <signal.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
-#include <../ExtLibs/devil.h>
 
 /*
 ===============================================================================
@@ -70,9 +62,6 @@ void idLib::Init( void ) {
 
 	// initialize the dictionary string pools
 	idDict::Init();
-
-	// greebo: Initialize the image library, so we can use it later on.
-	ExtLibs::ilInit();
 }
 
 /*
@@ -82,9 +71,6 @@ idLib::ShutDown
 */
 void idLib::ShutDown( void )
 {
-	// greebo: shutdown the IL library
-	ilShutDown();
-
 	// shut down the dictionary string pools
 	idDict::Shutdown();
 
@@ -247,6 +233,20 @@ void idLib::Warning( const char *fmt, ... ) {
 	va_end( argptr );
 
 	common->Warning( "%s", text );
+}
+
+/*
+===============
+idLib::Printf
+===============
+*/
+void idLib::Printf( const char* fmt, ... ) {
+	va_list		argptr;
+	va_start( argptr, fmt );
+	if ( common ) {
+		common->VPrintf( fmt, argptr );
+	}
+	va_end( argptr );
 }
 
 /*
@@ -563,24 +563,5 @@ int		IntForSixtets( byte *in ) {
 	return IntForSixtetsBig(in);
 #else
 #error unknown endianness!
-#endif
-}
-
-/*
-===============================================================================
-
-	Assertion
-
-===============================================================================
-*/
-
-void AssertFailed( const char *file, int line, const char *expression ) {
-	idLib::sys->DebugPrintf( "\n\nASSERTION FAILED!\n%s(%d): '%s'\n", file, line, expression );
-#ifdef _WIN32
-    __debugbreak();
-#elif defined( __linux__ )
-	__asm__ __volatile__ ("int $0x03");
-#elif defined( MACOS_X )
-	kill( getpid(), SIGINT );
 #endif
 }

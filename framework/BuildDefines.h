@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /*
@@ -73,11 +73,6 @@
 	#define ID_NOLANADDRESS 0
 #endif
 
-// build an exe with no CVAR_CHEAT controls
-#ifndef ID_ALLOW_CHEATS
-	#define ID_ALLOW_CHEATS 0
-#endif
-
 #ifndef ID_ENABLE_CURL
 	#define ID_ENABLE_CURL 1
 #endif
@@ -88,21 +83,13 @@
 	#define ID_CLIENTINFO_TAGS 0
 #endif
 
-// for win32 this is defined in preprocessor settings so that MFC can be
-// compiled out.
-//#define ID_DEDICATED
-
 // don't define ID_ALLOW_TOOLS when we don't want tool code in the executable.
-#if defined( _WIN32 ) && !defined( ID_DEDICATED )
+#if defined( _WIN32 )
 #ifndef NO_MFC
 #define	ID_ALLOW_TOOLS
 #endif
 #endif
 
 #ifndef ID_OPENAL
-#	if !defined( ID_DEDICATED )
-#		define ID_OPENAL 1
-#	else
-#		define ID_OPENAL 0
-#	endif
+#	define ID_OPENAL 1
 #endif

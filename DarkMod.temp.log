@@ -1,0 +1,5 @@
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 212):INI (INIT) FR:    0] Initializing mod logging
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 212):INI (INIT) FR:    0] Darkmod path is C:\dev\tdm\darkmod\
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 256):INI (INIT) FR:    0] Trying to open C:\dev\tdm\darkmod\\darkmod.ini
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 327):INI (INIT) FR:    0] Loading INI settings
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 351):INI (INIT) FR:    0] Switching logfile to Darkmod.log.

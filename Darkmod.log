@@ -1,0 +1,30 @@
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 366):INI (INIT) FR:    0] LogFile created at 2021.09.29 09:37:04
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 369):INI (INIT) FR:    0] Executable last cleaned and rebuilt on Sep 28 2021 21:45:46
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 372):INI (INIT) FR:    0] The Dark Mod 2.10/32, code revision 9540 (1435:9540M)
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogBegin: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogEnd: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogInfo: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogDebug: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogWarning: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 418):FRC (FORCE) FR:    0] LogError: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_FRAME: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_SYSTEM: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_MISC: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_FROBBING: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_AI: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_SOUND: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_FUNCTION: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_ENTITY: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_INVENTORY: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_LIGHT: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_WEAPON: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_MATH: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_MOVEMENT: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_STIM_RESPONSE: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_OBJECTIVES: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_DIFFICULTY: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_CONVERSATION: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_MAINMENU: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_LOCKPICK: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_AAS: 0
+[C:/dev/tdm/dmsrc/game/DarkModGlobals.cpp ( 428):FRC (FORCE) FR:    0] LogClass_STATE: 0

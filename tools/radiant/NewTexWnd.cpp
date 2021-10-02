@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -254,8 +254,8 @@ void CNewTexWnd::OnPaint() {
 			g_qeglobals.d_savedinfo.colors[COLOR_TEXTUREBACK][2],
 			0
 		);
-		GL_Viewport(0, 0, rectClient.Width(), rectClient.Height());
-		GL_Scissor(0, 0, rectClient.Width(), rectClient.Height());
+		GL_ViewportVidSize(0, 0, rectClient.Width(), rectClient.Height());
+		GL_ScissorVidSize(0, 0, rectClient.Width(), rectClient.Height());
 		qglMatrixMode(GL_PROJECTION);
 		qglLoadIdentity();
 		qglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -283,7 +283,6 @@ void CNewTexWnd::OnPaint() {
 				// if in use, draw a background
 				qglLineWidth(1);
 				GL_FloatColor(1, 1, 1);
-				globalImages->BindNull();
 				qglBegin(GL_LINE_LOOP);
 				qglVertex2f(draw.x - 1, draw.y + 1 - FONT_HEIGHT);
 				qglVertex2f(draw.x - 1, draw.y - height - 1 - FONT_HEIGHT);
@@ -312,7 +311,6 @@ void CNewTexWnd::OnPaint() {
 				if ( !idStr::Icmp(g_qeglobals.d_texturewin.texdef.name, mat->GetName()) ) {
 					qglLineWidth(3);
 					GL_FloatColor(1, 0, 0);
-					globalImages->BindNull();
 
 					qglBegin(GL_LINE_LOOP);
 					qglVertex2f(draw.x - 4, draw.y - FONT_HEIGHT + 4);
@@ -325,7 +323,6 @@ void CNewTexWnd::OnPaint() {
 				}
 
 				// draw the texture name
-				globalImages->BindNull();
 				GL_FloatColor(1, 1, 1);
 				qglRasterPos2f(draw.x, draw.y - FONT_HEIGHT + 2);
 
@@ -348,9 +345,8 @@ void CNewTexWnd::OnPaint() {
 		g_qeglobals.d_texturewin.m_nTotalHeight = abs(draw.y) + 100;
 
 		// reset the current texture
-		globalImages->BindNull();
 		qglFinish();
-		qwglSwapBuffers(dc.GetSafeHdc());
+		SwapBuffers(dc.GetSafeHdc());
 		TRACE("Texture Paint\n");
 	}
 

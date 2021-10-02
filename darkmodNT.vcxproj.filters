@@ -46,9 +46,6 @@
     <Filter Include="Game\GameSys">
       <UniqueIdentifier>{979bed74-b0ad-4b91-92a5-51f703280c0c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Game\Http">
-      <UniqueIdentifier>{ab1f887d-fe95-4de4-9fa9-94e250aa3e51}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Game\Inventory">
       <UniqueIdentifier>{9187785c-a030-476a-86e0-852991ff64e3}</UniqueIdentifier>
     </Filter>
@@ -60,9 +57,6 @@
     </Filter>
     <Filter Include="Game\Physics">
       <UniqueIdentifier>{c9e9f2e0-3a85-4046-bb18-7ca37d74e5a3}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Game\pugixml">
-      <UniqueIdentifier>{abf77553-10c5-4feb-ba31-19c456f2599f}</UniqueIdentifier>
     </Filter>
     <Filter Include="Game\Script">
       <UniqueIdentifier>{ec546557-2e91-4e8a-b2b7-1e9df86ec9bd}</UniqueIdentifier>
@@ -114,6 +108,27 @@
     </Filter>
     <Filter Include="Tools\Compilers\RoqVQ">
       <UniqueIdentifier>{c61639f4-7a7b-4dd9-b436-4e62942715ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Test">
+      <UniqueIdentifier>{f3dbab64-0ae8-4ef2-853f-3decc9d7954b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Renderer\glad">
+      <UniqueIdentifier>{552c1804-5a3b-4e1f-a939-984ef7bde14c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="idLib\Sys">
+      <UniqueIdentifier>{ec979f94-95e6-4757-a337-e3fccae54fa4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="idLib\Sys\Win32">
+      <UniqueIdentifier>{981009fd-4a0e-4ecb-83c0-bc3123061e58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tools\Compilers\Particle">
+      <UniqueIdentifier>{b602a60b-9b06-4cba-a575-5ec753acf392}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Renderer\Backend">
+      <UniqueIdentifier>{16a792a5-ae3f-4d05-b7cc-1c497c34aa43}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Network">
+      <UniqueIdentifier>{ab1f887d-fe95-4de4-9fa9-94e250aa3e51}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -193,9 +208,6 @@
       <Filter>Framework</Filter>
     </ClInclude>
     <ClInclude Include="renderer\Cinematic.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="renderer\glext.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="renderer\GuiModel.h">
@@ -344,15 +356,6 @@
     </ClInclude>
     <ClInclude Include="sound\efxlib.h">
       <Filter>Sound</Filter>
-    </ClInclude>
-    <ClInclude Include="framework\minizip\ioapi.h">
-      <Filter>Framework\minizip</Filter>
-    </ClInclude>
-    <ClInclude Include="framework\minizip\unzip.h">
-      <Filter>Framework\minizip</Filter>
-    </ClInclude>
-    <ClInclude Include="framework\minizip\zip.h">
-      <Filter>Framework\minizip</Filter>
     </ClInclude>
     <ClInclude Include="framework\CompressionParameters.h">
       <Filter>Framework</Filter>
@@ -670,10 +673,7 @@
       <Filter>Game\GameSys</Filter>
     </ClInclude>
     <ClInclude Include="game\Http\HttpConnection.h">
-      <Filter>Game\Http</Filter>
-    </ClInclude>
-    <ClInclude Include="game\Http\HttpRequest.h">
-      <Filter>Game\Http</Filter>
+      <Filter>Game\Network</Filter>
     </ClInclude>
     <ClInclude Include="game\Inventory\Category.h">
       <Filter>Game\Inventory</Filter>
@@ -794,12 +794,6 @@
     </ClInclude>
     <ClInclude Include="game\physics\Push.h">
       <Filter>Game\Physics</Filter>
-    </ClInclude>
-    <ClInclude Include="game\pugixml\pugiconfig.hpp">
-      <Filter>Game\pugixml</Filter>
-    </ClInclude>
-    <ClInclude Include="game\pugixml\pugixml.hpp">
-      <Filter>Game\pugixml</Filter>
     </ClInclude>
     <ClInclude Include="game\script\Script_Compiler.h">
       <Filter>Game\Script</Filter>
@@ -970,9 +964,6 @@
       <Filter>Game</Filter>
     </ClInclude>
     <ClInclude Include="game\IK.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="game\ImageMapManager.h">
       <Filter>Game</Filter>
     </ClInclude>
     <ClInclude Include="game\IniFile.h">
@@ -1197,9 +1188,6 @@
     <ClInclude Include="idlib\geometry\Winding2D.h">
       <Filter>idLib\Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="idlib\hashing\CRC32.h">
-      <Filter>idLib\Hashing</Filter>
-    </ClInclude>
     <ClInclude Include="idlib\hashing\MD4.h">
       <Filter>idLib\Hashing</Filter>
     </ClInclude>
@@ -1260,23 +1248,14 @@
     <ClInclude Include="idlib\math\Simd_Generic.h">
       <Filter>idLib\Math</Filter>
     </ClInclude>
-    <ClInclude Include="idlib\math\Simd_MMX.h">
-      <Filter>idLib\Math</Filter>
-    </ClInclude>
     <ClInclude Include="idlib\math\Simd_SSE.h">
       <Filter>idLib\Math</Filter>
     </ClInclude>
     <ClInclude Include="idlib\math\Simd_SSE2.h">
       <Filter>idLib\Math</Filter>
     </ClInclude>
-    <ClInclude Include="idlib\math\Simd_SSE3.h">
-      <Filter>idLib\Math</Filter>
-    </ClInclude>
     <ClInclude Include="idlib\math\Vector.h">
       <Filter>idLib\Math</Filter>
-    </ClInclude>
-    <ClInclude Include="idlib\Base64.h">
-      <Filter>idLib\Text</Filter>
     </ClInclude>
     <ClInclude Include="idlib\CmdArgs.h">
       <Filter>idLib\Text</Filter>
@@ -1303,9 +1282,6 @@
       <Filter>idLib</Filter>
     </ClInclude>
     <ClInclude Include="idlib\Heap_Embedded.h">
-      <Filter>idLib</Filter>
-    </ClInclude>
-    <ClInclude Include="idlib\Image.h">
       <Filter>idLib</Filter>
     </ClInclude>
     <ClInclude Include="idlib\LangDict.h">
@@ -1387,9 +1363,6 @@
     <ClInclude Include="renderer\FrameBuffer.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\BufferObject.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
     <ClInclude Include="idlib\math\Simd_AVX.h">
       <Filter>idLib\Math</Filter>
     </ClInclude>
@@ -1403,13 +1376,148 @@
       <Filter>Game\GameSys</Filter>
     </ClInclude>
     <ClInclude Include="game\Http\MessageTcp.h">
-      <Filter>Game\Http</Filter>
+      <Filter>Game\Network</Filter>
     </ClInclude>
     <ClInclude Include="sound\snd_efxpresets.h">
       <Filter>Sound</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\Profiling.h">
+    <ClInclude Include="game\FrobHelper.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\Debug.h">
+      <Filter>idLib</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\GLSLProgram.h">
       <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\doctest.h">
+      <Filter>Test</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\testing.h">
+      <Filter>Test</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\TestRun.h">
+      <Filter>Test</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\GLSLProgramManager.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="framework\minizip\minizip_extra.h">
+      <Filter>Framework\minizip</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\glad.h">
+      <Filter>Renderer\glad</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\glad_wgl.h">
+      <Filter>Renderer\glad</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\sys\sys_assert.h">
+      <Filter>idLib\Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\sys\sys_defines.h">
+      <Filter>idLib\Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\sys\sys_types.h">
+      <Filter>idLib\Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\sys\sys_threading.h">
+      <Filter>idLib\Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\Thread.h">
+      <Filter>idLib</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\sys\sys_includes.h">
+      <Filter>idLib\Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\ParallelJobList.h">
+      <Filter>idLib</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\ParallelJobList_JobHeaders.h">
+      <Filter>idLib</Filter>
+    </ClInclude>
+    <ClInclude Include="tools\compilers\compiler_common.h">
+      <Filter>Tools\Compilers</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\ImmediateRendering.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\AmbientOcclusionStage.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\BloomStage.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\DepthStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\DrawBatchExecutor.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\GpuBuffer.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\InteractionStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\RenderBackend.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\StencilShadowStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\FrameBufferManager.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="framework\GamepadInput.h">
+      <Filter>Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="framework\LoadStack.h">
+      <Filter>Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="sys\sys_padinput.h">
+      <Filter>Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\ManyLightInteractionStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\ShadowMapStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\ParticleSystem.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\ParticleSystem_decl.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\ParticleSystem_def.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="game\Http\HttpRequest.h">
+      <Filter>Game\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\hashing\sha256.h">
+      <Filter>idLib\Hashing</Filter>
+    </ClInclude>
+    <ClInclude Include="tools\compilers\dmap\planargraph.h">
+      <Filter>Tools\Compilers\DMap</Filter>
+    </ClInclude>
+    <ClInclude Include="tools\compilers\dmap\earcut.h">
+      <Filter>Tools\Compilers\DMap</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\containers\DisjointSets.h">
+      <Filter>idLib\Containers</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\backend\FrobOutlineStage.h">
+      <Filter>Renderer\Backend</Filter>
+    </ClInclude>
+    <ClInclude Include="framework\Tracing.h">
+      <Filter>Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="idlib\math\Simd_SSSE3.h">
+      <Filter>idLib\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="framework\DeclSubtitles.h">
+      <Filter>Framework</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1501,9 +1609,6 @@
       <Filter>Framework</Filter>
     </ClCompile>
     <ClCompile Include="renderer\Cinematic.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="renderer\draw_arb2.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
     <ClCompile Include="renderer\draw_common.cpp">
@@ -1692,9 +1797,6 @@
     <ClCompile Include="sys\win32\win_net.cpp">
       <Filter>Sys</Filter>
     </ClCompile>
-    <ClCompile Include="sys\win32\win_qgl.cpp">
-      <Filter>Sys</Filter>
-    </ClCompile>
     <ClCompile Include="sys\win32\win_shared.cpp">
       <Filter>Sys</Filter>
     </ClCompile>
@@ -1754,15 +1856,6 @@
     </ClCompile>
     <ClCompile Include="framework\I18N.cpp">
       <Filter>Framework</Filter>
-    </ClCompile>
-    <ClCompile Include="framework\minizip\ioapi.c">
-      <Filter>Framework\minizip</Filter>
-    </ClCompile>
-    <ClCompile Include="framework\minizip\unzip.cpp">
-      <Filter>Framework\minizip</Filter>
-    </ClCompile>
-    <ClCompile Include="framework\minizip\zip.cpp">
-      <Filter>Framework\minizip</Filter>
     </ClCompile>
     <ClCompile Include="renderer\CinematicID.cpp">
       <Filter>Renderer</Filter>
@@ -2074,10 +2167,7 @@
       <Filter>Game\GameSys</Filter>
     </ClCompile>
     <ClCompile Include="game\Http\HttpConnection.cpp">
-      <Filter>Game\Http</Filter>
-    </ClCompile>
-    <ClCompile Include="game\Http\HttpRequest.cpp">
-      <Filter>Game\Http</Filter>
+      <Filter>Game\Network</Filter>
     </ClCompile>
     <ClCompile Include="game\Inventory\Category.cpp">
       <Filter>Game\Inventory</Filter>
@@ -2189,9 +2279,6 @@
     </ClCompile>
     <ClCompile Include="game\physics\Push.cpp">
       <Filter>Game\Physics</Filter>
-    </ClCompile>
-    <ClCompile Include="game\pugixml\pugixml.cpp">
-      <Filter>Game\pugixml</Filter>
     </ClCompile>
     <ClCompile Include="game\script\Script_Compiler.cpp">
       <Filter>Game\Script</Filter>
@@ -2353,9 +2440,6 @@
       <Filter>Game</Filter>
     </ClCompile>
     <ClCompile Include="game\IK.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClCompile Include="game\ImageMapManager.cpp">
       <Filter>Game</Filter>
     </ClCompile>
     <ClCompile Include="game\IniFile.cpp">
@@ -2535,9 +2619,6 @@
     <ClCompile Include="idlib\geometry\Winding2D.cpp">
       <Filter>idLib\Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="idlib\hashing\CRC32.cpp">
-      <Filter>idLib\Hashing</Filter>
-    </ClCompile>
     <ClCompile Include="idlib\hashing\MD4.cpp">
       <Filter>idLib\Hashing</Filter>
     </ClCompile>
@@ -2586,23 +2667,14 @@
     <ClCompile Include="idlib\math\Simd_Generic.cpp">
       <Filter>idLib\Math</Filter>
     </ClCompile>
-    <ClCompile Include="idlib\math\Simd_MMX.cpp">
-      <Filter>idLib\Math</Filter>
-    </ClCompile>
     <ClCompile Include="idlib\math\Simd_SSE.cpp">
       <Filter>idLib\Math</Filter>
     </ClCompile>
     <ClCompile Include="idlib\math\Simd_SSE2.cpp">
       <Filter>idLib\Math</Filter>
     </ClCompile>
-    <ClCompile Include="idlib\math\Simd_SSE3.cpp">
-      <Filter>idLib\Math</Filter>
-    </ClCompile>
     <ClCompile Include="idlib\math\Vector.cpp">
       <Filter>idLib\Math</Filter>
-    </ClCompile>
-    <ClCompile Include="idlib\Base64.cpp">
-      <Filter>idLib\Text</Filter>
     </ClCompile>
     <ClCompile Include="idlib\CmdArgs.cpp">
       <Filter>idLib\Text</Filter>
@@ -2629,9 +2701,6 @@
       <Filter>idLib</Filter>
     </ClCompile>
     <ClCompile Include="idlib\Heap_Embedded.cpp">
-      <Filter>idLib</Filter>
-    </ClCompile>
-    <ClCompile Include="idlib\Image.cpp">
       <Filter>idLib</Filter>
     </ClCompile>
     <ClCompile Include="idlib\LangDict.cpp">
@@ -2701,16 +2770,10 @@
     <ClCompile Include="tools\compilers\dmap\glfile.cpp">
       <Filter>Tools\Compilers\DMap</Filter>
     </ClCompile>
-    <ClCompile Include="tools\compilers\dmap\leakfile.cpp">
-      <Filter>Tools\Compilers\DMap</Filter>
-    </ClCompile>
     <ClCompile Include="tools\compilers\dmap\map.cpp">
       <Filter>Tools\Compilers\DMap</Filter>
     </ClCompile>
     <ClCompile Include="tools\compilers\dmap\optimize.cpp">
-      <Filter>Tools\Compilers\DMap</Filter>
-    </ClCompile>
-    <ClCompile Include="tools\compilers\dmap\optimize_gcc.cpp">
       <Filter>Tools\Compilers\DMap</Filter>
     </ClCompile>
     <ClCompile Include="tools\compilers\dmap\output.cpp">
@@ -2767,9 +2830,6 @@
     <ClCompile Include="renderer\draw_stencil.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="renderer\BufferObject.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
     <ClCompile Include="idlib\math\Simd_AVX.cpp">
       <Filter>idLib\Math</Filter>
     </ClCompile>
@@ -2780,16 +2840,151 @@
       <Filter>Game\GameSys</Filter>
     </ClCompile>
     <ClCompile Include="game\Http\MessageTcp.cpp">
-      <Filter>Game\Http</Filter>
+      <Filter>Game\Network</Filter>
     </ClCompile>
     <ClCompile Include="sound\snd_efxpresets.cpp">
       <Filter>Sound</Filter>
     </ClCompile>
-    <ClCompile Include="renderer\Profiling.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
     <ClCompile Include="idlib\containers\LinkList.cpp">
       <Filter>idLib\Containers</Filter>
+    </ClCompile>
+    <ClCompile Include="game\FrobHelper.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\Debug.cpp">
+      <Filter>idLib</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\GLSLProgram.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\TestRun.cpp">
+      <Filter>Test</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\draw_glsl_multi.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\GLSLProgramManager.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="framework\minizip\minizip_extra.c">
+      <Filter>Framework\minizip</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\glad.c">
+      <Filter>Renderer\glad</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\glad_wgl.c">
+      <Filter>Renderer\glad</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\qgl.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\sys\sys_assert.cpp">
+      <Filter>idLib\Sys</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\Thread.cpp">
+      <Filter>idLib</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\sys\win32\win_thread.cpp">
+      <Filter>idLib\Sys\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\ParallelJobList.cpp">
+      <Filter>idLib</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\compilers\compiler_common.cpp">
+      <Filter>Tools\Compilers</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\compilers\particle\ParticleCollisionStatic.cpp">
+      <Filter>Tools\Compilers\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\ImmediateRendering.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\AmbientOcclusionStage.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\BloomStage.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\DepthStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\DrawBatchExecutor.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\GpuBuffer.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\InteractionStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\RenderBackend.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\StencilShadowStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\FrameBufferManager.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="framework\GamepadInput.cpp">
+      <Filter>Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="framework\LoadStack.cpp">
+      <Filter>Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="sys\sys_padinput.cpp">
+      <Filter>Sys</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\ManyLightInteractionStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\ShadowMapStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\ParticleSystem.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="game\Http\HttpRequest.cpp">
+      <Filter>Game\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\hashing\sha256.c">
+      <Filter>idLib\Hashing</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\containers\StrPool.cpp">
+      <Filter>idLib\Containers</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\containers\PlaneSet.cpp">
+      <Filter>idLib\Containers</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\compilers\dmap\planargraph.cpp">
+      <Filter>Tools\Compilers\DMap</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\compilers\dmap\earcut.cpp">
+      <Filter>Tools\Compilers\DMap</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\containers\DisjointSets.cpp">
+      <Filter>idLib\Containers</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\backend\FrobOutlineStage.cpp">
+      <Filter>Renderer\Backend</Filter>
+    </ClCompile>
+    <ClCompile Include="sys\sys_cpu.cpp">
+      <Filter>Sys</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\math\Simd_IdAsm.cpp">
+      <Filter>idLib\Math</Filter>
+    </ClCompile>
+    <ClCompile Include="framework\Tracing.cpp">
+      <Filter>Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\artefacts\tracy\src\TracyClient.cpp">
+      <Filter>idLib</Filter>
+    </ClCompile>
+    <ClCompile Include="idlib\math\Simd_SSSE3.cpp">
+      <Filter>idLib\Math</Filter>
+    </ClCompile>
+    <ClCompile Include="framework\DeclSubtitles.cpp">
+      <Filter>Framework</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

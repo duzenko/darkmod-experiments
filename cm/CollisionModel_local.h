@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 /*
@@ -373,7 +373,6 @@ private:			// CollisionMap_rotate.cpp
 private:			// CollisionMap_contents.cpp
 	bool			TestTrmVertsInBrush( cm_traceWork_t *tw, cm_brush_t *b );
 	bool			TestTrmInPolygon( cm_traceWork_t *tw, cm_polygon_t *p );
-	cm_node_t *		PointNode( const idVec3 &p, cm_model_t *model );
 	int				PointContents( const idVec3 p, cmHandle_t model );
 	int				TransformedPointContents( const idVec3 &p, cmHandle_t model, const idVec3 &origin, const idMat3 &modelAxis );
 	int				ContentsTrm( trace_t *results, const idVec3 &start,
@@ -453,6 +452,7 @@ private:			// CollisionMap_load.cpp
 	void			OptimizeArrays( cm_model_t *model );
 	void			FinishModel( cm_model_t *model );
 	void			BuildModels( const idMapFile *mapFile );
+	cmHandle_t		AddModel( cm_model_t *model );
 	cmHandle_t		FindModel( const char *name );
 	cm_model_t *	CollisionModelForMapEntity( const idMapEntity *mapEnt );	// brush/patch model from .map
 	cm_model_t *	LoadRenderModel( const char *fileName, const idDeclSkin* skin = NULL );	// ASE/LWO models. skin added #4232 SteveL
@@ -498,6 +498,7 @@ private:			// collision map data
 	int				maxModels;
 	int				numModels;
 	cm_model_t **	models;
+	idHashIndex		modelsHash;
 					// polygons and brush for trm model
 	cm_polygonRef_t*trmPolygons[MAX_TRACEMODEL_POLYS];
 	cm_brushRef_t *	trmBrushes[1];

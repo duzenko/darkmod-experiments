@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -19,7 +19,7 @@
 
 
 #include "qe3.h"
-#include <GL/glu.h>
+//#include <GL/glu.h>
 
 #include "../../renderer/tr_local.h"
 #include "../../renderer/model_local.h"	// for idRenderModelMD5
@@ -44,7 +44,7 @@ DrawRenderModel
 void DrawRenderModel( idRenderModel *model, idVec3 &origin, idMat3 &axis, bool cameraView ) {
 	for ( int i = 0; i < model->NumSurfaces(); i++ ) {
 		const modelSurface_t *surf = model->Surface( i );
-		const idMaterial *material = surf->shader;
+		const idMaterial *material = surf->material;
 
 		int nDrawMode = g_pParentWnd->GetCamera()->Camera().draw_mode;
 
@@ -3559,7 +3559,6 @@ void Brush_DrawFacingAngle( brush_t *b, entity_t *e, bool particle ) {
 	VectorMA(endpoint, -dist, ( particle ) ? up : forward, tip1);
 	VectorMA(tip1, -dist, ( particle ) ? forward : up, tip1);
 	VectorMA(tip1, 2 * dist, ( particle ) ? forward : up, tip2);
-	globalImages->BindNull();
 	qglColor4f(1, 1, 1, 1);
 	qglLineWidth(2);
 	qglBegin(GL_LINES);
@@ -3607,9 +3606,9 @@ void DrawProjectedLight(brush_t *b, bool bSelected, bool texture) {
 	GL_FloatColor(1, 0, 1);
 	for (i = 0; i < tri->numIndexes; i += 3) {
 		qglBegin(GL_LINE_LOOP);
-		glVertex3fv(tri->verts[tri->indexes[i]].xyz.ToFloatPtr());
-		glVertex3fv(tri->verts[tri->indexes[i + 1]].xyz.ToFloatPtr());
-		glVertex3fv(tri->verts[tri->indexes[i + 2]].xyz.ToFloatPtr());
+		qglVertex3fv(tri->verts[tri->indexes[i]].xyz.ToFloatPtr());
+		qglVertex3fv(tri->verts[tri->indexes[i + 1]].xyz.ToFloatPtr());
+		qglVertex3fv(tri->verts[tri->indexes[i + 2]].xyz.ToFloatPtr());
 		qglEnd();
 	}
 
@@ -3777,6 +3776,7 @@ void DrawSpeaker(brush_t *b, bool bSelected, bool twoD) {
 		qglTranslatef(b->owner->origin.x, b->owner->origin.y, b->owner->origin.z );
 		GL_FloatColor( 0.4f, 0.4f, 0.4f );
 		qglPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
+#if 0	//TODO: restore this piece of code without GLU
 		GLUquadricObj* qobj = gluNewQuadric();
 		gluSphere(qobj, min, 8, 8);
 		GL_FloatColor( 0.8f, 0.8f, 0.8f );
@@ -3798,6 +3798,7 @@ void DrawSpeaker(brush_t *b, bool bSelected, bool twoD) {
 		}
 		gluSphere(qobj, max, 8, 8);
 		gluDeleteQuadric(qobj);
+#endif
 		qglPopMatrix();
 	}
 
@@ -3861,7 +3862,6 @@ void DrawLight(brush_t *b, bool bSelected) {
 	idVec3	vSave;
 	VectorCopy(vTriColor, vSave);
 
-	globalImages->BindNull();
 	qglBegin(GL_TRIANGLE_FAN);
 	qglVertex3fv(vTop.ToFloatPtr());
 	int i;
@@ -4025,7 +4025,6 @@ void Brush_DrawModel( brush_t *b, bool camera, bool bSelected ) {
 			*/
 
             //draw white triangle outlines
-			globalImages->BindNull();
 
             qglPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
             qglDisable( GL_BLEND );
@@ -4046,7 +4045,6 @@ void Brush_DrawModel( brush_t *b, bool camera, bool bSelected ) {
 		qglPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 	}
 	else if ( camera ) {
-		globalImages->BindNull();
 	}
 
 	if ( g_bPatchShowBounds ) {
@@ -4164,8 +4162,6 @@ void Brush_DrawAxis(brush_t *b) {
 		xr = (b->modelHandle->Bounds()[1].x > b->modelHandle->Bounds()[0].x) ? b->modelHandle->Bounds()[1].x - b->modelHandle->Bounds()[0].x : b->modelHandle->Bounds()[0].x - b->modelHandle->Bounds()[1].x;
 		yr = (b->modelHandle->Bounds()[1].y > b->modelHandle->Bounds()[0].y) ? b->modelHandle->Bounds()[1].y - b->modelHandle->Bounds()[0].y : b->modelHandle->Bounds()[0].y - b->modelHandle->Bounds()[1].y;
 		zr = (b->modelHandle->Bounds()[1].z > b->modelHandle->Bounds()[0].z) ? b->modelHandle->Bounds()[1].z - b->modelHandle->Bounds()[0].z : b->modelHandle->Bounds()[0].z - b->modelHandle->Bounds()[1].z;
-
-		globalImages->BindNull();
 
 		GLTransformedCircle(0, b->owner->origin, xr, mat, 1.25, idVec3(0, 0, 1), dist);
 		GLTransformedCircle(1, b->owner->origin, yr, mat, 1.25, idVec3(0, 1, 0), dist);
@@ -4292,7 +4288,6 @@ void Brush_DrawEnv( brush_t *b, bool cameraView, bool bSelected ) {
 			GL_FloatColor( 1.f, 1.f, 1.f );
 		}
 		DrawRenderModel( model, origin, axis, true );
-		globalImages->BindNull();
 		delete model;
 		model = NULL;
 
@@ -4502,8 +4497,6 @@ void Brush_Draw(brush_t *b, bool bSelected) {
 			qglDisable(GL_BLEND);
 		}
 	}
-
-	globalImages->BindNull();
 }
 
 /*

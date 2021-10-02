@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -290,12 +290,12 @@ void idRenderModelDecal::CreateDecal( const idRenderModel *model, const decalPro
 		const modelSurface_t *surf = model->Surface( surfNum );
 
 		// if no geometry or no shader
-		if ( !surf->geometry || !surf->shader ) {
+		if ( !surf->geometry || !surf->material ) {
 			continue;
 		}
 
 		// decals and overlays use the same rules
-		if ( !localInfo.force && !surf->shader->AllowOverlays() ) {
+		if ( !localInfo.force && !surf->material->AllowOverlays() ) {
 			continue;
 		}
 
@@ -505,9 +505,12 @@ void idRenderModelDecal::AddDecalDrawSurf( viewEntity_t *space ) {
 
 	// copy the current vertexes to temp vertex cache
 	newTri->ambientCache = vertexCache.AllocVertex( tri.verts, ALIGN( tri.numVerts * sizeof( idDrawVert ), VERTEX_CACHE_ALIGN ) );
+	newTri->indexCache = vertexCache.AllocIndex( tri.indexes, ALIGN( tri.numIndexes * sizeof( tri.indexes[0] ), INDEX_CACHE_ALIGN ) );
 
-	// create the drawsurf
-	R_AddDrawSurf( newTri, space, &space->entityDef->parms, material, space->scissorRect );
+	if ( newTri->ambientCache.IsValid() && newTri->indexCache.IsValid() ) {
+		// create the drawsurf
+		R_AddDrawSurf( newTri, space, &space->entityDef->parms, material, space->scissorRect, -1.0f, true );
+	}
 }
 
 /*

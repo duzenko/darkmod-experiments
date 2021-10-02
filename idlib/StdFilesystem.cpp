@@ -1,26 +1,36 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
 #include "StdFilesystem.h"
 
 #ifdef _MSC_VER
-	//STL-based implementation for MSVC2013
-	#include <filesystem>
-	namespace stdfsys = std::tr2::sys;
-	//TODO: support later versions of MSVC
+	#if _MSC_VER < 1910
+		//STL-based implementation for MSVC2013
+		#include <filesystem>
+		namespace stdfsys = std::tr2::sys;
+	#else // MSVC 2017+
+		#if _HAS_CXX17
+			#include <filesystem>
+			namespace stdfsys = std::filesystem;
+		#else
+			#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
+			#include <experimental/filesystem>
+			namespace stdfsys = std::experimental::filesystem;
+		#endif
+	#endif 
 #else
 	//it should be here for both GCC and Clang
 	#include <experimental/filesystem>

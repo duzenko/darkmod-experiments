@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -119,6 +119,13 @@ bool PathCornerTask::Perform(Subsystem& subsystem)
 				// Move is done, fall back to PatrolTask
 				DM_LOG(LC_AI, LT_INFO)LOGSTRING("Move is done.\r");
 
+				// grayman #3989 - Save the ideal sitting/sleeping location for patrolling to return to after
+				// an interruption. Though saved for all path_corner nodes and the original AI location when
+				// the AI starts with a "sitting" or "sleeping" spawnarg, it is only used by
+				// Event_GetVectorToIdealOrigin(), which is called by the sitting/sleeping animations.
+
+				owner->GetMemory().returnSitPosition = path->GetPhysics()->GetOrigin();
+
 				// grayman #3755 - reset time this door can be used again
 
 				Memory& memory = owner->GetMemory();
@@ -142,7 +149,7 @@ bool PathCornerTask::Perform(Subsystem& subsystem)
 			
 			idVec3 moveDeltaVec = ownerOrigin - _lastPosition;
 			float moveDelta = moveDeltaVec.NormalizeFast();
-		
+
 			// grayman #2414 - start of new prediction code
 
 			if (moveDelta > 0)
@@ -160,8 +167,8 @@ bool PathCornerTask::Perform(Subsystem& subsystem)
 					toPath.z = 0; // ignore vertical component
 					float distToPath = toPath.NormalizeFast();
 
-					// The move direction and the distance vector to the path are pointing in roughly the same direction.
-					// The prediction will be rather accurate.
+					// If the move direction and the distance vector to the path are pointing in roughly the same direction,
+					// the prediction will be rather accurate.
 
 					if (toPath * moveDeltaVec > 0.7f)
 					{
@@ -199,6 +206,13 @@ bool PathCornerTask::Perform(Subsystem& subsystem)
 							// Move is done, fall back to PatrolTask
 							DM_LOG(LC_AI, LT_INFO)LOGSTRING("PathCornerTask ending prematurely.\r");
 
+							// grayman #5156 - need to include this missing line
+							// grayman #3989 - Save the ideal sitting/sleeping location for patrolling to return to after
+							// an interruption. Though saved for all path_corner nodes and the original AI location when
+							// the AI starts with a "sitting" or "sleeping" spawnarg, it is only used by
+							// Event_GetVectorToIdealOrigin(), which is called by the sitting/sleeping animation scripts.
+							owner->GetMemory().returnSitPosition = path->GetPhysics()->GetOrigin();
+
 							// End this task, let the next patrol/pathcorner task take up its work before
 							// the AI code is actually reaching its position and issuing StopMove
 							return true;
@@ -219,7 +233,7 @@ bool PathCornerTask::Perform(Subsystem& subsystem)
 		if (owner->AI_DEST_UNREACHABLE)
 		{
 			// Unreachable, fall back to PatrolTask
-			DM_LOG(LC_AI, LT_INFO)LOGSTRING("Destination is unreachable, ending PathCornerTask.\r");
+			DM_LOG(LC_AI, LT_INFO)LOGSTRING("Destination is unreachable, ending PathCornerTask, falling back to PatrolTask.\r");
 			idVec3 prevMove = owner->movementSubsystem->GetPrevTraveled(true); // grayman #3647
 
 			// NextPath();

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __WINDOW_H__
@@ -285,7 +285,7 @@ public:
 
 	bool ParseScript(idParser *src, idGuiScriptList &list, int *timeParm = NULL, bool allowIf = false);
 	bool RunScript(int n);
-	bool RunScriptList(idGuiScriptList *src);
+	bool RunScriptList(idGuiScriptList *src, const char *name = "[unknown]");
 	void SetRegs(const char *key, const char *val);
     intptr_t ParseExpression(idParser *src, idWinVar *var = NULL, intptr_t component = 0);
 	int ExpressionConstant(float f);
@@ -317,6 +317,10 @@ public:
 	void		ClientToScreen		( idRectangle* rect );
 
 	bool		UpdateFromDictionary ( idDict& dict );
+
+	//stgatilov: debugging/error reporting
+	void		BeforeExecute(idGuiScript *script);
+	idStr		GetCurrentSourceLocation() const;
 
 protected:
 
@@ -433,6 +437,12 @@ protected:
 	idRegisterList regList;
 
 	idWinBool	hideCursor;
+
+	//stgatilov: pool of source filename strings referenced in idGuiScript elements
+	idDict sourceFilenamePool;
+	//regularly set during script execution: workaround to pass this data into Script_Set
+	const char *sourceFilenameCurrent;
+	int sourceLineNumCurrent;
 };
 
 ID_INLINE void idWindow::AddDefinedVar( idWinVar* var ) {

@@ -339,8 +339,8 @@ void Z_Draw(void) {
 	}
 
 	// clear
-	GL_Viewport(0, 0, z.width, z.height);
-	GL_Scissor(0, 0, z.width, z.height);
+	GL_ViewportVidSize(0, 0, z.width, z.height);
+	GL_ScissorVidSize(0, 0, z.width, z.height);
 
 	qglClearColor
 	(
@@ -370,7 +370,6 @@ void Z_Draw(void) {
 	h = z.height / 2 / z.scale;
 	qglOrtho(-w, w, z.origin[2] - h, z.origin[2] + h, -8, 8);
 
-	globalImages->BindNull();
 	qglDisable(GL_DEPTH_TEST);
 	qglDisable(GL_BLEND);
 
@@ -381,8 +380,6 @@ void Z_Draw(void) {
 	qglDisable(GL_CULL_FACE);
 
 	qglPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-	globalImages->BindNull();
 
 	// draw filled interiors and edges
 	dir_up[0] = 0;

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -324,7 +324,7 @@ bool CFrobLock::IsPickable()
 
 void CFrobLock::Open()
 {
-	if (!IsLocked())
+	if (!IsLocked() || cv_door_ignore_locks.GetBool())
 	{
 		// If we're unlocked, just ToggleOpen the targets
 		ToggleOpenTargets();
@@ -353,7 +353,7 @@ void CFrobLock::Open()
 
 void CFrobLock::ToggleOpenTargets()
 {
-	if (IsLocked())
+	if (IsLocked() && !cv_door_ignore_locks.GetBool())
 	{
 		// We're still locked, play the locked sound and exit
 		FrobLockStartSound("snd_locked");
@@ -529,7 +529,7 @@ void CFrobLock::UpdateHandlePosition()
 
 		if (handle == NULL) continue;
 
-		handle->SetFractionalPosition(fraction);
+		handle->SetFractionalPosition(fraction, false);
 	}
 }
 
@@ -666,4 +666,8 @@ void CFrobLock::Event_ClearPlayerImmobilization(idEntity* player)
 
 	// Release the immobilization imposed on the player by Lockpicking
 	static_cast<idPlayer*>(player)->SetImmobilization("Lockpicking", 0);
+
+	// stgatilov #4968: stop lockpicking if player's frob is broken
+	// note: release does not look at lockpick type, so we pass garbage
+	m_Lock->ProcessLockpickImpulse(EReleased, '-');
 }

@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 /*
@@ -34,35 +34,6 @@
 #include "rc/doom_resource.h"
 #include "../../renderer/tr_local.h"
 #include "../../renderer/FrameBuffer.h"
-
-// WGL_ARB_extensions_string
-PFNWGLGETEXTENSIONSSTRINGARBPROC wglGetExtensionsStringARB;
-
-// WGL_EXT_swap_interval
-PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
-
-// WGL_ARB_pixel_format
-PFNWGLGETPIXELFORMATATTRIBIVARBPROC wglGetPixelFormatAttribivARB;
-PFNWGLGETPIXELFORMATATTRIBFVARBPROC wglGetPixelFormatAttribfvARB;
-PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB;
-
-// WGL_ARB_pbuffer
-PFNWGLCREATEPBUFFERARBPROC	wglCreatePbufferARB;
-PFNWGLGETPBUFFERDCARBPROC	wglGetPbufferDCARB;
-PFNWGLRELEASEPBUFFERDCARBPROC	wglReleasePbufferDCARB;
-PFNWGLDESTROYPBUFFERARBPROC	wglDestroyPbufferARB;
-PFNWGLQUERYPBUFFERARBPROC	wglQueryPbufferARB;
-
-// WGL_ARB_render_texture
-PFNWGLBINDTEXIMAGEARBPROC		wglBindTexImageARB;
-PFNWGLRELEASETEXIMAGEARBPROC	wglReleaseTexImageARB;
-PFNWGLSETPBUFFERATTRIBARBPROC	wglSetPbufferAttribARB;
-
-//
-// function declaration
-//
-bool QGL_Init( const char *dllname );
-void QGL_Shutdown( void );
 
 
 /*
@@ -105,7 +76,7 @@ static void GLimp_RestoreGamma( void ) {
 ========================
 GLimp_SetGamma
 
-The renderer calls this when the user adjusts r_gamma or r_brightness
+The renderer calls this when the user adjusts gamma or brightness
 ========================
 */
 void GLimp_SetGamma( unsigned short red[256], unsigned short green[256], unsigned short blue[256] ) {
@@ -187,49 +158,11 @@ LONG WINAPI FakeWndProc(
 	qwglMakeCurrent( hDC, hGLRC );
 
 	// free things
-	wglMakeCurrent( NULL, NULL );
-	wglDeleteContext( hGLRC );
+	qwglMakeCurrent( NULL, NULL );
+	qwglDeleteContext( hGLRC );
 	ReleaseDC( hWnd, hDC );
 
 	return DefWindowProc( hWnd, uMsg, wParam, lParam );
-}
-
-
-/*
-==================
-GLW_GetWGLExtensionsWithFakeWindow
-==================
-*/
-void GLW_CheckWGLExtensions( HDC hDC ) {
-	wglGetExtensionsStringARB = ( PFNWGLGETEXTENSIONSSTRINGARBPROC )GLimp_ExtensionPointer( "wglGetExtensionsStringARB" );
-
-	if ( wglGetExtensionsStringARB ) {
-		glConfig.wgl_extensions_string = ( const char * ) wglGetExtensionsStringARB( hDC );
-	} else {
-		glConfig.wgl_extensions_string = "";
-	}
-
-	// WGL_EXT_swap_control
-	wglSwapIntervalEXT = ( PFNWGLSWAPINTERVALEXTPROC ) GLimp_ExtensionPointer( "wglSwapIntervalEXT" );
-
-	// WGL_ARB_pixel_format
-	wglGetPixelFormatAttribivARB = ( PFNWGLGETPIXELFORMATATTRIBIVARBPROC )GLimp_ExtensionPointer( "wglGetPixelFormatAttribivARB" );
-	wglGetPixelFormatAttribfvARB = ( PFNWGLGETPIXELFORMATATTRIBFVARBPROC )GLimp_ExtensionPointer( "wglGetPixelFormatAttribfvARB" );
-	wglChoosePixelFormatARB = ( PFNWGLCHOOSEPIXELFORMATARBPROC )GLimp_ExtensionPointer( "wglChoosePixelFormatARB" );
-
-	// WGL_ARB_pbuffer
-	wglCreatePbufferARB = ( PFNWGLCREATEPBUFFERARBPROC )GLimp_ExtensionPointer( "wglCreatePbufferARB" );
-	wglGetPbufferDCARB = ( PFNWGLGETPBUFFERDCARBPROC )GLimp_ExtensionPointer( "wglGetPbufferDCARB" );
-	wglReleasePbufferDCARB = ( PFNWGLRELEASEPBUFFERDCARBPROC )GLimp_ExtensionPointer( "wglReleasePbufferDCARB" );
-	wglDestroyPbufferARB = ( PFNWGLDESTROYPBUFFERARBPROC )GLimp_ExtensionPointer( "wglDestroyPbufferARB" );
-	wglQueryPbufferARB = ( PFNWGLQUERYPBUFFERARBPROC )GLimp_ExtensionPointer( "wglQueryPbufferARB" );
-
-	// WGL_ARB_render_texture
-	wglBindTexImageARB = ( PFNWGLBINDTEXIMAGEARBPROC )GLimp_ExtensionPointer( "wglBindTexImageARB" );
-	wglReleaseTexImageARB = ( PFNWGLRELEASETEXIMAGEARBPROC )GLimp_ExtensionPointer( "wglReleaseTexImageARB" );
-	wglSetPbufferAttribARB = ( PFNWGLSETPBUFFERATTRIBARBPROC )GLimp_ExtensionPointer( "wglSetPbufferAttribARB" );
-
-	qglGetIntegerv( GL_MAX_SAMPLES, ( GLint * )&glConfig.maxSamples );
 }
 
 /*
@@ -241,6 +174,9 @@ static void GLW_GetWGLExtensionsWithFakeWindow( void ) {
 	HWND	hWnd;
 	MSG		msg;
 
+	//load basic functions like e.g. wglMakeCurrent
+	GLimp_LoadFunctions(false);
+
 	// Create a window for the sole purpose of getting
 	// a valid context to get the wglextensions
 	hWnd = CreateWindow( WIN32_FAKE_WINDOW_CLASS_NAME, GAME_NAME,
@@ -251,10 +187,13 @@ static void GLW_GetWGLExtensionsWithFakeWindow( void ) {
 	                     NULL, NULL, win32.hInstance, NULL );
 	if ( hWnd ) {
 		HDC hDC = GetDC( hWnd );
-		HGLRC gRC = wglCreateContext( hDC );
-		wglMakeCurrent( hDC, gRC );
-		GLW_CheckWGLExtensions( hDC );
-		wglDeleteContext( gRC );
+		HGLRC gRC = qwglCreateContext( hDC );
+		qwglMakeCurrent( hDC, gRC );
+		//reload context creation functions like e.g. wglCreateContextAttribsARB
+		win32.hDC = hDC;
+		GLimp_LoadFunctions();
+		win32.hDC = NULL;
+		qwglDeleteContext( gRC );
 		ReleaseDC( hWnd, hDC );
 
 		DestroyWindow( hWnd );
@@ -276,7 +215,6 @@ GLW_WM_CREATE
 */
 void GLW_WM_CREATE( HWND hWnd ) {
 }
-
 
 /*
 ====================
@@ -323,7 +261,23 @@ static bool GLW_InitDriver( glimpParms_t parms ) {
 
 	// the multisample path uses the wgl
 	// duzenko #4425: AA needs to be setup elsewhere
-	if ( wglChoosePixelFormatARB && ( parms.multiSamples > 1 && !r_useFbo.GetBool() ) ) {
+#if 1	// ChoosePixelFormatARB is the only way to get sRGB with the default FBO?
+	UINT	numFormats;
+	int		iAttributes[] = {
+		WGL_SAMPLE_BUFFERS_ARB,				1,
+		WGL_SAMPLES_ARB,					1,
+		WGL_DOUBLE_BUFFER_ARB,				TRUE,
+		WGL_STENCIL_BITS_ARB,				8,
+		WGL_DEPTH_BITS_ARB,					24,
+		WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB,	TRUE,
+		0,									0
+	};
+	FLOAT	fAttributes[] = { 0, 0 };
+	if ( qwglChoosePixelFormatARB && r_fboSRGB ) {
+		qwglChoosePixelFormatARB( win32.hDC, iAttributes, fAttributes, 1, &win32.pixelformat, &numFormats );
+	} else
+#else	// used to do this in older TDM versions
+	if ( qwglChoosePixelFormatARB && ( parms.multiSamples > 1 && !r_useFbo.GetBool() ) ) {
 		int		iAttributes[20];
 		FLOAT	fAttributes[] = {0, 0};
 		UINT	numFormats;
@@ -350,8 +304,10 @@ static bool GLW_InitDriver( glimpParms_t parms ) {
 		iAttributes[18] = 0;
 		iAttributes[19] = 0;
 
-		wglChoosePixelFormatARB( win32.hDC, iAttributes, fAttributes, 1, &win32.pixelformat, &numFormats );
-	} else {
+		qinit_wglChoosePixelFormatARB( win32.hDC, iAttributes, fAttributes, 1, &win32.pixelformat, &numFormats );
+	} else 
+#endif
+	{
 		// this is the "classic" choose pixel format path
 		// eventually we may need to have more fallbacks, but for
 		// now, ask for everything
@@ -372,14 +328,6 @@ static bool GLW_InitDriver( glimpParms_t parms ) {
 
 	// get the full info
 	DescribePixelFormat( win32.hDC, win32.pixelformat, sizeof( win32.pfd ), &win32.pfd );
-	glConfig.colorBits = win32.pfd.cColorBits;
-	glConfig.depthBits = win32.pfd.cDepthBits;
-	glConfig.stencilBits = win32.pfd.cStencilBits;
-
-	// XP seems to set this incorrectly
-	if ( !glConfig.stencilBits ) {
-		glConfig.stencilBits = 8;
-	}
 
 	// the same SetPixelFormat is used either way
 	if ( SetPixelFormat( win32.hDC, win32.pixelformat, &win32.pfd ) == FALSE ) {
@@ -387,13 +335,42 @@ static bool GLW_InitDriver( glimpParms_t parms ) {
 		return false;
 	}
 
-	// startup the OpenGL subsystem by creating a context and making it current
-	common->Printf( "...creating GL context: " );
-	if ( ( win32.hGLRC = qwglCreateContext( win32.hDC ) ) == 0 ) {
-		common->Printf( S_COLOR_YELLOW "failed\n" S_COLOR_DEFAULT );
+	if (GLAD_WGL_ARB_create_context && GLAD_WGL_ARB_create_context_profile) {
+		// create OpenGL context for rendering (new GL3+ approach with context and debug)
+		common->Printf( "...creating GL context: " );
+		if( r_glCoreProfile.GetInteger() == 0 )
+			common->Printf("compatibility ");
+		else if( r_glCoreProfile.GetInteger() == 1 )
+			common->Printf("core ");
+		else if( r_glCoreProfile.GetInteger() == 2 )
+			common->Printf("core-fc ");
+		if( r_glDebugContext.GetBool() )
+			common->Printf("debug ");
+		common->Printf("\n");
+		const int attribs[] = {
+			// we want at least this version of GL
+			WGL_CONTEXT_MAJOR_VERSION_ARB, QGL_REQUIRED_VERSION_MAJOR,
+			WGL_CONTEXT_MINOR_VERSION_ARB, QGL_REQUIRED_VERSION_MINOR,
+			// TODO: might want to (optionally) create a core profile once we got rid of the old stuff
+			WGL_CONTEXT_PROFILE_MASK_ARB, r_glCoreProfile.GetInteger() > 0 ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB : WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+			// special case for 3.1: even core profiles are still compatible :/
+			// enable debug context if asked for
+			WGL_CONTEXT_FLAGS_ARB, (r_glCoreProfile.GetInteger() > 1 ? WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB : 0) | (r_glDebugContext.GetBool() ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+			0
+		};
+		win32.hGLRC = qwglCreateContextAttribsARB( win32.hDC, NULL, attribs );
+	}
+	else {
+		// create OpenGL context for rendering (deprecated GL1 approach)
+		r_glCoreProfile.SetInteger(0);
+		common->Printf( "...creating GL context: deprecated\n" );
+		win32.hGLRC = qwglCreateContext( win32.hDC );
+	}
+
+	if ( win32.hGLRC == 0 ) {
+		common->Printf( S_COLOR_YELLOW "Failed to create OpenGL context\n" S_COLOR_DEFAULT );
 		return false;
 	}
-	common->Printf( "succeeded\n" );
 
 	common->Printf( "...making context current: " );
 	if ( !qwglMakeCurrent( win32.hDC, win32.hGLRC ) ) {
@@ -473,11 +450,27 @@ static bool GLW_CreateWindow( glimpParms_t parms ) {
 
 	// compute width and height
 	if ( parms.fullScreen ) {
-		exstyle = 0; // WS_EX_TOPMOST;
+		exstyle = 0;
 		stylebits = WS_POPUP | WS_VISIBLE | WS_SYSMENU;
+
+		if (win32.win_topmost)
+			 exstyle |= WS_EX_TOPMOST;
 
 		x = 0;
 		y = 0;
+
+		if ( r_fullscreen.GetInteger() == 2 ) {
+			//always adjust game resolution to desktop resolution in borderless mode
+			parms.width = glConfig.vidWidth = win32.desktopWidth;
+			parms.height = glConfig.vidHeight = win32.desktopHeight;
+			r_customWidth.SetInteger( win32.desktopWidth );
+			r_customHeight.SetInteger( win32.desktopHeight );
+			//adding excessive lines above and below screen, so that OS does NOT put us into exclusive mode
+			//this hack was found here: https://stackoverflow.com/q/22259067/556899
+			y = -1;
+			parms.height += 2;
+		}
+
 		w = parms.width;
 		h = parms.height;
 	} else {
@@ -491,6 +484,8 @@ static bool GLW_CreateWindow( glimpParms_t parms ) {
 
 		exstyle = 0;
 		stylebits = WINDOW_STYLE | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+		if ( win32.win_maximized )
+			stylebits |= WS_MAXIMIZE;
 		AdjustWindowRect( &r, stylebits, FALSE );
 
 		w = r.right - r.left;
@@ -586,10 +581,10 @@ GLW_SetFullScreen
 ===================
 */
 static bool GLW_SetFullScreen( glimpParms_t parms ) {
-	if ( r_useFbo.GetBool() ) {
-		win32.cdsFullscreen = true;
+	win32.cdsFullscreen = true;
+	if ( r_fullscreen.GetInteger() == 2 )
 		return true;
-	}
+
 	DEVMODE		dm;
 	int			cdsRet;
 	DEVMODE		devmode;
@@ -692,7 +687,6 @@ parameters and try again.
 ===================
 */
 bool GLimp_Init( glimpParms_t parms ) {
-	const char	*driverName;
 	HDC			hDC;
 
 	common->Printf( "Initializing OpenGL subsystem\n" );
@@ -717,27 +711,9 @@ bool GLimp_Init( glimpParms_t parms ) {
 	// create our window classes if we haven't already
 	GLW_CreateWindowClasses();
 
-	// this will load the dll and set all our qgl* function pointers,
-	// but doesn't create a window
-
-	// r_glDriver is only intended for using instrumented OpenGL
-	// dlls.  Normal users should never have to use it, and it is
-	// not archived.
-	driverName = r_glDriver.GetString()[0] ? r_glDriver.GetString() : "opengl32";
-	if ( !QGL_Init( driverName ) ) {
-		common->Warning( "GLimp_Init: Could not load r_glDriver \"%s\"", driverName );
-		return false;
-	}
-
 	// getting the wgl extensions involves creating a fake window to get a context,
 	// which is pretty disgusting, and seems to mess with the AGP VAR allocation
 	GLW_GetWGLExtensionsWithFakeWindow();
-
-	if ( parms.multiSamples > glConfig.maxSamples ) {
-		common->Warning( "GLimp_Init: Tried to set multiSamples above the maximum supported by hardware" );
-		parms.multiSamples = glConfig.maxSamples;
-		r_multiSamples.SetInteger( glConfig.maxSamples );
-	}
 
 	// try to change to fullscreen
 	if ( parms.fullScreen ) {
@@ -754,11 +730,9 @@ bool GLimp_Init( glimpParms_t parms ) {
 		return false;
 	}
 
-	// wglSwapinterval, etc
-	GLW_CheckWGLExtensions( win32.hDC );
-
-	// check logging
-	GLimp_EnableLogging( ( r_logFile.GetInteger() != 0 ) );
+	common->Printf( "...initializing QGL\n" );
+	//load all function pointers available in the final context
+	GLimp_LoadFunctions();
 
 	return true;
 }
@@ -832,26 +806,21 @@ bool GLimp_SetScreenParms( glimpParms_t parms ) {
 		common->Printf( "%i %i %i %i\n", x, y, w, h );
 	}
 
-	if ( r_useFbo.GetBool() ) { // duzenko #4425: always use desktop resolution when using fbo
-		if ( parms.fullScreen ) {
-			HMONITOR hMonitor = MonitorFromWindow( win32.hWnd, MONITOR_DEFAULTTOPRIMARY );
-			MONITORINFO lpmi;
-			lpmi.cbSize = sizeof( lpmi );
-			if ( GetMonitorInfo( hMonitor, &lpmi ) ) {
-				SetWindowPos( win32.hWnd, 0, lpmi.rcMonitor.left, lpmi.rcMonitor.top,
-				              lpmi.rcMonitor.right - lpmi.rcMonitor.left, lpmi.rcMonitor.bottom - lpmi.rcMonitor.top, SWP_SHOWWINDOW );
-			} else {
-				SetWindowPos( win32.hWnd, 0, 0, 0, win32.desktopWidth, win32.desktopHeight, SWP_SHOWWINDOW );
-			}
+	// duzenko #4425: always use desktop resolution when using fbo
+	if ( parms.fullScreen ) {
+		HMONITOR hMonitor = MonitorFromWindow( win32.hWnd, MONITOR_DEFAULTTOPRIMARY );
+		MONITORINFO lpmi;
+		lpmi.cbSize = sizeof( lpmi );
+		if ( GetMonitorInfo( hMonitor, &lpmi ) ) {
+			SetWindowPos( win32.hWnd, 0, lpmi.rcMonitor.left, lpmi.rcMonitor.top,
+						  lpmi.rcMonitor.right - lpmi.rcMonitor.left, lpmi.rcMonitor.bottom - lpmi.rcMonitor.top, SWP_SHOWWINDOW );
 		} else {
-			SetWindowPos( win32.hWnd, 0, x, y, w, h, SWP_SHOWWINDOW );
+			SetWindowPos( win32.hWnd, 0, 0, 0, win32.desktopWidth, win32.desktopHeight, SWP_SHOWWINDOW );
 		}
-		return true;
 	} else {
-		bool ret = ( ChangeDisplaySettings( &dm, parms.fullScreen ? CDS_FULLSCREEN : 0 ) == DISP_CHANGE_SUCCESSFUL );
-		SetWindowPos( win32.hWnd, parms.fullScreen ? HWND_TOPMOST : HWND_NOTOPMOST, x, y, w, h, parms.fullScreen ? SWP_NOSIZE | SWP_NOMOVE : SWP_SHOWWINDOW );
-		return ret;
+		SetWindowPos( win32.hWnd, 0, x, y, w, h, SWP_SHOWWINDOW );
 	}
+	return true;
 }
 
 /*
@@ -875,7 +844,7 @@ void GLimp_Shutdown( void ) {
 	}
 
 	// delete HGLRC
-	if ( win32.hGLRC ) {
+	if ( win32.hGLRC && qwglDeleteContext ) {
 		retVal = qwglDeleteContext( win32.hGLRC ) != 0;
 		common->Printf( "...deleting GL context: %s\n", success[retVal] );
 		win32.hGLRC = NULL;
@@ -914,7 +883,8 @@ void GLimp_Shutdown( void ) {
 	GLimp_RestoreGamma();
 
 	// shutdown QGL subsystem
-	QGL_Shutdown();
+	common->Printf( "...shutting down QGL\n" );
+	GLimp_UnloadFunctions();
 }
 
 
@@ -926,13 +896,13 @@ GLimp_SwapBuffers
 void GLimp_SwapBuffers( void ) {
 	// wglSwapinterval is a windows-private extension,
 	// so we must check for it here instead of portably
-	if ( r_swapIntervalTemp.IsModified() ) {
-		r_swapIntervalTemp.ClearModified();
-		if ( wglSwapIntervalEXT ) {
-			wglSwapIntervalEXT( r_swapIntervalTemp.GetInteger() );
+	if ( r_swapInterval.IsModified() ) {
+		r_swapInterval.ClearModified();
+		if ( qwglSwapIntervalEXT ) {
+			qwglSwapIntervalEXT( r_swapInterval );
 		}
 	}
-	qwglSwapBuffers( win32.hDC );
+	SwapBuffers( win32.hDC );
 
 #ifdef DEBUG_PRINTS
 	//Sys_DebugPrintf( "*** SwapBuffers() ***\n" );
@@ -1135,24 +1105,4 @@ void GLimp_WakeBackEnd( void *data ) {
 #ifdef DEBUG_PRINTS
 	OutputDebugString( "<--GLimp_WakeBackEnd\n" );
 #endif
-}
-
-//===================================================================
-
-/*
-===================
-GLimp_ExtensionPointer
-
-Returns a function pointer for an OpenGL extension entry point
-===================
-*/
-GLExtension_t GLimp_ExtensionPointer( const char *name ) {
-	void	( *proc )( void );
-
-	proc = ( GLExtension_t )qwglGetProcAddress( name );
-
-	if ( !proc ) {
-		common->Printf( "Couldn't find proc address for: %s\n", name );
-	}
-	return proc;
 }

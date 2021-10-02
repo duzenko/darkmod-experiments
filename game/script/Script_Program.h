@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SCRIPT_PROGRAM_H__
@@ -313,11 +313,12 @@ public:
 	initialized_t			initialized;
 
 public:
-							idVarDef( idTypeDef *typeptr = NULL );
+							idVarDef( idTypeDef *typeptr = NULL, const char *fileName = NULL );
 							~idVarDef();
 
 	const char *			Name( void ) const;
 	const char *			GlobalName( void ) const;
+	const char *			FileName( void ) const { return fileName.c_str(); }
 
 	void					SetTypeDef( idTypeDef *_type ) { typeDef = _type; }
 	idTypeDef *				TypeDef( void ) const { return typeDef; }
@@ -338,6 +339,7 @@ private:
 	idTypeDef *				typeDef;
 	idVarDefName *			name;		// name of this var
 	idVarDef *				next;		// next var with the same name
+	idStr					fileName;
 };
 
 /***********************************************************************

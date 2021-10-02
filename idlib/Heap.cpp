@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -24,6 +24,22 @@
 	//it was removed from Doom 3 BFG, and most likely it is worse than the now-default LFH
 	//besides, using standard heap makes it easier to analyze crash dumps and integrate heap profiling applications
 	#define USE_LIBC_MALLOC		1
+#endif
+
+bool g_tracingAllocStacks = false;
+#ifdef TRACY_ENABLE
+	//stgatilov: not very good in terms of code size, but hopefully it won't be a problem in one cpp file
+	#define TRACY_MALLOC_REPORT(ptr, len) \
+		if (g_tracingAllocStacks) { \
+			TracySecureAllocS(ptr, len, 10) \
+		} else { \
+			TracySecureAlloc(ptr, len) \
+		}
+	#define TRACY_FREE_ANNOUNCE(ptr) \
+		TracySecureFree(ptr)
+#else
+	#define TRACY_MALLOC_REPORT(ptr, len)
+	#define TRACY_FREE_ANNOUNCE(ptr)
 #endif
 
 #ifndef CRASH_ON_STATIC_ALLOCATION
@@ -258,7 +274,9 @@ void *idHeap::Allocate( const dword bytes ) {
 	c_heapAllocRunningCount++;
 
 #if USE_LIBC_MALLOC
-	return malloc( bytes );
+	void *ptr = malloc( bytes );
+	TRACY_MALLOC_REPORT( ptr, bytes )
+	return ptr;
 #else
 	if ( !(bytes & ~255) ) {
 		return SmallAllocate( bytes );
@@ -282,6 +300,7 @@ void idHeap::Free( void *p ) {
 	c_heapAllocRunningCount--;
 
 #if USE_LIBC_MALLOC
+	TRACY_FREE_ANNOUNCE( p )
 	free( p );
 #else
 	switch( ((byte *)(p))[-1] ) {
@@ -312,14 +331,16 @@ idHeap::Allocate16
 */
 void *idHeap::Allocate16( const dword bytes ) {
 	byte *ptr, *alignedPtr;
+	dword allocBytes = bytes + 16 + sizeof(intptr_t);
 
-	ptr = (byte *) malloc( bytes + 16 + sizeof(intptr_t) );
+	ptr = (byte *) malloc( allocBytes );
+	TRACY_MALLOC_REPORT( ptr, allocBytes )
 	if ( !ptr ) {
 		if ( defragBlock ) {
 			idLib::common->Printf( "Freeing defragBlock on alloc of %i.\n", bytes );
 			free( defragBlock );
 			defragBlock = NULL;
-			ptr = (byte *) malloc( bytes + 16 + sizeof(intptr_t) );
+			ptr = (byte *) malloc( allocBytes );
 			AllocDefragBlock();
 		}
 		if ( !ptr ) {
@@ -340,7 +361,9 @@ idHeap::Free16
 ================
 */
 void idHeap::Free16( void *p ) {
-	free( (void *) *((intptr_t *) (( (byte *) p ) - sizeof(intptr_t))) );
+	void *ptr = (void *) *((intptr_t *) (( (byte *) p ) - sizeof(intptr_t)));
+	TRACY_FREE_ANNOUNCE( ptr )
+	free( ptr );
 }
 
 /*
@@ -1065,7 +1088,9 @@ void *Mem_Alloc( const int size ) {
 #ifdef CRASH_ON_STATIC_ALLOCATION
 		*((int*)0x0) = 1;
 #endif
-		return malloc( size );
+		void *ptr = malloc( size );
+		TRACY_MALLOC_REPORT( ptr, size )
+		return ptr;
 	}
 	void *mem = mem_heap->Allocate( size );
 #ifdef ID_DEBUG_UNINITIALIZED_MEMORY
@@ -1084,10 +1109,12 @@ void Mem_Free( void *ptr ) {
 	if ( !ptr ) {
 		return;
 	}
+
 	if ( !mem_heap ) {
 #ifdef CRASH_ON_STATIC_ALLOCATION
 		*((int*)0x0) = 1;
 #endif
+		TRACY_FREE_ANNOUNCE( ptr )
 		free( ptr );
 		return;
 	}
@@ -1108,7 +1135,9 @@ void *Mem_Alloc16( const int size ) {
 #ifdef CRASH_ON_STATIC_ALLOCATION
 		*((int*)0x0) = 1;
 #endif
-		return malloc( size );
+		void *ptr = malloc( size );
+		TRACY_MALLOC_REPORT( ptr, size )
+		return ptr;
 	}
 	void *mem = mem_heap->Allocate16( size );
 #ifdef ID_DEBUG_UNINITIALIZED_MEMORY
@@ -1132,6 +1161,7 @@ void Mem_Free16( void *ptr ) {
 #ifdef CRASH_ON_STATIC_ALLOCATION
 		*((int*)0x0) = 1;
 #endif
+		TRACY_FREE_ANNOUNCE( ptr );
 		free( ptr );
 		return;
 	}
@@ -1247,57 +1277,10 @@ static char				mem_leakName[256] = "";
 Mem_CleanupFileName
 ==================
 */
+const char *CleanupSourceCodeFileName(const char *fileName);	//defined in Debug.cpp
 const char *Mem_CleanupFileName( const char *fileName ) {
-	static char newFileNames[4][MAX_STRING_CHARS];
-	static int index;
-
-	index = (index + 1) & 3;
-	char *path = newFileNames[index];
-	strcpy(path, fileName);
-
-	for (int i = 0; path[i]; i++)
-		if (path[i] == '\\')
-			path[i] = '/';
-	static const char *BASE_DIR = "tdm/";
-	char *tdm = strstr(path, BASE_DIR);
-	if (tdm)
-		path = tdm + strlen(BASE_DIR);
-	while (char *topar = strstr(path, "/../")) {
-		char *ptr;
-		for (ptr = topar; ptr > path && *(ptr-1) != '/'; ptr--);
-		topar += 4;
-		memmove(ptr, topar, strlen(topar) + 1);
-	}
-	return path;
-
-	//stgatilov: the original code was allocating idStr
-	//which is wrong because string pool is already dead
-/*	int i1, i2;
-	idStr newFileName;
-	static char newFileNames[4][MAX_STRING_CHARS];
-	static int index;
-
-	newFileName = fileName;
-	newFileName.BackSlashesToSlashes();
-	i1 = newFileName.Find( "neo", false );
-	if ( i1 >= 0 ) {
-		i1 = newFileName.Find( "/", false, i1 );
-		newFileName = newFileName.Right( newFileName.Length() - ( i1 + 1 ) );
-	}
-	while( 1 ) {
-		i1 = newFileName.Find( "/../" );
-		if ( i1 <= 0 ) {
-			break;
-		}
-		i2 = i1 - 1;
-		while( i2 > 1 && newFileName[i2-1] != '/' ) {
-			i2--;
-		}
-		newFileName = newFileName.Left( i2 - 1 ) + newFileName.Right( newFileName.Length() - ( i1 + 4 ) );
-	}
-	index = ( index + 1 ) & 3;
-	strncpy( newFileNames[index], newFileName.c_str(), sizeof( newFileNames[index] ) );
-	return newFileNames[index];*/
+	//moved to debug system
+	return CleanupSourceCodeFileName(fileName);
 }
 
 /*

@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #ifndef __DARKMOD_INVENTORYCURSOR_H__
 #define __DARKMOD_INVENTORYCURSOR_H__
@@ -40,6 +39,8 @@ public:
 	/**
 	 * greebo: Clears the cursor. After calling this, the cursor is pointing
 	 *         at nothing. The category lock and other settings are not affected by this call.
+	 * stifu #2993: This changes the cursor to the default category and dummy item to make
+	 * 	       sure the item index is always valid
 	 */
 	void					ClearItem();
 
@@ -68,8 +69,11 @@ public:
 	 * Set the current item index.
 	 * Validation of the index is done when doing Nex/Prev Category
 	 * so we don't really care whether this is a valid index or not.
+	 * STiFU #2993: Add validation after all to make sure the index is always valid
 	 */
-	void					SetCurrentItem(int index) { m_CurrentItem = index; }
+	void					SetCurrentItem(int index);
+
+	void					Validate();
 
 	/**
 	 * Returns the current index within the category of the item pointed at.

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -74,13 +74,22 @@ void CInventoryCursor::Restore(idRestoreGame *savefile)
 CInventoryItemPtr CInventoryCursor::GetCurrentItem()
 {
 	// Return an item if the inventory has items
-	return (m_Inventory->GetNumCategories() > 0) ? m_Inventory->GetCategory(m_CurrentCategory)->GetItem(m_CurrentItem) : CInventoryItemPtr();
+	CInventoryCategoryPtr currentCategory = m_Inventory->GetCategory(m_CurrentCategory);
+	if (currentCategory) {
+		return currentCategory->GetItem(m_CurrentItem);
+	}
+	return CInventoryItemPtr();
 }
 
 void CInventoryCursor::ClearItem()
 {
-	// greebo: Invalidate the item index, this should be enough
-	m_CurrentItem = -1;
+	// stifu #2993: Make sure the item index is always valid. Switch to dummy item
+	// WARNING: Implicit logic - Assumes TDM_DUMMY_ITEM always exists
+	if (!SetCurrentItem(TDM_DUMMY_ITEM))
+	{
+		m_CurrentItem = 0;
+		m_CurrentCategory = 0;
+	}	
 }
 
 bool CInventoryCursor::SetCurrentItem(CInventoryItemPtr item)
@@ -122,6 +131,34 @@ bool CInventoryCursor::SetCurrentItem(const idStr& itemName)
 	return true;
 }
 
+
+void CInventoryCursor::SetCurrentItem(int index)
+{
+	m_CurrentItem = index;
+
+	Validate();
+}
+
+
+void CInventoryCursor::Validate()
+{
+	CInventoryCategoryPtr pCurCategory = m_Inventory->GetCategory(m_CurrentCategory);
+
+	if (pCurCategory == nullptr)
+	{
+		ClearItem();
+		return;
+	}
+
+	if (pCurCategory->GetNumItems() == 0)
+	{
+		ClearItem();
+		return;
+	}
+
+	m_CurrentItem = idMath::ClampInt(0, pCurCategory->GetNumItems() - 1, m_CurrentItem);
+}
+
 CInventoryItemPtr CInventoryCursor::GetNextItem()
 {
 	CInventoryCategoryPtr curCategory = m_Inventory->GetCategory(m_CurrentCategory);
@@ -140,6 +177,11 @@ CInventoryItemPtr CInventoryCursor::GetNextItem()
 	{
 		// Advance to the next allowed category
 		curCategory = GetNextCategory();
+		if (curCategory->GetNumItems() == 0)
+		{
+			ClearItem();
+			return GetCurrentItem();
+		}
 
 		if (m_WrapAround) 
 		{
@@ -170,6 +212,11 @@ CInventoryItemPtr CInventoryCursor::GetPrevItem()
 	if (m_CurrentItem < 0)
 	{
 		curCategory = GetPrevCategory();
+		if (curCategory->GetNumItems() == 0)
+		{
+			ClearItem();
+			return GetCurrentItem();
+		}
 
 		if (m_WrapAround)
 		{

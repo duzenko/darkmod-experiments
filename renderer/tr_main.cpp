@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 
@@ -17,11 +17,9 @@
 #pragma hdrstop
 
 #include "tr_local.h"
+#include "math.h"
 #ifdef __ppc__
 #include <vecLib/vecLib.h>
-#endif
-#if defined(MACOS_X) && defined(__i386__)
-#include <xmmintrin.h>
 #endif
 
 //====================================================================
@@ -120,15 +118,6 @@ void idScreenRect::Union( const idScreenRect &rect ) {
 	if ( rect.y2 > y2 ) {
 		y2 = rect.y2;
 	}
-}
-
-/*
-======================
-idScreenRect::Equals
-======================
-*/
-bool idScreenRect::Equals( const idScreenRect &rect ) const {
-	return ( x1 == rect.x1 && x2 == rect.x2 && y1 == rect.y1 && y2 == rect.y2 );
 }
 
 /*
@@ -375,9 +364,10 @@ void R_AxisToModelMatrix( const idMat3 &axis, const idVec3 &origin, float modelM
 	modelMatrix[15] = 1;
 }
 
+DEBUG_OPTIMIZE_ON
 // FIXME: these assume no skewing or scaling transforms
 void R_LocalPointToGlobal( const float modelMatrix[16], const idVec3 &in, idVec3 &out ) {
-#if defined(__SSE__) || (defined(MACOS_X) && defined(__i386__))
+#if defined(__SSE__)
 	__m128 row0 = _mm_loadu_ps( &modelMatrix[0] );
 	__m128 row1 = _mm_loadu_ps( &modelMatrix[4] );
 	__m128 row2 = _mm_loadu_ps( &modelMatrix[8] );
@@ -410,6 +400,7 @@ void R_LocalPointToGlobal( const float modelMatrix[16], const idVec3 &in, idVec3
 	         + in[2] * modelMatrix[10] + modelMatrix[14];
 #endif
 }
+DEBUG_OPTIMIZE_OFF
 
 void R_PointTimesMatrix( const float modelMatrix[16], const idVec4 &in, idVec4 &out ) {
 	out[0] = in[0] * modelMatrix[0] + in[1] * modelMatrix[4]
@@ -422,6 +413,7 @@ void R_PointTimesMatrix( const float modelMatrix[16], const idVec4 &in, idVec4 &
 	         + in[2] * modelMatrix[11] + modelMatrix[15];
 }
 
+DEBUG_OPTIMIZE_ON
 void R_GlobalPointToLocal( const float modelMatrix[16], const idVec3 &in, idVec3 &out ) {
 	idVec3	temp;
 
@@ -431,7 +423,9 @@ void R_GlobalPointToLocal( const float modelMatrix[16], const idVec3 &in, idVec3
 	out[1] = DotProduct( temp, &modelMatrix[4] );
 	out[2] = DotProduct( temp, &modelMatrix[8] );
 }
+DEBUG_OPTIMIZE_OFF
 
+DEBUG_OPTIMIZE_ON
 void R_LocalVectorToGlobal( const float modelMatrix[16], const idVec3 &in, idVec3 &out ) {
 	out[0] = in[0] * modelMatrix[0] + in[1] * modelMatrix[4]
 	         + in[2] * modelMatrix[8];
@@ -440,20 +434,26 @@ void R_LocalVectorToGlobal( const float modelMatrix[16], const idVec3 &in, idVec
 	out[2] = in[0] * modelMatrix[2] + in[1] * modelMatrix[6]
 	         + in[2] * modelMatrix[10];
 }
+DEBUG_OPTIMIZE_OFF
 
+DEBUG_OPTIMIZE_ON
 void R_GlobalVectorToLocal( const float modelMatrix[16], const idVec3 &in, idVec3 &out ) {
 	out[0] = DotProduct( in, &modelMatrix[0] );
 	out[1] = DotProduct( in, &modelMatrix[4] );
 	out[2] = DotProduct( in, &modelMatrix[8] );
 }
+DEBUG_OPTIMIZE_OFF
 
-void VPCALL R_GlobalPlaneToLocal( const float modelMatrix[16], const idPlane &in, idPlane &out ) {
+DEBUG_OPTIMIZE_ON
+void R_GlobalPlaneToLocal( const float modelMatrix[16], const idPlane &in, idPlane &out ) {
 	out[0] = DotProduct( in, &modelMatrix[0] );
 	out[1] = DotProduct( in, &modelMatrix[4] );
 	out[2] = DotProduct( in, &modelMatrix[8] );
 	out[3] = in[3] + modelMatrix[12] * in[0] + modelMatrix[13] * in[1] + modelMatrix[14] * in[2];
 }
+DEBUG_OPTIMIZE_OFF
 
+DEBUG_OPTIMIZE_ON
 void R_LocalPlaneToGlobal( const float modelMatrix[16], const idPlane &in, idPlane &out ) {
 	float	offset;
 
@@ -462,6 +462,7 @@ void R_LocalPlaneToGlobal( const float modelMatrix[16], const idPlane &in, idPla
 	offset = modelMatrix[12] * out[0] + modelMatrix[13] * out[1] + modelMatrix[14] * out[2];
 	out[3] = in[3] - offset;
 }
+DEBUG_OPTIMIZE_OFF
 
 // transform Z in eye coordinates to window coordinates
 void R_TransformEyeZToWin( float src_z, const float *projectionMatrix, float &dst_z ) {
@@ -503,7 +504,13 @@ bool R_RadiusCullLocalBox( const idBounds &bounds, const float modelMatrix[16], 
 
 	R_LocalPointToGlobal( modelMatrix, localOrigin, worldOrigin );
 
-	worldRadius = ( bounds[0] - localOrigin ).Length();	// FIXME: won't be correct for scaled objects
+	//stgatilov #4970: should be 1 for orthogonal transformations
+	float maxScale = idMath::Sqrt( idMath::Fmax( idMath::Fmax (
+		idVec3(modelMatrix[0], modelMatrix[1], modelMatrix[2]).LengthSqr(),
+		idVec3(modelMatrix[4], modelMatrix[5], modelMatrix[6]).LengthSqr() ),
+		idVec3(modelMatrix[8], modelMatrix[9], modelMatrix[10]).LengthSqr() )
+	);
+	worldRadius = ( bounds[0] - localOrigin ).Length() * maxScale;
 
 	for ( i = 0 ; i < numPlanes ; i++ ) {
 		frust = planes + i;
@@ -911,6 +918,12 @@ void R_SetupProjection( void ) {
 	tr.viewDef->projectionMatrix[7] = 0;
 	tr.viewDef->projectionMatrix[11] = -1;
 	tr.viewDef->projectionMatrix[15] = 0;
+
+	// setup render matrices for faster culling
+	idRenderMatrix::Transpose( *(idRenderMatrix*)tr.viewDef->projectionMatrix, tr.viewDef->projectionRenderMatrix );
+	idRenderMatrix viewRenderMatrix;
+	idRenderMatrix::Transpose( *(idRenderMatrix*)tr.viewDef->worldSpace.modelViewMatrix, viewRenderMatrix );
+	idRenderMatrix::Multiply( tr.viewDef->projectionRenderMatrix, viewRenderMatrix, tr.viewDef->worldSpace.mvp );
 }
 
 /*
@@ -1002,10 +1015,8 @@ R_QsortSurfaces
 =======================
 */
 static int R_QsortSurfaces( const void *a, const void *b ) {
-	const drawSurf_t	*ea, *eb;
-
-	ea = *( drawSurf_t ** )a;
-	eb = *( drawSurf_t ** )b;
+	drawSurf_t* ea = *( drawSurf_t ** )a;
+	drawSurf_t* eb = *( drawSurf_t ** )b;
 
 	if ( ea->sort < eb->sort ) {
 		return -1;
@@ -1013,7 +1024,11 @@ static int R_QsortSurfaces( const void *a, const void *b ) {
 	if ( ea->sort > eb->sort ) {
 		return 1;
 	}
-	return 0;
+	// sort by material to reduce texture state changes in depth stage
+	if ( ea->material != eb->material ) {
+		return ea->material - eb->material;
+	}
+	return ea->space - eb->space;
 }
 
 /*
@@ -1022,34 +1037,10 @@ R_SortDrawSurfs
 =================
 */
 static void R_SortDrawSurfs( void ) {
+	TRACE_CPU_SCOPE( "R_SortDrawSurfs" )
+
 	if ( !tr.viewDef->numDrawSurfs ) // otherwise an assert fails in debug builds
 		return;
-	// sort the drawsurfs by sort type, then orientation, then shader
-	qsort( tr.viewDef->drawSurfs, tr.viewDef->numDrawSurfs, sizeof( tr.viewDef->drawSurfs[0] ),
-		R_QsortSurfaces );
-#ifdef MULTI_LIGHT_IN_FRONT // calculate the light/entity bounds intersections here to reduce the CPU load in the backend
-	idList<int> lDefInd;	// FIXME this has been calculated already somewhere - make use of that
-	for ( int i = 0; i < tr.viewDef->numDrawSurfs; i++ ) {
-		auto surf = tr.viewDef->drawSurfs[i];
-		auto entDef = surf->space->entityDef;				// happens to be null - font materials, etc?
-		if ( entDef )	// even if not used, still zero the onLights (else SMP crash when toggling)
-			for ( auto vLight = tr.viewDef->viewLights; vLight; vLight = vLight->next ) {
-				idVec3 localLightOrigin;
-				R_GlobalPointToLocal( surf->space->modelMatrix, vLight->globalLightOrigin, localLightOrigin );
-				if ( R_CullLocalBox( surf->frontendGeo->bounds, entDef->modelMatrix, 6, vLight->lightDef->frustum ) )
-					continue;
-				lDefInd.Append( vLight->lightDef->index );
-			}
-
-		if ( lDefInd.Num() ) { // expect to at least include the main ambient light
-			lDefInd.Append( -1 );
-			auto frameMem = (int *)R_FrameAlloc( sizeof( int ) * lDefInd.Num() );
-			memcpy( frameMem, lDefInd.Ptr(), lDefInd.MemoryUsed() );
-			surf->onLights = frameMem;
-			lDefInd.SetNum( 0, false );
-		} else
-			surf->onLights = NULL;
-	}
 	// filter the offscreen shadow-only surfaces into a separate array
 	idList<drawSurf_t*> visible( tr.viewDef->numDrawSurfs ), offscreen( tr.viewDef->numDrawSurfs );
 	for ( int i = 0; i < tr.viewDef->numDrawSurfs; i++ ) {
@@ -1063,9 +1054,10 @@ static void R_SortDrawSurfs( void ) {
 	tr.viewDef->numOffscreenSurfs = offscreen.Num();
 	memcpy( tr.viewDef->drawSurfs, visible.Ptr(), visible.MemoryUsed() );
 	memcpy( &tr.viewDef->drawSurfs[tr.viewDef->numDrawSurfs], offscreen.Ptr(), offscreen.MemoryUsed() );
-#endif // MULTI_LIGHT_IN_FRONT
+	// sort the drawsurfs by sort type, then orientation, then shader
+	qsort( tr.viewDef->drawSurfs, tr.viewDef->numDrawSurfs, sizeof( tr.viewDef->drawSurfs[0] ),
+		R_QsortSurfaces );
 }
-
 
 //========================================================================
 
@@ -1080,6 +1072,8 @@ Parms will typically be allocated with R_FrameAlloc
 ================
 */
 void R_RenderView( viewDef_t &parms ) {
+	TRACE_CPU_SCOPE( "R_RenderView" )
+	
 	viewDef_t		*oldView;
 
 	if ( parms.renderView.width <= 0 || parms.renderView.height <= 0 ) {
@@ -1126,6 +1120,8 @@ void R_RenderView( viewDef_t &parms ) {
 
 	// sort all the ambient surfaces for translucency ordering
 	R_SortDrawSurfs();
+
+	R_Tools();
 
 	// generate any subviews (mirrors, cameras, etc) before adding this view
 	if ( R_GenerateSubViews() ) {

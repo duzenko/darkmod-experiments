@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -696,6 +696,21 @@ unsigned int idMapEntity::GetGeometryCRC( void ) const {
 	return crc;
 }
 
+bool idMapEntity::NeedsReload(const idMapEntity *oldEntity) const {
+	const idDict &a = epairs, &b = oldEntity->epairs;
+	int m = a.GetNumKeyVals();
+	int n = b.GetNumKeyVals();
+	if (m != n)
+		return true;
+	for (int i = 0; i < n; i++) {
+		if (*a.GetKeyVal(i) == *b.GetKeyVal(i))
+			continue;
+		return true;
+	}
+	if (GetGeometryCRC() != oldEntity->GetGeometryCRC())
+		return true;
+	return false;
+}
 
 idMapFile::idMapFile( void ) {
 	version = CURRENT_MAP_VERSION;
@@ -709,12 +724,231 @@ idMapFile::~idMapFile( void ) {
 	entities.DeleteContents( true );
 }
 
+int idMapReloadInfo::NameAndIdx::Cmp(const NameAndIdx *a, const NameAndIdx *b) {
+	return idStr::Cmp(a->name, b->name);
+}
+
+idMapReloadInfo idMapFile::TryReload() {
+	idStr filename = fileName;
+	bool ignoreRegion = true;
+	if (filename.CheckExtension(".reg"))
+		ignoreRegion = false;
+	filename.StripFileExtension();
+
+	idMapReloadInfo res;
+	//move data from *this to res.oldMap
+	res.oldMap.reset(new idMapFile(*this));
+	this->entities.Clear();
+
+	auto RestoreOldMap = [&]() {
+		*this = *res.oldMap;
+		this->entities = res.oldMap->entities;
+		res.oldMap->entities.Clear();
+		res.oldMap.reset();
+		res = idMapReloadInfo();
+	};
+
+	//load new map
+	common->SetErrorIndirection(true);
+	try {
+		Parse(fileName.c_str(), ignoreRegion);
+	}
+	catch(std::shared_ptr<ErrorReportedException> err) {
+		common->Warning("Map not loaded: %s", err->ErrorMessage().c_str());
+		RestoreOldMap();
+		res.mapInvalid = true;
+		return res;
+	}
+	common->SetErrorIndirection(false);
+
+	typedef idMapReloadInfo::NameAndIdx NameAndIdx;
+	//write out entities, sort and check them
+	auto PrepareListOfEntityNameAndIds = [](const idList<idMapEntity*> &entities, idList<NameAndIdx> &result) -> bool {
+		for (int i = 0; i < entities.Num(); i++) {
+			idMapEntity *ent = entities[i];
+			if (const idKeyValue *kv = ent->epairs.FindKey("name") )
+				result.AddGrow({kv->GetValue().c_str(), i});
+			else {
+				if (idStr::Cmp(ent->epairs.GetString("classname", ""), "worldspawn") == 0)
+					result.AddGrow({"worldspawn", i});
+				else {
+					common->Warning("idMapFile::Reload: no difference because of unnamed entity %d", i);
+					return false;	//unnamed entity: can't detect anything
+				}
+			}
+		}
+		result.Sort(NameAndIdx::Cmp);
+		for (int i = 1; i < result.Num(); i++)
+			if (NameAndIdx::Cmp(&result[i-1], &result[i]) == 0) {
+				common->Warning(
+					"idMapFile::Reload: no difference because name %s is used twice: %d and %d",
+					result[i].name, result[i-1].idx, result[i].idx
+				);
+				return false;
+			}
+		return true;
+	};
+	idList<NameAndIdx> oldEntities, newEntities;
+	bool ok = PrepareListOfEntityNameAndIds(this->entities, newEntities);
+	ok &= PrepareListOfEntityNameAndIds(res.oldMap->entities, oldEntities);
+	if (!ok) {
+		RestoreOldMap();
+		return res;
+	}
+
+	//go over entities (merge-like) and compute difference
+	int i = 0, j = 0;
+	while (i < newEntities.Num() || j < oldEntities.Num()) {
+		int cmp;
+		if (i == newEntities.Num())
+			cmp = 1;
+		else if (j == oldEntities.Num())
+			cmp = -1;
+		else
+			cmp = NameAndIdx::Cmp(&newEntities[i], &oldEntities[j]);
+
+		if (cmp == 0) {	//two entities with equal name
+			const idMapEntity *newEnt = this->GetEntity(newEntities[i].idx);
+			const idMapEntity *oldEnt = res.oldMap->GetEntity(oldEntities[j].idx);
+			if (newEnt->NeedsReload(oldEnt))
+				res.modifiedEntities.AddGrow(newEntities[i]);
+			i++;  j++;
+		}
+		else {
+			if (cmp < 0)
+				res.addedEntities.AddGrow(newEntities[i++]);
+			else
+				res.removedEntities.AddGrow(oldEntities[j++]);
+		}
+	}
+
+	//now we are certain we computed diff properly
+	res.cannotReload = false;
+	return res;
+}
+
+idMapReloadInfo idMapFile::ApplyDiff(const char *text) {
+	idMapReloadInfo res;
+
+	idList<idMapEntity*> diffAdded, diffRemoved, diffModified;
+	idList<bool> diffModRespawn;
+
+	auto ParseDiff = [&]() -> bool {
+		idLexer src(LEXFL_NOSTRINGCONCAT | LEXFL_NOSTRINGESCAPECHARS | LEXFL_ALLOWPATHNAMES | LEXFL_NOFATALERRORS);
+		src.LoadMemory(text, strlen(text), "map-diff");
+		idToken token;
+
+		idDict seenNames;
+		while (src.ReadToken(&token)) {
+			int status;
+			bool respawn = false;
+			if (token == "add")
+				status = 1;
+			else if (token == "remove")
+				status = -1;
+			else if (token == "modify")
+				status = 0;
+			else if (token == "modify_respawn") {
+				status = 0;
+				respawn = true;
+			}
+			else {
+				src.Error("idMapFile::ApplyDiff: unknown modification type");
+				return false;
+			}
+
+			src.ReadToken(&token);
+			if (token == "entity") {
+				idMapEntity *ent = idMapEntity::Parse(src, false);
+				if (!ent) {
+					src.Error("idMapFile::ApplyDiff: could not parse entity");
+					return false;
+				}
+				const char *name = ent->epairs.GetString("name");
+				if (seenNames.FindKey(name)) {
+					src.Error("idMapFile::ApplyDiff: entity %s described twice in diff", name);
+					return false;
+				}
+				seenNames.Set(name, "");
+				idMapEntity *oldEnt = FindEntity(name);
+				if (status <= 0 && !oldEnt) {
+					src.Warning("idMapFile::ApplyDiff: changed entity %s does not exist", name);
+					return false;
+				}
+				if (status > 0 && oldEnt) {
+					src.Warning("idMapFile::ApplyDiff: added entity %s already exists", name);
+					return false;
+				}
+				if (status < 0)
+					diffRemoved.AddGrow(ent);
+				else if (status == 0) {
+					diffModified.AddGrow(ent);
+					diffModRespawn.AddGrow(respawn);
+				}
+				else if (status > 0)
+					diffAdded.AddGrow(ent);
+			}
+			else {
+				src.Error("idMapFile::ApplyDiff: unknown object type");
+				return false;
+			}
+		}
+
+		return true;
+	};
+	if (!ParseDiff()) {
+		diffAdded.DeleteContents();
+		diffRemoved.DeleteContents();
+		diffModified.DeleteContents();
+		res.mapInvalid = true;
+		return res;
+	}
+
+	//create empty "old" map, to be populated with old versions of entities
+	res.oldMap.reset(new idMapFile());
+	typedef idMapReloadInfo::NameAndIdx NameAndIdx;
+
+	for (int i = 0; i < diffRemoved.Num(); i++) {
+		idMapEntity *diffEnt = diffRemoved[i];
+		const char *name = diffEnt->epairs.GetString("name");
+		idMapEntity *oldEnt = FindEntity(name);
+		entities.Remove(oldEnt);
+		int pos = res.oldMap->AddEntity(oldEnt);
+		res.removedEntities.AddGrow({oldEnt->epairs.GetString("name"), pos});
+	}
+	for (int i = 0; i < diffModified.Num(); i++) {
+		idMapEntity *diffEnt = diffModified[i];
+		const char *name = diffEnt->epairs.GetString("name");
+		idMapEntity *oldEnt = FindEntity(name);
+		if (!diffModRespawn[i] && !diffEnt->NeedsReload(oldEnt))
+			continue;	//no actual change here
+		int pos = entities.FindIndex(oldEnt);
+		res.oldMap->AddEntity(oldEnt);
+		entities[pos] = diffEnt;
+		if (diffModRespawn[i])
+			res.respawnEntities.AddGrow({name, pos});
+		else
+			res.modifiedEntities.AddGrow({name, pos});
+	}
+	for (int i = 0; i < diffAdded.Num(); i++) {
+		idMapEntity *diffEnt = diffAdded[i];
+		const char *name = diffEnt->epairs.GetString("name");
+		int pos = AddEntity(diffEnt);
+		res.addedEntities.AddGrow({name, pos});
+	}
+
+	res.cannotReload = false;
+	return res;
+}
+
 /*
 ===============
 idMapFile::Parse
 ===============
 */
 bool idMapFile::Parse( const char *filename, bool ignoreRegion, bool osPath ) {
+	TRACE_CPU_SCOPE_TEXT("idMapFile::Parse", filename)
+
 	// no string concatenation for epairs and allow path names for materials
 	idLexer src( LEXFL_NOSTRINGCONCAT | LEXFL_NOSTRINGESCAPECHARS | LEXFL_ALLOWPATHNAMES );
 	idToken token;
@@ -838,7 +1072,7 @@ bool idMapFile::Parse( const char *filename, bool ignoreRegion, bool osPath ) {
 						entities[0]->primitives.Append(pr);
 					}
 					// End of #4300
-					mapEnt->primitives.Clear();
+					mapEnt->primitives.ClearFree();
 				}
 			}
 		}
@@ -987,4 +1221,17 @@ bool idMapFile::NeedsReload() {
 		}
 	}
 	return true;
+}
+
+
+/*
+===============
+idMapFile::GetTotalPrimitivesNum
+===============
+*/
+int idMapFile::GetTotalPrimitivesNum() const {
+	int res = 0;
+	for (int i = 0; i < entities.Num(); i++)
+		res += entities[i]->GetNumPrimitives();
+	return res;
 }

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -144,8 +144,6 @@ idWeapon::idWeapon() {
 	hideUntilTime			= -1;
 
 	Clear();
-
-	fl.networkSync = true;
 }
 
 /*
@@ -174,10 +172,9 @@ idWeapon::Spawn
 ================
 */
 void idWeapon::Spawn( void ) {
-	if ( !gameLocal.isClient ) {
+	{
 		// setup the world model
 		worldModel = static_cast< idAnimatedEntity * >( gameLocal.SpawnEntityType( idAnimatedEntity::Type, NULL ) );
-		worldModel.GetEntity()->fl.networkSync = true;
 	}
 
 	thread = new idThread();
@@ -732,9 +729,9 @@ void idWeapon::Clear( void ) {
 			ent->Event_Remove();
 	}
 
-	m_Attachments.Clear();
+	m_Attachments.ClearFree();
 
-	m_animRates.Clear();
+	m_animRates.ClearFree();
 
 	// clear attack flags on the player
 	if( owner )
@@ -1743,7 +1740,6 @@ idWeapon::WeaponStolen
 ================
 */
 void idWeapon::WeaponStolen( void ) {
-	assert( !gameLocal.isClient );
 	if ( projectileEnt ) {
 		if ( isLinked ) {
 			SetState( "WeaponStolen", 0 );
@@ -1906,7 +1902,9 @@ bool idWeapon::BloodSplat( float size ) {
 	localOrigin[1] += gameLocal.random.RandomFloat() * 1.0f;
 	localOrigin[2] += gameLocal.random.RandomFloat() * -2.0f;
 
-	normal = idVec3( gameLocal.random.CRandomFloat(), -gameLocal.random.RandomFloat(), -1 );
+	normal.x = gameLocal.random.CRandomFloat();
+	normal.y = -gameLocal.random.RandomFloat();
+	normal.z = -1;
 	normal.Normalize();
 
 	idMath::SinCos16( gameLocal.random.RandomFloat() * idMath::TWO_PI, s, c );
@@ -2185,7 +2183,7 @@ void idWeapon::PresentWeapon( bool showViewModel )
 	if ( worldModel.GetEntity() && worldModel.GetEntity()->GetRenderEntity() ) {
 		// deal with the third-person visible world model
 		// don't show shadows of the world model in first person
-		if ( gameLocal.isMultiplayer || g_showPlayerShadow.GetBool() || pm_thirdPerson.GetBool() ) {
+		if ( g_showPlayerShadow.GetBool() || pm_thirdPerson.GetBool() ) {
 			worldModel.GetEntity()->GetRenderEntity()->suppressShadowInViewID	= 0;
 		} else {
 			worldModel.GetEntity()->GetRenderEntity()->suppressShadowInViewID	= owner->entityNumber+1;
@@ -2239,7 +2237,7 @@ void idWeapon::PresentWeapon( bool showViewModel )
 		gameRenderWorld->UpdateLightDef( worldMuzzleFlashHandle, &worldMuzzleFlash );
 
 		// wake up monsters with the flashlight
-		if ( !gameLocal.isMultiplayer && lightOn && !owner->fl.notarget ) {
+		if ( lightOn && !owner->fl.notarget ) {
 			AlertMonsters();
 		}
 	}
@@ -2512,7 +2510,8 @@ idWeapon::WriteToSnapshot
 */
 void idWeapon::WriteToSnapshot( idBitMsgDelta &msg ) const {
 	msg.WriteBits( ammoClip, ASYNC_PLAYER_INV_CLIP_BITS );
-	msg.WriteBits( worldModel.GetSpawnId(), 32 );
+	msg.WriteBits( worldModel.GetEntityNum(), 32 );
+	msg.WriteBits( worldModel.GetSpawnNum(), 32 );
 	msg.WriteBits( lightOn, 1 );
 	msg.WriteBits( isFiring ? 1 : 0, 1 );
 }
@@ -2524,7 +2523,9 @@ idWeapon::ReadFromSnapshot
 */
 void idWeapon::ReadFromSnapshot( const idBitMsgDelta &msg ) {	
 	ammoClip = msg.ReadBits( ASYNC_PLAYER_INV_CLIP_BITS );
-	worldModel.SetSpawnId( msg.ReadBits( 32 ) );
+	int entId = msg.ReadBits( 32 );
+	int spnId = msg.ReadBits( 32 );
+	worldModel.Set( entId, spnId );
 	bool snapLight = msg.ReadBits( 1 ) != 0;
 	isFiring = msg.ReadBits( 1 ) != 0;
 
@@ -2555,39 +2556,7 @@ idWeapon::ClientReceiveEvent
 ================
 */
 bool idWeapon::ClientReceiveEvent( int event, int time, const idBitMsg &msg ) {
-#ifdef MULTIPLAYER
-	switch( event ) {
-		case EVENT_RELOAD: {
-			if ( gameLocal.time - time < 1000 ) {
-				if ( WEAPON_NETRELOAD.IsLinked() ) {
-					WEAPON_NETRELOAD = true;
-					WEAPON_NETENDRELOAD = false;
-				}
-			}
-			return true;
-		}
-		case EVENT_ENDRELOAD: {
-			if ( WEAPON_NETENDRELOAD.IsLinked() ) {
-				WEAPON_NETENDRELOAD = true;
-			}
-			return true;
-		}
-		case EVENT_CHANGESKIN: {
-			int index = gameLocal.ClientRemapDecl( DECL_SKIN, msg.ReadLong() );
-			renderEntity.customSkin = ( index != -1 ) ? static_cast<const idDeclSkin *>( declManager->DeclByIndex( DECL_SKIN, index ) ) : NULL;
-			UpdateVisuals();
-			if ( worldModel.GetEntity() ) {
-				worldModel.GetEntity()->SetSkin( renderEntity.customSkin );
-			}
-			return true;
-		}
-		default: {
-			return idEntity::ClientReceiveEvent( event, time, msg );
-		}
-	}
-#else
 	return false;
-#endif
 }
 
 /*
@@ -2729,10 +2698,6 @@ idWeapon::Event_UseAmmo
 ===============
 */
 void idWeapon::Event_UseAmmo( int amount ) {
-	if ( gameLocal.isClient ) {
-		return;
-	}
-
 	owner->GetCurrentWeaponItem()->UseAmmo(( powerAmmo ) ? amount : ( amount * ammoRequired ) );
 	if ( clipSize && ammoRequired ) {
 		ammoClip -= powerAmmo ? amount : ( amount * ammoRequired );
@@ -2749,10 +2714,6 @@ idWeapon::Event_AddToClip
 */
 void idWeapon::Event_AddToClip( int amount ) {
 	int ammoAvail;
-
-	if ( gameLocal.isClient ) {
-		return;
-	}
 
 	ammoClip += amount;
 	if ( ammoClip > clipSize ) {
@@ -2813,9 +2774,6 @@ idWeapon::Event_NetReload
 */
 void idWeapon::Event_NetReload( void ) {
 	assert( owner );
-	if ( gameLocal.isServer ) {
-		ServerSendEvent( EVENT_RELOAD, NULL, false, -1 );
-	}
 }
 
 /*
@@ -2825,9 +2783,6 @@ idWeapon::Event_NetEndReload
 */
 void idWeapon::Event_NetEndReload( void ) {
 	assert( owner );
-	if ( gameLocal.isServer ) {
-		ServerSendEvent( EVENT_ENDRELOAD, NULL, false, -1 );
-	}
 }
 
 /*
@@ -3010,17 +2965,6 @@ void idWeapon::Event_SetSkin( const char *skinname ) {
 	if ( worldModel.GetEntity() ) {
 		worldModel.GetEntity()->SetSkin( skinDecl );
 	}
-
-#ifdef MULTIPLAYER
-	if (gameLocal.isServer) {
-		idBitMsg	msg;
-		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
-
-		msg.Init( msgBuf, sizeof( msgBuf ) );
-		msg.WriteLong( ( skinDecl != NULL ) ? gameLocal.ServerRemapDecl( -1, DECL_SKIN, skinDecl->Index() ) : -1 );
-		ServerSendEvent( EVENT_CHANGESKIN, &msg, false, -1 );
-	}
-#endif
 }
 
 /*
@@ -3092,7 +3036,6 @@ idWeapon::Event_CreateProjectile
 */
 void idWeapon::Event_CreateProjectile()
 {
-	if ( !gameLocal.isClient )
 	{
 		projectileEnt = NULL;
 
@@ -3123,10 +3066,6 @@ void idWeapon::Event_CreateProjectile()
 		}
 
 		idThread::ReturnEntity( projectileEnt );
-	}
-	else
-	{
-		idThread::ReturnEntity( NULL );
 	}
 }
 
@@ -3176,8 +3115,7 @@ void idWeapon::Event_LaunchProjectiles( int num_projectiles, float spread, float
 		return;
 	}
 
-	// avoid all ammo considerations on an MP client
-	if ( !gameLocal.isClient ) {
+	{
 
 		CInventoryWeaponItemPtr weaponItem = owner->GetCurrentWeaponItem();
 
@@ -3223,26 +3161,7 @@ void idWeapon::Event_LaunchProjectiles( int num_projectiles, float spread, float
 		kick_endtime = gameLocal.realClientTime + muzzle_kick_maxtime;
 	}
 
-	if ( gameLocal.isClient ) {
-
-		// predict instant hit projectiles
-		if ( projectileDef->dict.GetBool( "net_instanthit" ) ) {
-			float spreadRad = DEG2RAD( spread );
-			muzzle_pos = muzzleOrigin + playerViewAxis[ 0 ] * 2.0f;
-			for( i = 0; i < num_projectiles; i++ ) {
-				ang = idMath::Sin( spreadRad * gameLocal.random.RandomFloat() );
-				spin = (float)DEG2RAD( 360.0f ) * gameLocal.random.RandomFloat();
-				//dir = playerViewAxis[ 0 ] + playerViewAxis[ 2 ] * ( ang * idMath::Sin( spin ) ) - playerViewAxis[ 1 ] * ( ang * idMath::Cos( spin ) );
-				dir = muzzleAxis[ 0 ]; // Dram: Make the weapon shoot directly from the barrel bone. Found by Ishtvan
-				dir.Normalize();
-				gameLocal.clip.Translation( tr, muzzle_pos, muzzle_pos + dir * 4096.0f, NULL, mat3_identity, MASK_SHOT_RENDERMODEL, owner );
-				if ( tr.fraction < 1.0f ) {
-					idProjectile::ClientPredictionCollide( this, projectileDef->dict, tr, vec3_origin, true );
-				}
-			}
-		}
-
-	} else {
+	{
 
 		ownerBounds = owner->GetPhysics()->GetAbsBounds();
 
@@ -3252,15 +3171,18 @@ void idWeapon::Event_LaunchProjectiles( int num_projectiles, float spread, float
 		for( i = 0; i < num_projectiles; i++ ) {
 			ang = idMath::Sin( spreadRad * gameLocal.random.RandomFloat() );
 			spin = (float)DEG2RAD( 360.0f ) * gameLocal.random.RandomFloat();
-			//dir = playerViewAxis[ 0 ] + playerViewAxis[ 2 ] * ( ang * idMath::Sin( spin ) ) - playerViewAxis[ 1 ] * ( ang * idMath::Cos( spin ) );
-			dir = muzzleAxis[ 0 ]; // Dram: Make the weapon shoot directly from the barrel bone. Found by Ishtvan
 
-			if (projectileDef->dict.GetBool("fire_along_playerview", "0"))
-			{
+			const idMat3 *shootLcs = nullptr;
+			if (projectileDef->dict.GetBool("fire_along_playerview", "0")) {
 				// greebo: Fire the projectile along the playerview direction
-				dir = playerViewAxis.ToAngles().ToForward();
+				shootLcs = &playerViewAxis;
+				//dir = playerViewAxis.ToAngles().ToForward();
 			}
-
+			else {
+				shootLcs = &muzzleAxis;
+				//dir = muzzleAxis[ 0 ]; // Dram: Make the weapon shoot directly from the barrel bone. Found by Ishtvan
+			}
+			dir = (*shootLcs)[ 0 ] + (*shootLcs)[ 2 ] * ( ang * idMath::Sin( spin ) ) - (*shootLcs)[ 1 ] * ( ang * idMath::Cos( spin ) );
 			dir.Normalize();
 
 			//gameRenderWorld->DebugArrow(colorWhite, muzzleOrigin, muzzleOrigin + dir*100, 1, 15000);
@@ -3277,11 +3199,6 @@ void idWeapon::Event_LaunchProjectiles( int num_projectiles, float spread, float
 			if ( !ent || !ent->IsType( idProjectile::Type ) ) {
 				const char *projectileName = weaponDef->dict.GetString( "def_projectile" );
 				gameLocal.Error( "'%s' is not an idProjectile", projectileName );
-			}
-
-			if ( projectileDef->dict.GetBool( "net_instanthit" ) ) {
-				// don't synchronize this on top of the already predicted effect
-				ent->fl.networkSync = false;
 			}
 
 			proj = static_cast<idProjectile *>(ent);
@@ -3343,7 +3260,7 @@ void idWeapon::Event_Melee( void ) {
 		gameLocal.Error( "No meleeDef on '%s'", weaponDef->dict.GetString( "classname" ) );
 	}
 
-	if ( !gameLocal.isClient ) {
+	{
 		idVec3 start = playerViewOrigin;
 		idVec3 end = start + playerViewAxis[0] * ( meleeDistance * owner->PowerUpModifier( MELEE_DISTANCE ) );
 		gameLocal.clip.TracePoint( tr, start, end, MASK_SHOT_RENDERMODEL, owner );
@@ -3379,16 +3296,6 @@ void idWeapon::Event_Melee( void ) {
 
 			ent->ApplyImpulse( this, tr.c.id, tr.c.point, impulse );
 
-			// weapon stealing - do this before damaging so weapons are not dropped twice
-#ifdef MULTIPLAYER
-			if (gameLocal.isMultiplayer
-				&& weaponDef && weaponDef->dict.GetBool( "stealing" )
-				&& ent->IsType( idPlayer::Type )
-				&& ( gameLocal.gameType != GAME_TDM || gameLocal.serverInfo.GetBool( "si_teamDamage" ) || ( owner->team != static_cast< idPlayer * >( ent )->team ) )
-				) {
-				owner->StealWeapon( static_cast< idPlayer * >( ent ) );
-			}
-#endif
 			if ( ent->fl.takedamage ) {
 				idVec3 kickDir, globalKickDir;
 				meleeDef->dict.GetVector( "kickDir", "0 0 0", kickDir );
@@ -3514,10 +3421,6 @@ void idWeapon::Event_EjectBrass( void ) {
 		return;
 	}
 
-	if ( gameLocal.isClient ) {
-		return;
-	}
-
 	idMat3 axis;
 	idVec3 origin, linear_velocity, angular_velocity;
 	idEntity *ent;
@@ -3535,7 +3438,9 @@ void idWeapon::Event_EjectBrass( void ) {
 	debris->Launch();
 
 	linear_velocity = 40 * ( playerViewAxis[0] + playerViewAxis[1] + playerViewAxis[2] );
-	angular_velocity.Set( 10 * gameLocal.random.CRandomFloat(), 10 * gameLocal.random.CRandomFloat(), 10 * gameLocal.random.CRandomFloat() );
+	angular_velocity.x = 10 * gameLocal.random.CRandomFloat();
+	angular_velocity.y = 10 * gameLocal.random.CRandomFloat();
+	angular_velocity.z = 10 * gameLocal.random.CRandomFloat();
 
 	debris->GetPhysics()->SetLinearVelocity( linear_velocity );
 	debris->GetPhysics()->SetAngularVelocity( angular_velocity );

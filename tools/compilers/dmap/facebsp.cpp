@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -368,6 +368,7 @@ tree_t *FaceBSP( bspface_t *list ) {
 	int			count;
 	int			start, end;
 
+	TRACE_CPU_SCOPE("FaceBSP")
 	start = Sys_Milliseconds();
 
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "--- FaceBSP ---\n" );
@@ -384,11 +385,14 @@ tree_t *FaceBSP( bspface_t *list ) {
 	}
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "%5i faces\n", count );
 
+	c_faceLeafs = 0;
+	c_nodes = 0;
 	tree->headnode = AllocNode();
 	tree->headnode->bounds = tree->bounds;
-	c_faceLeafs = 0;
 
 	BuildFaceTree_r ( tree->headnode, list );
+	tree->nodeCnt = c_nodes;
+	tree->leafCnt = c_faceLeafs;
 
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "%5i leafs\n", c_faceLeafs );
 
@@ -402,6 +406,13 @@ tree_t *FaceBSP( bspface_t *list ) {
 
 //==========================================================================
 
+idCVar dmap_bspAllSidesOfVisportal(
+	"dmap_bspAllSidesOfVisportal", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"If set to 1, then all sides of a visportal brush are inserted into BSP tree. "
+	"If set to 0, then only the side with visportal material is inserted (old style). "
+	"When dmapping old missions, either fix all visportal warnings or set this to 0. "
+);
+
 /*
 =================
 MakeStructuralBspFaceList
@@ -413,6 +424,7 @@ bspface_t	*MakeStructuralBspFaceList( primitive_t *list ) {
 	side_t		*s;
 	idWinding	*w;
 	bspface_t	*f, *flist;
+	TRACE_CPU_SCOPE("MakeStructuralBspFaceList")
 
 	flist = NULL;
 	for ( ; list ; list = list->next ) {
@@ -429,7 +441,8 @@ bspface_t	*MakeStructuralBspFaceList( primitive_t *list ) {
 			if ( !w ) {
 				continue;
 			}
-			if ( ( b->contents & CONTENTS_AREAPORTAL ) && ! ( s->material->GetContentFlags() & CONTENTS_AREAPORTAL ) ) {
+			if ( !dmap_bspAllSidesOfVisportal.GetBool() &&	//stgatilov #5129
+				( b->contents & CONTENTS_AREAPORTAL ) && ! ( s->material->GetContentFlags() & CONTENTS_AREAPORTAL ) ) {
 				continue;
 			}
 			f = AllocBspFace();

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -24,12 +24,24 @@
 #include "UserInterfaceLocal.h"
 
 
+//stgatilov: additional debug output
+static void ReportGuiCmd(idWindow *window, const char *fullCmd) {
+	if (idStr::Cmp(fullCmd, "mainmenu_heartbeat;") == 0)
+		return;	//stgatilov: suppress typical meaningless spam
+	idStr location = window->GetCurrentSourceLocation();
+	DM_LOG(LC_MAINMENU, LT_DEBUG)LOGSTRING("CMD: %-30s (%s)", fullCmd, location.c_str());
+}
+
 /*
 =========================
 Script_Set
 =========================
 */
 void Script_Set(idWindow *window, idList<idGSWinVar> *src) {
+	if (src->Num() < 2) {
+		idStr location = window->GetCurrentSourceLocation();
+		common->Error("Set command lacks parameters at %s", location.c_str());
+	}
 	idStr key, val;
 	idWinStr *dest = dynamic_cast<idWinStr*>((*src)[0].var);
 	if (dest) {
@@ -45,8 +57,10 @@ void Script_Set(idWindow *window, idList<idGSWinVar> *src) {
 					val += "\"";
 					i++;
 				}
+				ReportGuiCmd(window, val.c_str());
 				window->AddCommand(val);
 			} else {
+				ReportGuiCmd(window, dest->c_str());
 				window->AddCommand(*dest);
 			}
 			return;
@@ -259,6 +273,8 @@ idGuiScript::idGuiScript() {
 	conditionReg = -1;
 	handler = NULL;
 	parms.SetGranularity( 2 );
+	srcFilename = nullptr;
+	srcLineNum = 0;
 }
 
 /*
@@ -405,13 +421,14 @@ void idGuiScriptList::Execute(idWindow *win) {
 				float f = win->EvalRegs(gs->conditionReg);
 				if (f) {
 					if (gs->ifList) {
-						win->RunScriptList(gs->ifList);
+						win->RunScriptList(gs->ifList, NULL);
 					}
 				} else if (gs->elseList) {
-					win->RunScriptList(gs->elseList);
+					win->RunScriptList(gs->elseList, NULL);
 				}
 			}
 		}
+		win->BeforeExecute(gs);
 		gs->Execute(win);
 	}
 }
@@ -479,7 +496,7 @@ void idGuiScript::FixupParms(idWindow *win) {
 			} else if ( precacheSounds ) {
 				// Search for "play <...>"
 				idToken token;
-				idParser parser( LEXFL_NOSTRINGCONCAT | LEXFL_ALLOWMULTICHARLITERALS | LEXFL_ALLOWBACKSLASHSTRINGCONCAT );
+				idParser parser( LEXFL_NOSTRINGCONCAT | LEXFL_ALLOWMULTICHARLITERALS | LEXFL_ALLOWBACKSLASHSTRINGCONCAT | LEXFL_ALLOWPATHNAMES );
 				parser.LoadMemory(str->c_str(), str->Length(), "command");
 
 				while ( parser.ReadToken(&token) ) {

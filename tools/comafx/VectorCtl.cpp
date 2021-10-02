@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "precompiled.h"
 #pragma hdrstop
@@ -149,7 +149,7 @@ COLORREF CVectorCtl::CalcLight (double dx, double dy, double dz)
     if (NL < 0.0)   // Diffuse coefficient
         NL = 0.0;
 
-    RV = max (0.0, -rz);
+    RV = std::max (0.0, -rz);
     RV = double(pow (RV, m_dSpecularExponent));
 
     int  r = int (  double(GetRValue(m_clrDiffuse)) * NL +  // Diffuse
@@ -164,9 +164,9 @@ COLORREF CVectorCtl::CalcLight (double dx, double dy, double dz)
                     double(GetBValue(m_clrLight)) * RV +    // Specular
                     double(GetBValue(m_clrAmbient)));       // Ambient
 
-    r = min (255, r);   // Cutoff highlight
-    g = min (255, g);
-    b = min (255, b);
+    r = std::min (255, r);   // Cutoff highlight
+    g = std::min (255, g);
+    b = std::min (255, b);
     return RGB(BYTE(r),BYTE(g),BYTE(b));
 }
 
@@ -180,7 +180,7 @@ void CVectorCtl::InitBitmap (LPDRAWITEMSTRUCT lpDrawItemStruct, CDC *pDC)
     m_bBmpCreated = TRUE;
     m_dcMem.CreateCompatibleDC (pDC);
     m_pOldBitmap = m_dcMem.SelectObject (&m_bmpBuffer);
-    SetRadius (max (min (m_iWidth, m_iHeight) - 2, 0) / 2);
+    SetRadius ( std::max ( std::min (m_iWidth, m_iHeight) - 2, 0) / 2);
     SetCenter (m_iWidth / 2, m_iHeight / 2);
     CreateBackground ();
 }

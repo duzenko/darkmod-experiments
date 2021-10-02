@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -177,7 +177,6 @@ idMover::idMover(void)
 	damage = 0.0f;
 	areaPortal = 0;
 	nextBounceTime = 0; // grayman #4370
-	fl.networkSync = true;
 	m_FrobActionScript = "frob_mover";
 }
 
@@ -1801,7 +1800,6 @@ idMover_Binary::idMover_Binary()
 	updateStatus = 0;
 	areaPortal = 0;
 	blocked = false;
-	fl.networkSync = true;
 	m_FrobActionScript = "frob_binary_mover";
 }
 
@@ -2002,7 +2000,7 @@ void idMover_Binary::Spawn( void )
 
 	// create a physics team for the binary mover parts
 	if ( ent != this ) {
-		JoinTeam( ent );
+		gameLocal.Error("Mover teams support dropped (entity %s)", ent->name.c_str());
 	}
 
 	physicsObj.SetSelf( this );

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -23,6 +23,16 @@
 
 #define	 TEXTURE_OFFSET_EQUAL_EPSILON	0.005
 #define	 TEXTURE_VECTOR_EQUAL_EPSILON	0.001
+
+idCVar dmap_fasterPutPrimitives(
+	"dmap_fasterPutPrimitives", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"If set to 1, then use faster data structures for groups search in PutPrimitivesInAreas. "
+	"This is performance improvement in TDM 2.10."
+);
+struct groupsPerPlane_s {
+	idHashIndex hash;
+	idList<struct optimizeGroup_s *> lists;
+};
 
 /*
 ===============
@@ -41,9 +51,28 @@ static void AddTriListToArea( uEntity_t *e, mapTri_t *triList, int planeNum, int
 	if ( !triList ) {
 		return;
 	}
-
 	area = &e->areas[areaNum];
-	for ( group = area->groups ; group ; group = group->nextGroup ) {
+
+	optimizeGroup_t* *groupsList = &area->groups;
+	if (dmap_fasterPutPrimitives.GetBool()) {
+		groupsPerPlane_s &gpp = *area->groupsPerPlane;
+		//stgatilov: try to find list for this planeNum in hash table
+		groupsList = nullptr;
+		for (int i = gpp.hash.First(planeNum); i >= 0; i = gpp.hash.Next(i)) {
+			if (gpp.lists[i]->planeNum == planeNum) {
+				groupsList = &gpp.lists[i];
+				break;
+			}
+		}
+		if (!groupsList) {
+			//not found: create a new list
+			gpp.lists.AddGrow(nullptr);
+			gpp.hash.Add(planeNum, gpp.lists.Num() - 1);
+			groupsList = &gpp.lists[gpp.lists.Num() - 1];
+		}
+	}
+
+	for ( group = *groupsList ; group ; group = group->nextGroup ) {
 		if ( group->material == triList->material
 			&& group->planeNum == planeNum
 			&& group->mergeGroup == triList->mergeGroup ) {
@@ -76,9 +105,9 @@ static void AddTriListToArea( uEntity_t *e, mapTri_t *triList, int planeNum, int
 		group->planeNum = planeNum;
 		group->mergeGroup = triList->mergeGroup;
 		group->material = triList->material;
-		group->nextGroup = area->groups;
+		group->nextGroup = *groupsList;
 		group->texVec = *texVec;
-		area->groups = group;
+		*groupsList = group;
 	}
 
 	group->triList = MergeTriLists( group->triList, triList );
@@ -317,6 +346,7 @@ void ClipSidesByTree( uEntity_t *e ) {
 	side_t			*side;
 	primitive_t		*prim;
 
+	TRACE_CPU_SCOPE_TEXT("ClipSidesByTree", e->nameEntity)
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- ClipSidesByTree -----\n");
 
 	for ( prim = e->primitives ; prim ; prim = prim->next ) {
@@ -582,11 +612,25 @@ void PutPrimitivesInAreas( uEntity_t *e ) {
 	primitive_t		*prim;
 	mapTri_t		*tri;
 
+	TRACE_CPU_SCOPE_TEXT("PutPrimitivesInAreas", e->nameEntity)
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- PutPrimitivesInAreas -----\n");
 
 	// allocate space for surface chains for each area
 	e->areas = (uArea_t *)Mem_Alloc( e->numAreas * sizeof( e->areas[0] ) );
 	memset( e->areas, 0, e->numAreas * sizeof( e->areas[0] ) );
+
+	if (dmap_fasterPutPrimitives.GetBool()) {
+		//stgatilov: prepare auxilliary search structures for optimize groups
+		int avgPrimCount = e->mapEntity->GetNumPrimitives() / e->numAreas;
+		int capacity = idMath::Imax(16, idMath::CeilPowerOfTwo(avgPrimCount));
+		for (int i = 0; i < e->numAreas; i++) {
+			e->areas[i].groupsPerPlane = new groupsPerPlane_s();
+			groupsPerPlane_s &gpp = *e->areas[i].groupsPerPlane;
+			gpp.hash.ClearFree(capacity, capacity);
+			gpp.lists.Clear();
+			gpp.lists.Reserve(capacity);
+		}
+	}
 
 	// for each primitive, clip it to the non-solid leafs
 	// and divide it into different areas
@@ -594,12 +638,14 @@ void PutPrimitivesInAreas( uEntity_t *e ) {
 		b = prim->brush;
 
 		if ( !b ) {
+			TRACE_CPU_SCOPE_TEXT("PutPrimitiveInArea", "patch")
 			// add curve triangles
 			for ( tri = prim->tris ; tri ; tri = tri->next ) {
 				AddMapTriToAreas( tri, e );
 			}
 			continue;
 		}
+		TRACE_CPU_SCOPE_FORMAT("PutPrimitiveInArea", "Ent%d Br%d", prim->brush->entitynum, prim->brush->brushnum)
 
 		// clip in brush sides
 		for ( i = 0 ; i < b->numsides ; i++ ) {
@@ -634,16 +680,7 @@ void PutPrimitivesInAreas( uEntity_t *e ) {
 			common->Printf( "inlining %s.\n", entity->mapEntity->epairs.GetString( "name" ) );
 
 			idMat3	axis;
-			// get the rotation matrix in either full form, or single angle form
-			if ( !entity->mapEntity->epairs.GetMatrix( "rotation", "1 0 0 0 1 0 0 0 1", axis ) ) {
-				float angle = entity->mapEntity->epairs.GetFloat( "angle" );
-				if ( angle != 0.0f ) {
-					axis = idAngles( 0.0f, angle, 0.0f ).ToMat3();
-				} else {
-					axis.Identity();
-				}
-			}		
-
+			gameEdit->ParseSpawnArgsToAxis( &entity->mapEntity->epairs, axis );
 			idVec3	origin = entity->mapEntity->epairs.GetVector( "origin" );
 
 			for ( i = 0 ; i < model->NumSurfaces() ; i++ ) {
@@ -652,7 +689,7 @@ void PutPrimitivesInAreas( uEntity_t *e ) {
 
 				mapTri_t	mapTri;
 				memset( &mapTri, 0, sizeof( mapTri ) );
-				mapTri.material = surface->shader;
+				mapTri.material = surface->material;
 				// don't let discretes (autosprites, etc) merge together
 				if ( mapTri.material->IsDiscrete() ) {
 					mapTri.mergeGroup = (void *)surface;
@@ -669,6 +706,29 @@ void PutPrimitivesInAreas( uEntity_t *e ) {
 					AddMapTriToAreas( &mapTri, e );
 				}
 			}
+		}
+	}
+
+	if (dmap_fasterPutPrimitives.GetBool()) {
+		//stgatilov: merge lists of optimize groups back and shutdown auxilliary data structures
+		for (int i = 0; i < e->numAreas; i++) {
+			uArea_t *area = &e->areas[i];
+			groupsPerPlane_s &gpp = *area->groupsPerPlane;
+			//merge per-plane lists into one long list
+			optimizeGroup_t* &mergedList = area->groups;
+			assert(mergedList == nullptr);
+			for (int j = 0; j < gpp.lists.Num(); j++) {
+				optimizeGroup_t *group = gpp.lists[j];
+				assert(group);
+				optimizeGroup_t *end = group;
+				while (end->nextGroup)
+					end = end->nextGroup;
+				end->nextGroup = mergedList;
+				mergedList = group;
+			}
+			//delete auxilliary data structures
+			delete area->groupsPerPlane;
+			area->groupsPerPlane = nullptr;
 		}
 	}
 }
@@ -991,8 +1051,10 @@ void Prelight( uEntity_t *e ) {
 	if ( dmapGlobals.entityNum != 0 ) {
 		return;
 	}
+	TRACE_CPU_SCOPE("Prelight")
 	
 	if ( dmapGlobals.shadowOptLevel > 0 ) {
+		TRACE_CPU_SCOPE("BuildLightShadows")
 		PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- BuildLightShadows -----\n" );
 		start = Sys_Milliseconds();
 
@@ -1016,6 +1078,7 @@ void Prelight( uEntity_t *e ) {
 
 
 	if ( !dmapGlobals.noLightCarve ) {
+		TRACE_CPU_SCOPE("CarveGroupsByLight")
 		PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- CarveGroupsByLight -----\n" );
 		start = Sys_Milliseconds();
 		// now subdivide the optimize groups into additional groups for

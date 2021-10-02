@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __BRUSHBSP_H__
@@ -74,6 +74,9 @@ private:
 //
 //===============================================================
 
+// stgatilov #5212: this node was merged and deleted; parent points to the node it merged into
+// used in idAASBuild::MergeLeafNodes for reliable substitution of references
+#define NODE_ZOMBIE			BIT(29)
 #define NODE_VISITED		BIT(30)
 #define NODE_DONE			BIT(31)
 
@@ -151,7 +154,7 @@ public:
 							// try to merge portals
 	void					MergePortals( int skipContents );
 							// try to merge the two leaf nodes at either side of the portal
-	bool					TryMergeLeafNodes( idBrushBSPPortal *portal, int side );
+	bool					TryMergeLeafNodes( idBrushBSPPortal *portal, int side, idList<idBrushBSPNode*> &zombieNodes );
 	void					PruneMergedTree_r( idBrushBSPNode *node );
 							// melt portal windings
 	void					MeltPortals( int skipContents );
@@ -197,7 +200,6 @@ private:
 	void					BuildGrid_r( idList<idBrushBSPNode *> &gridCells, idBrushBSPNode *node );
 	void					PruneTree_r( idBrushBSPNode *node, int contents );
 	void					MakeOutsidePortals( void );
-	idWinding *				BaseWindingForNode( idBrushBSPNode *node );
 	void					MakeNodePortal( idBrushBSPNode *node );
 	void					SplitNodePortals( idBrushBSPNode *node );
 	void					MakeTreePortals_r( idBrushBSPNode *node );

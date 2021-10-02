@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -1119,7 +1119,7 @@ srfTriangles_t *R_CreateShadowVolume( const idRenderEntityLocal *ent,
 
 	assert( light != NULL );
 
-	if ( r_shadows.GetInteger() == 0 || r_shadows.GetInteger() == 2 && light->viewLight && !light->viewLight->tooBigForShadowMaps )
+	if ( light->viewLight && light->viewLight->shadows != LS_STENCIL )
 		return NULL;
 
 	if ( tri->numSilEdges == 0 || tri->numIndexes == 0 || tri->numVerts == 0 ) {

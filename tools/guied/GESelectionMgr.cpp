@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -310,10 +310,10 @@ void rvGESelectionMgr::UpdateRectangle ( void )
 		idRectangle selRect;
 		selRect = rvGEWindowWrapper::GetWrapper ( mSelections[i] )->GetScreenRect ( );
 		
-		mRect.w = max(selRect.x+selRect.w,mRect.w);
-		mRect.h = max(selRect.y+selRect.h,mRect.h);		
-		mRect.x = min(selRect.x,mRect.x);
-		mRect.y = min(selRect.y,mRect.y);
+		mRect.w = std::max(selRect.x+selRect.w,mRect.w);
+		mRect.h = std::max(selRect.y+selRect.h,mRect.h);
+		mRect.x = std::min(selRect.x,mRect.x);
+		mRect.y = std::min(selRect.y,mRect.y);
 	}
 	mRect.w -= mRect.x;
 	mRect.h -= mRect.y;

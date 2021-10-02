@@ -1,70 +1,43 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27428.2005
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30204.135
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DarkModNoTools", "darkmodNT.vcxproj", "{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}"
-	ProjectSection(ProjectDependencies) = postProject
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317} = {5F1A77C3-F94D-4C5F-B14B-03202CDFC317}
-	EndProjectSection
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ExtLibs", "ExtLibs\ExtLibs.vcxproj", "{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{37E5AF98-93D5-4183-8442-4DACCFDAA59D}"
-	ProjectSection(SolutionItems) = preProject
-		sys\msvc\natvis\game.natvis = sys\msvc\natvis\game.natvis
-		sys\msvc\natvis\idlib.natvis = sys\msvc\natvis\idlib.natvis
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug with inlines and memory log|Win32 = Debug with inlines and memory log|Win32
 		Debug with inlines and memory log|x64 = Debug with inlines and memory log|x64
-		Debug with inlines|Win32 = Debug with inlines|Win32
+		Debug with inlines and memory log|x86 = Debug with inlines and memory log|x86
 		Debug with inlines|x64 = Debug with inlines|x64
-		Debug|Win32 = Debug|Win32
+		Debug with inlines|x86 = Debug with inlines|x86
 		Debug|x64 = Debug|x64
-		Release|Win32 = Release|Win32
+		Debug|x86 = Debug|x86
 		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|Win32.ActiveCfg = Debug with inlines and memory log|Win32
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|Win32.Build.0 = Debug with inlines and memory log|Win32
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|x64.ActiveCfg = Debug with inlines and memory log|x64
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|x64.Build.0 = Debug with inlines and memory log|x64
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|Win32.ActiveCfg = Debug with inlines|Win32
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|Win32.Build.0 = Debug with inlines|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|x86.ActiveCfg = Debug with inlines and memory log|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines and memory log|x86.Build.0 = Debug with inlines and memory log|Win32
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|x64.ActiveCfg = Debug with inlines|x64
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|x64.Build.0 = Debug with inlines|x64
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|Win32.ActiveCfg = Debug|Win32
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|Win32.Build.0 = Debug|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|x86.ActiveCfg = Debug with inlines|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug with inlines|x86.Build.0 = Debug with inlines|Win32
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|x64.ActiveCfg = Debug|x64
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|x64.Build.0 = Debug|x64
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|Win32.ActiveCfg = Release|Win32
-		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|Win32.Build.0 = Release|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|x86.ActiveCfg = Debug|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Debug|x86.Build.0 = Debug|Win32
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|x64.ActiveCfg = Release|x64
 		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|x64.Build.0 = Release|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines and memory log|Win32.ActiveCfg = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines and memory log|Win32.Build.0 = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines and memory log|x64.ActiveCfg = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines and memory log|x64.Build.0 = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines|Win32.ActiveCfg = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines|Win32.Build.0 = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines|x64.ActiveCfg = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug with inlines|x64.Build.0 = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug|Win32.ActiveCfg = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug|Win32.Build.0 = Debug|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug|x64.ActiveCfg = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Debug|x64.Build.0 = Debug|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Release|Win32.ActiveCfg = Release|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Release|Win32.Build.0 = Release|Win32
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Release|x64.ActiveCfg = Release|x64
-		{5F1A77C3-F94D-4C5F-B14B-03202CDFC317}.Release|x64.Build.0 = Release|x64
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|x86.ActiveCfg = Release|Win32
+		{6C743332-F519-44CC-A7D6-A57AFC3F2CE1}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {AD14CEF6-977F-4D4A-B3E7-651D10E311FF}
+		SolutionGuid = {CFFED21C-6AAD-440A-88B8-B5AFC631F2A2}
 	EndGlobalSection
 EndGlobal

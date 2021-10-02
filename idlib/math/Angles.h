@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MATH_ANGLES_H__
@@ -123,12 +123,12 @@ ID_INLINE idAngles &idAngles::Zero( void ) {
 	return *this;
 }
 
-ID_INLINE float idAngles::operator[]( int index ) const {
+ID_FORCE_INLINE float idAngles::operator[]( int index ) const {
 	assert( ( index >= 0 ) && ( index < 3 ) );
 	return ( &pitch )[ index ];
 }
 
-ID_INLINE float &idAngles::operator[]( int index ) {
+ID_FORCE_INLINE float &idAngles::operator[]( int index ) {
 	assert( ( index >= 0 ) && ( index < 3 ) );
 	return ( &pitch )[ index ];
 }
@@ -242,15 +242,15 @@ ID_INLINE void idAngles::Clamp( const idAngles &min, const idAngles &max ) {
 	}
 }
 
-ID_INLINE int idAngles::GetDimension( void ) const {
+ID_FORCE_INLINE int idAngles::GetDimension( void ) const {
 	return 3;
 }
 
-ID_INLINE const float *idAngles::ToFloatPtr( void ) const {
+ID_FORCE_INLINE const float *idAngles::ToFloatPtr( void ) const {
 	return &pitch;
 }
 
-ID_INLINE float *idAngles::ToFloatPtr( void ) {
+ID_FORCE_INLINE float *idAngles::ToFloatPtr( void ) {
 	return &pitch;
 }
 

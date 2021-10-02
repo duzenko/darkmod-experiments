@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -67,8 +67,6 @@ idBrittleFracture::idBrittleFracture( void ) {
 
 	lastRenderEntityUpdate = -1;
 	changed = false;
-
-	fl.networkSync = true;
 
 	m_AreaPortal = 0;
 	m_bSoundDamped = false;
@@ -530,13 +528,13 @@ bool idBrittleFracture::UpdateRenderEntity( renderEntity_s *renderEntity, const 
 	SIMDProcessor->MinMax( decalTris->bounds[0], decalTris->bounds[1], decalTris->verts, decalTris->numVerts );
 
 	memset( &surface, 0, sizeof( surface ) );
-	surface.shader = material;
+	surface.material = material;
 	surface.id = 0;
 	surface.geometry = tris;
 	renderEntity->hModel->AddSurface( surface );
 
 	memset( &surface, 0, sizeof( surface ) );
-	surface.shader = decalMaterial;
+	surface.material = decalMaterial;
 	surface.id = 1;
 	surface.geometry = decalTris;
 	renderEntity->hModel->AddSurface( surface );
@@ -718,21 +716,6 @@ void idBrittleFracture::ProjectDecal( const idVec3 &point, const idVec3 &dir, co
 	idMat3 axis, axistemp;
 	idPlane textureAxis[2];
 
-	if ( gameLocal.isServer ) {
-		idBitMsg	msg;
-		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
-
-		msg.Init( msgBuf, sizeof( msgBuf ) );
-		msg.BeginWriting();
-		msg.WriteFloat( point[0] );
-		msg.WriteFloat( point[1] );
-		msg.WriteFloat( point[2] );
-		msg.WriteFloat( dir[0] );
-		msg.WriteFloat( dir[1] );
-		msg.WriteFloat( dir[2] );
-		ServerSendEvent( EVENT_PROJECT_DECAL, &msg, true, -1 );
-	}
-
 	if ( time >= gameLocal.time ) {
 		// try to get the sound from the damage def
 		const idDeclEntityDef *damageDef = NULL;
@@ -880,21 +863,6 @@ void idBrittleFracture::Shatter( const idVec3 &point, const idVec3 &impulse, con
 	idVec3 dir;
 	shard_t *shard;
 	float m;
-
-	if ( gameLocal.isServer ) {
-		idBitMsg	msg;
-		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
-
-		msg.Init( msgBuf, sizeof( msgBuf ) );
-		msg.BeginWriting();
-		msg.WriteFloat( point[0] );
-		msg.WriteFloat( point[1] );
-		msg.WriteFloat( point[2] );
-		msg.WriteFloat( impulse[0] );
-		msg.WriteFloat( impulse[1] );
-		msg.WriteFloat( impulse[2] );
-		ServerSendEvent( EVENT_SHATTER, &msg, true, -1 );
-	}
 
 	if ( time > ( gameLocal.time - shardAliveTime ) ) 
 	{
@@ -1206,7 +1174,7 @@ void idBrittleFracture::CreateFractures( const idRenderModel *renderModel ) {
 	*/
 	for ( i = 0; i < 1 /*renderModel->NumSurfaces()*/; i++ ) {
 		surf = renderModel->Surface( i );
-		material = surf->shader;
+		material = surf->material;
 
 		for ( j = 0; j < surf->geometry->numIndexes; j += 3 ) {
 			w.Clear();
@@ -1343,7 +1311,7 @@ void idBrittleFracture::Event_Touch( idEntity *other, trace_t *trace ) {
 		return;
 	}
 
-	if ( trace->c.id < 0 || trace->c.id >= shards.Num() ) {
+	if ( trace == nullptr || trace->c.id < 0 || trace->c.id >= shards.Num() ) {
 		return;
 	}
 

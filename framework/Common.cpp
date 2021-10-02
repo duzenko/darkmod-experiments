@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -21,7 +21,13 @@
 #include "../idlib/RevisionTracker.h"
 #include "../renderer/Image.h"
 #include "Session_local.h"
+#include "Debug.h"
 #include <iostream>
+
+#include "GamepadInput.h"
+#include "../renderer/backend/RenderBackend.h"
+#include "LoadStack.h"
+#include "../game/Missions/MissionManager.h"
 
 #define MAX_WARNING_LIST	256
 
@@ -69,12 +75,17 @@ private:
 EngineVersion engineVersion;
 
 idCVar com_version( "si_version", "not set", CVAR_SYSTEM|CVAR_ROM|CVAR_SERVERINFO, "engine version" );
-// idCVar com_maxFPS( "com_maxFPS", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "define the maximum FPS cap" );
 idCVar com_skipRenderer( "com_skipRenderer", "0", CVAR_BOOL|CVAR_SYSTEM, "skip the renderer completely" );
 idCVar com_purgeAll( "com_purgeAll", "0", CVAR_BOOL | CVAR_ARCHIVE | CVAR_SYSTEM, "purge everything between level loads" );
 idCVar com_memoryMarker( "com_memoryMarker", "-1", CVAR_INTEGER | CVAR_SYSTEM | CVAR_INIT, "used as a marker for memory stats" );
 idCVar com_preciseTic( "com_preciseTic", "1", CVAR_BOOL|CVAR_SYSTEM, "run one game tick every async thread update" );
 idCVar com_asyncInput( "com_asyncInput", "0", CVAR_BOOL | CVAR_SYSTEM, "sample input from the async thread" );
+idCVar com_warning_as_error( "com_warning_as_error", "0", CVAR_BOOL | CVAR_SYSTEM, "when enabled to 1, all warnings trigger error" );
+idCVar com_error_crash( "com_error_crash", "0", CVAR_INTEGER | CVAR_SYSTEM, "crash the hard way on the following:\n"
+	"  fatal errors   when >= 1\n"
+	"  normal errors  when >= 2\n"
+	"  warnings       when >= 3\n"
+, 0, 3);
 
 #define ASYNCSOUND_INFO "0: mix sound inline, 1: memory mapped async mix, 2: callback mixing, 3: write async mix"
 #if defined( MACOS_X )
@@ -85,7 +96,12 @@ idCVar com_asyncSound( "com_asyncSound", "3", CVAR_INTEGER|CVAR_SYSTEM|CVAR_ROM,
 idCVar com_asyncSound( "com_asyncSound", "1", CVAR_INTEGER|CVAR_SYSTEM, ASYNCSOUND_INFO, 0, 1 );
 #endif
 
-idCVar com_forceGenericSIMD( "com_forceGenericSIMD", "0", CVAR_BOOL | CVAR_SYSTEM | CVAR_NOCHEAT, "force generic platform independent SIMD" );
+idCVar com_forceGenericSIMD( "com_forceGenericSIMD", "0", CVAR_SYSTEM | CVAR_NOCHEAT,
+	"Force specified implementation of SIMD processor (if supported)\n"
+	"Value 1 or Generic forces slow platform-independent implementation. "
+	"Other options include: SSE, SSE2, SSSE3, AVX, AVX2, [Win32]:IdAsm)"
+);
+idCVar com_fpexceptions( "com_fpexceptions", "0", CVAR_BOOL | CVAR_SYSTEM, "enable FP exceptions: throw exception when NaN or Inf value is produced" );
 idCVar com_developer( "developer", "0", CVAR_BOOL|CVAR_SYSTEM|CVAR_NOCHEAT, "developer mode" );
 idCVar com_allowConsole( "com_allowConsole", "0", CVAR_BOOL | CVAR_SYSTEM | CVAR_NOCHEAT, "allow toggling console with the tilde key" );
 idCVar com_speeds( "com_speeds", "0", CVAR_BOOL|CVAR_SYSTEM|CVAR_NOCHEAT, "show engine timings" );
@@ -114,10 +130,10 @@ int				time_backend;			// renderSystem backend time
 int				time_frontendLast;
 int				time_backendLast;
 
-int				com_frameTime;			// time for the current frame in milliseconds
-int				com_frameMsec;
+int				com_frameTime;			// time moment of the current frame in milliseconds
+int				com_frameDelta;			// time elapsed since previous frame in milliseconds
 int				com_frameNumber;		// variable frame number
-volatile int	com_ticNumber;			// 60 hz tics
+std::atomic<int>	com_ticNumber;			// 60 hz tics
 int				com_editors;			// currently opened editor(s)
 bool			com_editorActive;		// true if an editor has focus
 
@@ -131,6 +147,8 @@ unsigned int	com_msgID = -1;
 idGame *		game = NULL;
 idGameEdit *	gameEdit = NULL;
 #endif
+
+void Com_Crash_f( const idCmdArgs &args );
 
 // writes si_version to the config file - in a kinda obfuscated way
 //#define ID_WRITE_VERSION
@@ -149,7 +167,7 @@ public:
 	virtual void				StartupVariable( const char *match, bool once );
 	virtual void				InitTool( const toolFlag_t tool, const idDict *dict );
 	virtual void				ActivateTool( bool active );
-    virtual void				WriteConfigToFile( const char *filename, const char* basePath = "fs_savepath" );
+    virtual void				WriteConfigToFile( const char *filename, const char* basePath = "fs_savepath", const eConfigExport configexport = eConfigExport_all);
 	virtual void				WriteFlaggedCVarsToFile( const char *filename, int flags, const char *setCmd );
 	virtual void				BeginRedirect( char *buffer, int buffersize, void (*flush)( const char * ) );
 	virtual void				EndRedirect( void );
@@ -157,6 +175,7 @@ public:
 	virtual void				Printf( const char *fmt, ... ) id_attribute((format(printf,2,3)));
 	virtual void				VPrintf( const char *fmt, va_list arg );
 	virtual void				DPrintf( const char *fmt, ... ) id_attribute((format(printf,2,3)));
+	virtual void				PrintCallStack();
 	virtual void				Warning( const char *fmt, ... ) id_attribute((format(printf,2,3)));
 	virtual void				DWarning( const char *fmt, ...) id_attribute((format(printf,2,3)));
 	virtual void				PrintWarnings( void );
@@ -208,10 +227,11 @@ private:
 	void						SingleAsyncTic( void );
 	void						LoadGameDLL( void );
 	void						UnloadGameDLL( void );
+	idStr						CallStackToString( int dropLastCalls = 1 );
 	//void						PrintLoadingMessage( const char *msg );
 
 	// greebo: used to initialise the fs_currentfm/fs_mod parameters
-	void						InitGameArguments();
+	void						InitGameArguments(idStrList *newModsList);
 
 	bool						com_fullyInitialized;
 	bool						com_refreshOnPrint;		// update the screen every print for dmap
@@ -504,7 +524,7 @@ idStr idCommonLocal::GetConsoleContents(int begin, int end) {
 	idStr res;
 	res.Fill(' ', len);
 	f->Read((char*)res.c_str(), len);
-	fileSystem->FreeFile(f);
+	delete f;
 	return res;
 }
 
@@ -577,6 +597,27 @@ void idCommonLocal::DWarning( const char *fmt, ... ) {
 	Printf( S_COLOR_YELLOW "WARNING:" S_COLOR_RED "%s\n", msg );
 }
 
+
+idStr idCommonLocal::CallStackToString(int dropLastCalls) {
+	uint8_t traceData[4096];
+	int traceSize = sizeof(traceData);
+	uint32_t hash = idDebugSystem::GetStack(traceData, traceSize);
+
+	idList<debugStackFrame_t> callstack;
+	idDebugSystem::DecodeStack(traceData, traceSize, callstack);
+	idDebugSystem::CleanStack(callstack);
+
+	for (int t = 0; t < dropLastCalls; t++)
+		callstack.RemoveIndex(0);
+	char message[32<<10];
+	idDebugSystem::StringifyStack(hash, callstack.Ptr(), callstack.Num(), message, sizeof(message));
+	return message;
+}
+void idCommonLocal::PrintCallStack() {
+	idStr message = CallStackToString(1);
+	Printf(message);
+}
+
 /*
 ==================
 idCommonLocal::Warning
@@ -597,6 +638,12 @@ void idCommonLocal::Warning( const char *fmt, ... ) {
 
 	if ( warningList.Num() < MAX_WARNING_LIST ) {
 		warningList.AddUnique( msg );
+	}
+	if ( com_error_crash.GetInteger() >= 3 ) {
+		Com_Crash_f(idCmdArgs());
+	}
+	if ( com_warning_as_error.GetBool() ) {
+		Error("Promoted to error (com_warning_as_error = 1)");
 	}
 }
 
@@ -634,7 +681,7 @@ idCommonLocal::ClearWarnings
 */
 void idCommonLocal::ClearWarnings( const char *reason ) {
 	warningCaption = reason;
-	warningList.Clear();
+	warningList.ClearFree();
 }
 
 /*
@@ -703,6 +750,10 @@ idCommonLocal::Error
 void idCommonLocal::Error( const char *fmt, ... ) {
 	va_list		argptr;
 
+	if ( com_error_crash.GetInteger() >= 2 ) {
+		Com_Crash_f(idCmdArgs());
+	}
+
 	int code = ERP_DROP;
 
 	// if we don't have GL running, make it a fatal error
@@ -718,6 +769,12 @@ void idCommonLocal::Error( const char *fmt, ... ) {
 		// full screen rendering window covering the
 		// error dialog
 		if ( com_errorEntered == ERP_FATAL ) {
+			if ( logFile ) {	//try to print something to log file
+				static const char *UBER_ERROR = "Recursive fatal error!\n";
+				logFile->Write(UBER_ERROR, idStr::Length(UBER_ERROR));
+				logFile->Flush();
+			}
+			assert(false);		//break in debug build
 			Sys_Quit();
 		}
 		code = ERP_FATAL;
@@ -811,6 +868,10 @@ Dump out of the game to a system dialog
 void idCommonLocal::FatalError( const char *fmt, ... ) {
 	va_list		argptr;
 	char msgBuf[MAX_PRINT_MSG_SIZE];
+
+	if ( com_error_crash.GetInteger() >= 1 ) {
+		Com_Crash_f(idCmdArgs());
+	}
 
 	// if we got a recursive error, make it fatal
 	if ( com_errorEntered ) {
@@ -937,7 +998,7 @@ void idCommonLocal::ParseCommandLine( int argc, const char **argv ) {
 	}
 }
 
-void idCommonLocal::InitGameArguments() {
+void idCommonLocal::InitGameArguments(idStrList *newModsList) {
 	bool fsGameDefined = false;
 	bool fsGameBaseDefined = false;
 	bool fsBasePathDefined = false;
@@ -1043,13 +1104,18 @@ void idCommonLocal::InitGameArguments() {
         common->Warning("Fan missions directory does not exist");
     }
 
-    // at the very least, check if the specified fan mission 
-    // folder exists in <fs_mod>/fms/
+	// stgatilov #5661: look for new pk4 files in fms/ directory
+	// and copy them to fms/{modname}/ subdirectory if found
+	// Note: pk4 of the current FM can only be replaced before fileSystem is initialized!
+	idStrList newMods = CMissionManager::SearchForNewMods(fmPath);
+	if (newModsList)
+		*newModsList = newMods;
+
     if ( fsGameDefined ) {
         idStr curFm = idStr( cvarSystem->GetCVarString("fs_currentfm") );
         Sys_ListFiles( fmPath.c_str(), "/", fmList );
 
-        // check if the currently selected fm folder exists
+        // check if the currently selected fm folder exists in <fs_mod>/fms/
         if ( fmList.FindIndex( curFm ) < 0 ) {
             fsGameDefined = false;
             common->Warning("Fan missions path does not exist for installed fm: %s", curFm.c_str());
@@ -1258,7 +1324,11 @@ void idCommonLocal::WriteFlaggedCVarsToFile( const char *filename, int flags, co
 idCommonLocal::WriteConfigToFile
 ==================
 */
-void idCommonLocal::WriteConfigToFile( const char *filename, const char* basePath ) {
+void idCommonLocal::WriteConfigToFile( 
+	const char*						filename, 
+	const char*						basePath, 
+	const eConfigExport	configexport)
+{
 	idFile *f;
 #ifdef ID_WRITE_VERSION
 	ID_TIME_T t;
@@ -1286,8 +1356,13 @@ void idCommonLocal::WriteConfigToFile( const char *filename, const char* basePat
 	f->Printf( "// %s\n", out.c_str() );
 #endif
 
-	idKeyInput::WriteBindings( f );
-	cvarSystem->WriteFlaggedVariables( CVAR_ARCHIVE, "seta", f );
+	if (configexport == eConfigExport_all || configexport == eConfigExport_keybinds)
+		idKeyInput::WriteBindings( f );
+	if (configexport == eConfigExport_all || configexport == eConfigExport_padbinds)
+		idGamepadInput::WriteBindings( f );
+	if (configexport == eConfigExport_all || configexport == eConfigExport_cvars)
+		cvarSystem->WriteFlaggedVariables( CVAR_ARCHIVE, "seta", f );
+
 	fileSystem->CloseFile( f );
 }
 
@@ -1315,7 +1390,10 @@ void idCommonLocal::WriteConfiguration( void ) {
 	bool developer = com_developer.GetBool();
 	com_developer.SetBool( false );
 
-	WriteConfigToFile( CONFIG_FILE, "fs_savepath" );
+	// STiFU #4797: Separate config files for cvars and keybinds
+	WriteConfigToFile( CONFIG_FILE,	  "fs_savepath", idCommon::eConfigExport_cvars    );
+	WriteConfigToFile( KEYBINDS_FILE, "fs_savepath", idCommon::eConfigExport_keybinds );
+	WriteConfigToFile( PADBINDS_FILE, "fs_savepath", idCommon::eConfigExport_padbinds );
 
 	// restore the developer cvar
 	com_developer.SetBool( developer );
@@ -1504,10 +1582,10 @@ Just throw a fatal error to test error shutdown procedures.
 ==================
 */
 static void Com_Error_f( const idCmdArgs &args ) {
-	if ( !com_developer.GetBool() ) {
+	/*if ( !com_developer.GetBool() ) {
 		commonLocal.Printf( "error may only be used in developer mode\n" );
 		return;
-	}
+	}*/
 
 	if ( args.Argc() > 1 ) {
 		commonLocal.FatalError( "Testing fatal error" );
@@ -1532,10 +1610,10 @@ static void Com_Freeze_f( const idCmdArgs &args ) {
 		return;
 	}
 
-	if ( !com_developer.GetBool() ) {
+	/*if ( !com_developer.GetBool() ) {
 		commonLocal.Printf( "freeze may only be used in developer mode\n" );
 		return;
-	}
+	}*/
 
 	s = atof( args.Argv(1) );
 
@@ -1556,11 +1634,11 @@ Com_Crash_f
 A way to force a bus error for development reasons
 =================
 */
-static void Com_Crash_f( const idCmdArgs &args ) {
-	if ( !com_developer.GetBool() ) {
+void Com_Crash_f( const idCmdArgs &args ) {
+	/*if ( !com_developer.GetBool() ) {
 		commonLocal.Printf( "crash may only be used in developer mode\n" );
 		return;
-	}
+	}*/
 
 	* ( int * ) 0 = 0x12345678;
 }
@@ -1617,11 +1695,7 @@ void Com_ReloadEngine_f( const idCmdArgs &args ) {
 	}
 	commonLocal.ShutdownGame( true );
 	commonLocal.InitGame();
-	if ( !menu 
-#ifdef MULTIPLAYER
-		&& !idAsyncNetwork::serverDedicated.GetBool()
-#endif
-		) {
+	if ( !menu ) {
 		Sys_ShowConsole( 0, false );
 	}
 	common->Printf( "============= ReloadEngine end ===============\n" );
@@ -1744,7 +1818,6 @@ idCommonLocal::LocalizeGui
 void idCommonLocal::LocalizeGui( const char *fileName, idLangDict &langDict ) {
 	idStr out, ws, work;
 	const char *buffer = NULL;
-	out.Empty();
 	int k;
 	char ch;
 	char slash = '\\';
@@ -2289,32 +2362,6 @@ void Com_FinishBuild_f( const idCmdArgs &args ) {
 }
 
 /*
-==============
-Com_Help_f
-==============
-*/
-void Com_Help_f( const idCmdArgs &args ) {
-	common->Printf( "\nCommonly used commands:\n" );
-	common->Printf( "  spawnServer      - start the server.\n" );
-	common->Printf( "  disconnect       - shut down the server.\n" );
-	common->Printf( "  listCmds         - list all console commands.\n" );
-	common->Printf( "  listCVars        - list all console variables.\n" );
-	common->Printf( "  kick             - kick a client by number.\n" );
-	common->Printf( "  gameKick         - kick a client by name.\n" );
-	common->Printf( "  serverNextMap    - immediately load next map.\n" );
-	common->Printf( "  serverMapRestart - restart the current map.\n" );
-	common->Printf( "  serverForceReady - force all players to ready status.\n" );
-	common->Printf( "\nCommonly used variables:\n" );
-	common->Printf( "  si_name          - server name (change requires a restart to see)\n" );
-	common->Printf( "  si_gametype      - type of game.\n" );
-	common->Printf( "  si_fragLimit     - max kills to win (or lives in Last Man Standing).\n" );
-	common->Printf( "  si_timeLimit     - maximum time a game will last.\n" );
-	common->Printf( "  si_warmup        - do pre-game warmup.\n" );
-	common->Printf( "  g_mapCycle       - name of .scriptcfg file for cycling maps.\n" );
-	common->Printf( "See mapcycle.scriptcfg for an example of a mapcyle script.\n\n" );
-}
-
-/*
 =================
 idCommonLocal::InitCommands
 =================
@@ -2327,10 +2374,7 @@ void idCommonLocal::InitCommands( void ) {
 	cmdSystem->AddCommand( "exit", Com_Quit_f, CMD_FL_SYSTEM, "exits the game" );
 	cmdSystem->AddCommand( "writeConfig", Com_WriteConfig_f, CMD_FL_SYSTEM, "writes a config file" );
 	cmdSystem->AddCommand( "reloadEngine", Com_ReloadEngine_f, CMD_FL_SYSTEM, "reloads the engine down to including the file system" );
-/*	cmdSystem->AddCommand( "setMachineSpec", Com_SetMachineSpec_f, CMD_FL_SYSTEM, "detects system capabilities and sets com_machineSpec to appropriate value" );
-	cmdSystem->AddCommand( "execMachineSpec", Com_ExecMachineSpec_f, CMD_FL_SYSTEM, "execs the appropriate config files and sets cvars based on com_machineSpec" );*/
 
-#if !defined( ID_DEDICATED )
 	// compilers
 	cmdSystem->AddCommand( "dmap", Dmap_f, CMD_FL_TOOL, "compiles a map", idCmdSystem::ArgCompletion_MapName );
 	cmdSystem->AddCommand( "renderbump", RenderBump_f, CMD_FL_TOOL, "renders a bump map", idCmdSystem::ArgCompletion_ModelName );
@@ -2339,7 +2383,7 @@ void idCommonLocal::InitCommands( void ) {
 	cmdSystem->AddCommand( "runAASDir", RunAASDir_f, CMD_FL_TOOL, "compiles AAS files for all maps in a folder", idCmdSystem::ArgCompletion_MapName );
 	cmdSystem->AddCommand( "runReach", RunReach_f, CMD_FL_TOOL, "calculates reachability for an AAS file", idCmdSystem::ArgCompletion_MapName );
 	cmdSystem->AddCommand( "roq", RoQFileEncode_f, CMD_FL_TOOL, "encodes a roq file" );
-#endif
+	cmdSystem->AddCommand( "runParticle", RunParticle_f, CMD_FL_TOOL, "calculates static collision for particle systems ('collisionStatic' in .prt files)", idCmdSystem::ArgCompletion_MapName );
 
 #ifdef ID_ALLOW_TOOLS
 	// editors
@@ -2365,6 +2409,8 @@ void idCommonLocal::InitCommands( void ) {
 	cmdSystem->AddCommand( "showDictMemory", idDict::ShowMemoryUsage_f, CMD_FL_SYSTEM, "shows memory used by dictionaries" );
 	cmdSystem->AddCommand( "listDictKeys", idDict::ListKeys_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "lists all keys used by dictionaries" );
 	cmdSystem->AddCommand( "listDictValues", idDict::ListValues_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "lists all values used by dictionaries" );
+	cmdSystem->AddCommand( "showLoadStackMemory", LoadStack::ShowMemoryUsage_f, CMD_FL_SYSTEM, "shows memory used by load stack strings (see decl_stack)" );
+	cmdSystem->AddCommand( "listLoadStackStrings", LoadStack::ListStrings_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "lists all strings stored in load stacks (see decl_stack)" );
 	cmdSystem->AddCommand( "testSIMD", idSIMD::Test_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "test SIMD code" );
 
 	// localization
@@ -2379,10 +2425,6 @@ void idCommonLocal::InitCommands( void ) {
 	// build helpers
 	cmdSystem->AddCommand( "startBuild", Com_StartBuild_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "prepares to make a build" );
 	cmdSystem->AddCommand( "finishBuild", Com_FinishBuild_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "finishes the build process" );
-
-#ifdef ID_DEDICATED
-	cmdSystem->AddCommand( "help", Com_Help_f, CMD_FL_SYSTEM, "shows help" );
-#endif
 }
 
 /*
@@ -2420,7 +2462,12 @@ idCommonLocal::InitSIMD
 =================
 */
 void idCommonLocal::InitSIMD( void ) {
-	idSIMD::InitProcessor( "tdm", com_forceGenericSIMD.GetBool() );
+	const char *cvarStr = com_forceGenericSIMD.GetString();
+	if (idStr::Cmp(cvarStr, "1") == 0)
+		cvarStr = "Generic";
+	if (idStr::Cmp(cvarStr, "0") == 0)
+		cvarStr = nullptr;
+	idSIMD::InitProcessor( "TDM", cvarStr );
 	com_forceGenericSIMD.ClearModified();
 }
 
@@ -2438,6 +2485,9 @@ void idCommonLocal::Frame( void ) {
 		// write config file if anything changed
 		WriteConfiguration(); 
 
+		// stgatilov #4550: update FPU props (e.g. NaN exceptions)
+		sys->ThreadHeartbeat();
+
 		// change SIMD implementation if required
 		if ( com_forceGenericSIMD.IsModified() ) {
 			InitSIMD();
@@ -2445,28 +2495,43 @@ void idCommonLocal::Frame( void ) {
 
 		eventLoop->RunEventLoop();
 
-		// duzenko #4409 - need frame time msec to pass to game tic
-		static int	lastTime;
-		const int	nowTime = Sys_Milliseconds();
-		com_frameMsec = nowTime - lastTime;
-		lastTime = nowTime;
-
-		if (sessLocal.com_fixedTic.GetBool())
-			com_frameTime += com_frameMsec;
-		else
-			//com_frameTime = com_ticNumber * USERCMD_MSEC;
-			com_frameTime += USERCMD_MSEC; // Max(USERCMD_MSEC, (1000 / Max(1, com_maxFPS.GetInteger()) ) );
-
-#ifdef MULTIPLAYER
-		idAsyncNetwork::RunFrame();
-
-		if ( idAsyncNetwork::IsActive() ) {
-			if ( idAsyncNetwork::serverDedicated.GetInteger() != 1 ) {
-				session->GuiFrameEvents();
-				session->UpdateScreen( false );
+		static int64_t com_frameTimeMicro = 0;		//same as com_frameTime, but in microseconds
+		static int64_t lastFrameAstroTime = Sys_Microseconds();
+		if (sessLocal.com_fixedTic.GetBool()) {
+			//stgatilov #4865: impose artificial FPS limit
+			int64_t minDeltaTime = 1000000 / sessLocal.com_maxFPS.GetInteger();
+			int64_t currFrameAstroTime;
+			while (1) {
+				currFrameAstroTime = Sys_Microseconds();
+				if (currFrameAstroTime - lastFrameAstroTime > minDeltaTime)
+					break;
+				//note: this is busy-wait loop
+				#ifdef __SSE2__
+					_mm_pause();
+				#else
+					currFrameAstroTime = currFrameAstroTime;	//NOP
+				#endif
 			}
-		} else 
-#endif
+			//see how much passed in microseconds
+			int deltaTime = currFrameAstroTime - lastFrameAstroTime;
+			lastFrameAstroTime = currFrameAstroTime;
+
+			//update precise time in microseconds, then round it to milliseconds
+			com_frameTimeMicro += deltaTime * com_timescale.GetFloat();
+			int newFrameTime = com_frameTimeMicro / 1000;
+			com_frameDelta = newFrameTime - com_frameTime;
+			com_frameTime = newFrameTime;
+		}
+		else {
+			//synchronize common time to async tic number
+			//(which is synced to astronomical time in idCommonLocal::SingleAsyncTic)
+			com_frameTime = com_ticNumber * USERCMD_MSEC;	//com_frameTime += USERCMD_MSEC;
+			com_frameDelta = USERCMD_MSEC;
+			//these variables are not used now, but they will be needed if we switch to uncapped FPS mode
+			com_frameTimeMicro = com_frameTime * 1000;
+			lastFrameAstroTime = Sys_Microseconds();
+		}
+
 		{
 			session->Frame();
 
@@ -2476,7 +2541,7 @@ void idCommonLocal::Frame( void ) {
 
 		// report timing information
 		if ( com_speeds.GetBool() ) {
-			Printf("frame:%i all:%3i gfr:%3i fr:%3i(%d) br:%3i(%d)\n", com_frameNumber, com_frameMsec, time_gameFrame, time_frontend, time_frontendLast, time_backend, time_backendLast);
+			Printf("frame:%i all:%3i gfr:%3i fr:%3i(%d) br:%3i(%d)\n", com_frameNumber, com_frameDelta, time_gameFrame, time_frontend, time_frontendLast, time_backend, time_backendLast);
 			time_gameFrame = 0;
 			time_gameDraw = 0;
 		}	
@@ -2501,12 +2566,6 @@ void idCommonLocal::GUIFrame( bool execCmd, bool network ) {
 	Sys_GenerateEvents();
 	eventLoop->RunEventLoop( execCmd );	// and execute any commands
 	com_frameTime = com_ticNumber * USERCMD_MSEC;
-
-#ifdef MULTIPLAYER
-	if (network) {
-		idAsyncNetwork::RunFrame();
-	}
-#endif
 
 	session->Frame();
 	session->UpdateScreen( false );	
@@ -2542,8 +2601,7 @@ typedef struct {
 #define MAX_ASYNC_STATS			1024
 
 asyncStats_t	com_asyncStats[MAX_ASYNC_STATS];		// indexed by com_ticNumber
-int prevAsyncMsec;
-int	lastTicMsec;
+int64_t lastTicUsec;
 
 void idCommonLocal::SingleAsyncTic( void ) {
 	// main thread code can prevent this from happening while modifying
@@ -2588,38 +2646,46 @@ void idCommonLocal::Async( void ) {
 		return;
 	}
 
-	else if ( !com_preciseTic.GetBool() ) {
+	// stgatilov #4550: update FPU props (e.g. NaN exceptions)
+	sys->ThreadHeartbeat();
+
+	if ( !com_preciseTic.GetBool() ) {
 		// just run a single tic, even if the exact msec isn't precise
 		SingleAsyncTic();
 		return;
 	}
 
-	const int msec = Sys_Milliseconds();
-	if ( !lastTicMsec ) {
-		lastTicMsec = msec - USERCMD_MSEC;
+	//stgatilov #4514: game tics happen even X microseconds (in cumulative sense)
+	//to see how often this function is called, see Sys_StartAsyncThread
+	static const int USERCMD_USEC = 16650;		// ~60.06 Hz --- a bit higher than vsync
+
+	const int64_t usec = Sys_GetTimeMicroseconds();
+	if ( !lastTicUsec ) {
+		lastTicUsec = usec - USERCMD_USEC;
 	}
 
-	int ticMsec = USERCMD_MSEC;
+	int64_t ticUsec = USERCMD_USEC;
 	const float timescale = com_timescale.GetFloat();
 
 	// don't skip too many
 	if ( timescale == 1.0f ) {
-		if ( lastTicMsec + (10 * USERCMD_MSEC) < msec ) {
-			lastTicMsec = msec - (10 * USERCMD_MSEC);
+		if ( lastTicUsec + (10 * USERCMD_USEC) < usec ) {
+			lastTicUsec = usec - (10 * USERCMD_USEC);
 		}
 	}
 	// the number of msec per tic can be varies with the timescale cvar
 	else {								// i.e if ( timescale != 1.0f )
-		ticMsec /= timescale;
-		if ( ticMsec < 1 ) {
-			ticMsec = 1;
+		ticUsec /= timescale;
+		if ( ticUsec < 1 ) {
+			ticUsec = 1;
 		}
 	}
 
-	while ( lastTicMsec + ticMsec <= msec ) {
+	while ( lastTicUsec + ticUsec <= usec ) {
 		SingleAsyncTic();
-		lastTicMsec += ticMsec;
+		lastTicUsec += ticUsec;
 	}
+	Sys_TriggerEvent( TRIGGER_EVENT_ONE );
 }
 
 /*
@@ -2763,6 +2829,9 @@ void idCommonLocal::Init( int argc, const char **argv, const char *cmdline )
 		// init CVar system
 		cvarSystem->Init();
 
+		// potentially start trace profiler if requested
+		InitTracing();
+
 		// start file logging right away, before early console or whatever
 		StartupVariable( "win_outputDebugString", false );
 
@@ -2777,6 +2846,7 @@ void idCommonLocal::Init( int argc, const char **argv, const char *cmdline )
 
 		// initialize key input/binding, done early so bind command exists
 		idKeyInput::Init();
+		idGamepadInput::Init();
 
 		// init the console so we can take prints
 		console->Init();
@@ -2790,8 +2860,8 @@ void idCommonLocal::Init( int argc, const char **argv, const char *cmdline )
 		// override cvars from command line
 		StartupVariable( NULL, false );
 
-        // set fpu double extended precision
-        Sys_FPU_SetPrecision();
+		// stgatilov #4550: set FPU props (FTZ + DAZ, etc.)
+		sys->ThreadStartup();
 
 		// initialize processor specific SIMD implementation
 		InitSIMD();
@@ -2817,10 +2887,6 @@ void idCommonLocal::Init( int argc, const char **argv, const char *cmdline )
 		// print all warnings queued during initialization
 		PrintWarnings();
 
-#ifdef	ID_DEDICATED
-		Printf( "\nType 'help' for dedicated server info.\n\n" );
-#endif
-
 		// remove any prints from the notify lines
 		console->ClearNotifyLines();
 		
@@ -2833,8 +2899,8 @@ void idCommonLocal::Init( int argc, const char **argv, const char *cmdline )
 		com_fullyInitialized = true;
 	}
 
-	catch( idException & ) {
-		Sys_Error( "Error during initialization" );
+	catch( idException &e ) {
+		Sys_Error( "Error during initialization. %s", e.error );
 	}
 }
 
@@ -2847,11 +2913,6 @@ idCommonLocal::Shutdown
 void idCommonLocal::Shutdown( void ) {
 
 	com_shuttingDown = true;
-
-#ifdef MULTIPLAYER
-	idAsyncNetwork::server.Kill();
-	idAsyncNetwork::client.Shutdown();
-#endif
 
     // save persistent console history
     console->SaveHistory();
@@ -2867,6 +2928,7 @@ void idCommonLocal::Shutdown( void ) {
 
 	// shut down the key system
 	idKeyInput::Shutdown();
+	idGamepadInput::Shutdown();
 
 	// shut down the cvar system
 	cvarSystem->Shutdown();
@@ -2881,8 +2943,8 @@ void idCommonLocal::Shutdown( void ) {
 
 	// free any buffered warning messages
 	ClearWarnings( GAME_NAME " shutdown" );
-	warningCaption.Clear();
-	errorList.Clear();
+	warningCaption.ClearFree();
+	errorList.ClearFree();
 
 	// enable leak test
 	Mem_EnableLeakTest( "tdm_main" );
@@ -2898,9 +2960,11 @@ idCommonLocal::InitGame
 */
 void idCommonLocal::InitGame( void )
 {
+	idStrList newModsList;
+
 	// greebo: Check if we have fs_currentfm and/or fs_mod defined, if not fall back to default values
 	// Do this before initialising the filesystem
-	InitGameArguments();
+	InitGameArguments(&newModsList);
 
 	// initialize the file system
 	fileSystem->Init();
@@ -2908,27 +2972,14 @@ void idCommonLocal::InitGame( void )
 	// init journalling, etc
 	eventLoop->Init();
 
+	// init the parallel job manager
+	parallelJobManager->Init();
+
 	// initialize the declaration manager
 	declManager->Init();
 
 	// force r_fullscreen 0 if running a tool
 	CheckToolMode();
-
-    // greebo: the config.spec file is saved to the mod save path in darkmod/fms/<fs_game>/
-	/*idFile *file = fileSystem->OpenExplicitFileRead( fileSystem->RelativePathToOSPath( CONFIG_SPEC, "fs_savepath", "" ) );
-	bool sysDetect = ( file == NULL );
-	if ( file ) {
-		fileSystem->CloseFile( file );
-	} else {
-		file = fileSystem->OpenFileWrite( CONFIG_SPEC, "fs_savepath", "" );
-		fileSystem->CloseFile( file );
-	}
-
-	idCmdArgs args;
-	if ( sysDetect ) {
-		SetMachineSpec();
-		Com_ExecMachineSpec_f( args );
-	}*/
 
 	// initialize the renderSystem data structures, but don't start OpenGL yet
 	renderSystem->Init();
@@ -2944,13 +2995,26 @@ void idCommonLocal::InitGame( void )
 	//PrintLoadingMessage( Translate( "#str_04345" ) );
 
 	// exec the startup scripts
+#ifdef NO_MFC
 	cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "exec editor.cfg\n" );
+#endif
 	cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "exec default.cfg\n" );
 
 	// skip the config file if "safe" is on the command line
-        if ( !SafeMode() && (fileSystem->FindFile(CONFIG_FILE) != FIND_NO) ) {
-		cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "exec " CONFIG_FILE "\n" );		// Darkmod.cfg
-		// if it does not exist, ignore it and only use "default.cfg", Darkmod.cfg will be written upon exit
+	if (!SafeMode())
+	{
+		// if any config file does not exist, ignore it and only use "default.cfg".
+		// Darkmod.cfg and DarkmodKeybinds.cfg will be written upon exit
+		if (fileSystem->FindFile(CONFIG_FILE) != FIND_NO) {
+			cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "exec " CONFIG_FILE "\n");		// Darkmod.cfg
+			
+		}
+		if (fileSystem->FindFile(KEYBINDS_FILE) != FIND_NO) { // STiFU #4797
+			cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "exec " KEYBINDS_FILE "\n");		// DarkmodKeybinds.cfg
+		}
+		if (fileSystem->FindFile(PADBINDS_FILE) != FIND_NO) {
+			cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "exec " PADBINDS_FILE "\n");
+		}
 	}
 	cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "exec autoexec.cfg\n" );
 
@@ -2979,29 +3043,9 @@ void idCommonLocal::InitGame( void )
 
 	//PrintLoadingMessage( Translate( "#str_04347" ) );
 
-#ifdef	ID_DEDICATED
-	// init async network
-	idAsyncNetwork::Init();
-
-	idAsyncNetwork::server.InitPort();
-	cvarSystem->SetCVarBool( "s_noSound", true );
-#else
-
-#ifdef MULTIPLAYER
-	// init async network
-	idAsyncNetwork::Init();
-
-	if (idAsyncNetwork::serverDedicated.GetInteger() == 1) {
-		idAsyncNetwork::server.InitPort();
-		cvarSystem->SetCVarBool( "s_noSound", true );
-	} else 
-#endif
-	{
-		// init OpenGL, which will open a window and connect sound and input hardware
-		//PrintLoadingMessage( Translate( "#str_04348" ) );
-		InitRenderSystem();
-	}
-#endif
+	// init OpenGL, which will open a window and connect sound and input hardware
+	//PrintLoadingMessage( Translate( "#str_04348" ) );
+	InitRenderSystem();
 
 	// initialize the user interfaces
 	uiManager->Init();
@@ -3011,20 +3055,11 @@ void idCommonLocal::InitGame( void )
 
 	// load the game dll
 	LoadGameDLL();
+	// stgatilov #5661: notify MissionManager about already accepted new FMs
+	gameLocal.m_MissionManager->AddToNewModList(newModsList);
 	
 	// init the session
 	session->Init();
-
-	// have to do this twice.. first one sets the correct r_mode for the renderer init
-	// this time around the backend is all setup correct.. a bit fugly but do not want
-	// to mess with all the gl init at this point.. an old vid card will never qualify for 
-	/*if ( sysDetect ) {
-		SetMachineSpec();
-		Com_ExecMachineSpec_f( args );
-		cvarSystem->SetCVarInteger( "s_numberOfSpeakers", 6 );
-		cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );
-		cmdSystem->ExecuteCommandBuffer();
-	}*/
 
 	// tels: #3199: now that the game DLL is loaded, we can execute another config, this
 	// enables it to run f.i. dmap (dmap before DLL load produces no AAS):
@@ -3047,13 +3082,6 @@ void idCommonLocal::ShutdownGame( bool reloading ) {
 	// shutdown the script debugger
 	// DebuggerServerShutdown();
 
-#ifdef MULTIPLAYER
-	idAsyncNetwork::client.Shutdown();
-
-	// shut down async networking
-	idAsyncNetwork::Shutdown();
-#endif
-
 	// shut down the session
 	session->Shutdown();
 
@@ -3069,7 +3097,9 @@ void idCommonLocal::ShutdownGame( bool reloading ) {
 	// shut down the event loop
 	eventLoop->Shutdown();
 
+
 	// shut down the renderSystem
+	renderBackend->Shutdown();
 	renderSystem->Shutdown();
 
 	// destroy the i18n manager

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -118,11 +118,11 @@ void idRenderModelOverlay::CreateOverlay( const idRenderModel *model, const idPl
 		const modelSurface_t *surf = model->Surface( surfNum );
 		float d;
 
-		if ( !surf->geometry || !surf->shader ) {
+		if ( !surf->geometry || !surf->material ) {
 			continue;
 		}
 
-		const idMaterial* shader = R_RemapShaderBySkin( surf->shader, customSkin, customShader ); // SteveL #3844
+		const idMaterial* shader = R_RemapShaderBySkin( surf->material, customSkin, customShader ); // SteveL #3844
 		
 		// some surfaces can explicitly disallow overlays
 		if ( !shader->AllowOverlays() ) {
@@ -270,7 +270,7 @@ void idRenderModelOverlay::AddOverlaySurfacesToModel( idRenderModel *baseModel )
 		} else {
 			newSurf = &staticModel->surfaces.Alloc();
 			newSurf->geometry = NULL;
-			newSurf->shader = materials[k]->material;
+			newSurf->material = materials[k]->material;
 			newSurf->id = -1 - k;
 		}
 

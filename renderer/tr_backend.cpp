@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 #include "precompiled.h"
@@ -17,8 +17,14 @@
 
 #include "tr_local.h"
 #include "FrameBuffer.h"
+#include "glsl.h"
+#include "GLSLProgramManager.h"
+#include "backend/RenderBackend.h"
+#include "BloomStage.h"
+#include "FrameBufferManager.h"
 
 backEndState_t	backEnd;
+idCVarBool image_showBackgroundLoads( "image_showBackgroundLoads", "0", CVAR_RENDERER, "1 = print outstanding background loads" );
 
 /*
 ======================
@@ -33,10 +39,12 @@ void RB_SetDefaultGLState( void ) {
 	GL_CheckErrors();
 
 	qglClearDepth( 1.0f );
-	qglColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+	//GL_FloatColor( 1.0f, 1.0f, 1.0f, 1.0f );
 
-	// the vertex array is always enabled
-	qglEnableVertexAttribArray( 0 );
+	// the vertex arrays are always enabled. FIXME: Not exactly a 'default GL state'
+	const int attrib_indices[] = { 0,2,3,8,9,10 };
+	for ( auto attr_index : attrib_indices )
+		qglEnableVertexAttribArray( attr_index );
 
 	// make sure our GL state vector is set correctly
 	memset( &backEnd.glState, 0, sizeof( backEnd.glState ) );
@@ -48,8 +56,6 @@ void RB_SetDefaultGLState( void ) {
 	qglEnable( GL_BLEND );
 	qglEnable( GL_SCISSOR_TEST );
 	qglEnable( GL_CULL_FACE );
-	qglDisable( GL_LIGHTING );
-	qglDisable( GL_LINE_STIPPLE );
 	qglDisable( GL_STENCIL_TEST );
 
 	qglPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
@@ -57,18 +63,13 @@ void RB_SetDefaultGLState( void ) {
 	qglDepthFunc( GL_ALWAYS );
 
 	qglCullFace( GL_FRONT_AND_BACK );
-	qglShadeModel( GL_SMOOTH );
+	//qglShadeModel( GL_SMOOTH );
 
 	if ( r_useScissor.GetBool() ) {
-		GL_Scissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+		GL_ScissorVidSize( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 	}
 
-	for ( int i = MAX_MULTITEXTURE_UNITS - 1 ; i >= 0 ; i-- ) {
-		GL_SelectTexture( i );
-
-		qglDisable( GL_TEXTURE_2D );
-		qglDisable( GL_TEXTURE_CUBE_MAP );
-	}
+	GL_CheckErrors();
 }
 
 /*
@@ -147,42 +148,6 @@ void GL_Cull( const int cullType ) {
 		}
 	}
 	backEnd.glState.faceCulling = cullType;
-}
-
-/*
-====================
-GL_Scissor
-
-Utility function,
-if you absolutly must
-check for anything out of the ordinary,
-then do it here.
-====================
-*/
-void GL_Scissor( int x /* left*/, int y /* bottom */, int w, int h ) {
-	// x and y can be negative, but neither width nor height must be.
-	if ( w <= 0 || h <= 0 ) {
-		return;
-	}
-	qglScissor( x, y, w, h );
-}
-
-/*
-====================
-GL_Viewport
-
-Utility function,
-if you absolutly must
-check for anything out of the ordinary,
-then do it here.
-====================
-*/
-void GL_Viewport( int x /* left */, int y /* bottom */, int w, int h ) {
-	// x and y can be negative, but neither width nor height must be.
-	if ( w <= 0 || h <= 0 ) {
-		return;
-	}
-	qglViewport( x, y, w, h );
 }
 
 /*
@@ -332,25 +297,24 @@ void GL_State( const int stateBits ) {
 	backEnd.glState.glStateBits = stateBits;
 }
 
-//anon begin
 /*
 ========================
-GL_DepthBoundsTest
+DepthBoundsTest
 ========================
 */
-void GL_DepthBoundsTest( const float zmin, const float zmax ) {
-	if ( !glConfig.depthBoundsTestAvailable || zmin > zmax ) {
+DepthBoundsTest::DepthBoundsTest( const idScreenRect &scissorRect ) {
+	if ( !glConfig.depthBoundsTestAvailable || !r_useDepthBoundsTest.GetBool() )
 		return;
-	}
-
-	if ( zmin == 0.0f && zmax == 0.0f ) {
-		qglDisable( GL_DEPTH_BOUNDS_TEST_EXT );
-	} else {
-		qglEnable( GL_DEPTH_BOUNDS_TEST_EXT );
-		qglDepthBoundsEXT( zmin, zmax );
-	}
+	assert( scissorRect.zmin <= scissorRect.zmax );
+	qglEnable( GL_DEPTH_BOUNDS_TEST_EXT );
+	qglDepthBoundsEXT( scissorRect.zmin, scissorRect.zmax );
 }
-//anon end
+
+DepthBoundsTest::~DepthBoundsTest() {
+	if ( !glConfig.depthBoundsTestAvailable || !r_useDepthBoundsTest.GetBool() )
+		return;
+	qglDisable( GL_DEPTH_BOUNDS_TEST_EXT );
+}
 
 /*
 ============================================================================
@@ -367,13 +331,13 @@ GL_Color
 Vector color 3 component (clamped)
 ====================
 */
-void GL_FloatColor( const idVec3 &color ) {
+/*GL_FloatColor( const idVec3 &color ) {
 	GLfloat parm[3];
 	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, color[0] );
 	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, color[1] );
 	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, color[2] );
 	qglColor3f( parm[0], parm[1], parm[2] );
-}
+}*/
 
 /*
 ====================
@@ -382,13 +346,8 @@ GL_Color
 Vector color 4 component (clamped)
 ====================
 */
-void GL_FloatColor( const idVec4 &color ) {
-	GLfloat parm[4];
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, color[0] );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, color[1] );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, color[2] );
-	parm[3] = idMath::ClampFloat( 0.0f, 1.0f, color[3] );
-	qglColor4f( parm[0], parm[1], parm[2], parm[3] );
+GLColorOverride::GLColorOverride( const idVec4 &color ) {
+	Enable( color.ToFloatPtr() );
 }
 
 /*
@@ -398,15 +357,8 @@ GL_Color
 Float to vector color 3 or 4 component (clamped)
 ====================
 */
-void GL_FloatColor( const float *color ) {
-	GLfloat parm[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, color[0] );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, color[1] );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, color[2] );
-	if ( color[3] ) {
-		parm[3] = idMath::ClampFloat( 0.0f, 1.0f, color[3] );
-	}
-	qglColor4fv( parm );
+GLColorOverride::GLColorOverride( const float *color ) {
+	Enable( color );
 }
 
 /*
@@ -416,12 +368,9 @@ GL_Color
 Float color 3 component (clamped)
 ====================
 */
-void GL_FloatColor( float r, float g, float b ) {
-	GLfloat parm[3];
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, r );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, g );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, b );
-	qglColor3f( parm[0], parm[1], parm[2] );
+GLColorOverride::GLColorOverride( float r, float g, float b ) {
+	GLfloat parm[4] = { r,g,b,1 };
+	Enable( parm );
 }
 
 /*
@@ -431,13 +380,27 @@ GL_Color
 Float color 4 component (clamped)
 ====================
 */
-void GL_FloatColor( float r, float g, float b, float a ) {
+GLColorOverride::GLColorOverride( float r, float g, float b, float a ) {
+	GLfloat parm[4] = {r,g,b,a};
+	Enable( parm );
+}
+
+GLColorOverride::~GLColorOverride() {
+	if ( !enabled )
+		return;
+	qglEnableVertexAttribArray( 3 );
+}
+
+void GLColorOverride::Enable( const float* color ) {
 	GLfloat parm[4];
-	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, r );
-	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, g );
-	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, b );
-	parm[3] = idMath::ClampFloat( 0.0f, 1.0f, a );
-	qglColor4f( parm[0], parm[1], parm[2], parm[3] );
+	parm[0] = idMath::ClampFloat( 0.0f, 1.0f, color[0] );
+	parm[1] = idMath::ClampFloat( 0.0f, 1.0f, color[1] );
+	parm[2] = idMath::ClampFloat( 0.0f, 1.0f, color[2] );
+	parm[3] = idMath::ClampFloat( 0.0f, 1.0f, color[3] );
+	//qglColor4f( parm[0], parm[1], parm[2], parm[3] );
+	qglDisableVertexAttribArray( 3 );
+	qglVertexAttrib4fv( 3, parm );
+	enabled = true;
 }
 
 /*
@@ -455,7 +418,8 @@ void GL_ByteColor( const byte *color ) {
 	if ( color[3] ) {
 		parm[3] = idMath::ClampByte( 0, 255, color[3] );
 	}
-	qglColor3ub( parm[0], parm[1], parm[2] );
+//	qglColor3ub( parm[0], parm[1], parm[2] );
+	qglVertexAttrib4ubv( 3, parm );
 }
 
 
@@ -467,11 +431,12 @@ Byte color 3 component (clamped)
 ====================
 */
 void GL_ByteColor( byte r, byte g, byte b ) {
-	GLubyte parm[3];
+	GLubyte parm[4] = { 255, 255, 255, 255 };
 	parm[0] = idMath::ClampByte( 0, 255, r );
 	parm[1] = idMath::ClampByte( 0, 255, g );
 	parm[2] = idMath::ClampByte( 0, 255, b );
-	qglColor3ub( parm[0], parm[1], parm[2] );
+	//qglColor3ub( parm[0], parm[1], parm[2] );
+	qglVertexAttrib4ubv( 3, parm );
 }
 
 /*
@@ -482,12 +447,18 @@ Byte color 4 component (clamped)
 ====================
 */
 void GL_ByteColor( byte r, byte g, byte b, byte a ) {
-	GLubyte parm[4];
+	GLubyte parm[4] = { 255, 255, 255, 255 };
 	parm[0] = idMath::ClampByte( 0, 255, r );
 	parm[1] = idMath::ClampByte( 0, 255, g );
 	parm[2] = idMath::ClampByte( 0, 255, b );
 	parm[3] = idMath::ClampByte( 0, 255, a );
-	qglColor4ub( parm[0], parm[1], parm[2], parm[3] );
+	//qglColor4ub( parm[0], parm[1], parm[2], parm[3] );
+	qglVertexAttrib4ubv( 3, parm );
+}
+
+void GL_SetProjection( float* matrix ) {
+	qglBindBuffer( GL_UNIFORM_BUFFER, programManager->uboHandle );
+	qglBufferData( GL_UNIFORM_BUFFER, sizeof( backEnd.viewDef->projectionMatrix ), matrix, GL_DYNAMIC_DRAW );
 }
 
 /*
@@ -507,9 +478,9 @@ This is not used by the normal game paths, just by some tools
 */
 void RB_SetGL2D( void ) {
 	// set 2D virtual screen size
-	GL_Viewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	GL_ViewportVidSize( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 	if ( r_useScissor.GetBool() ) {
-		GL_Scissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+		GL_ScissorVidSize( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 	}
 	qglMatrixMode( GL_PROJECTION );
 	qglLoadIdentity();
@@ -540,10 +511,6 @@ static void	RB_SetBuffer( const void *data ) {
 
 	backEnd.frameCount = cmd->frameCount;
 
-	if ( !r_useFbo.GetBool() ) { // duzenko #4425: not applicable, raises gl errors
-		qglDrawBuffer( cmd->buffer );
-	}
-
 	// clear screen for debugging
 	// automatically enable this with several other debug tools
 	// that might leave unrendered portions of the screen
@@ -558,7 +525,7 @@ static void	RB_SetBuffer( const void *data ) {
 		} else {
 			qglClearColor( 0.4f, 0.0f, 0.25f, 1.0f );
 		}
-		if ( !r_useFbo.GetBool() || !game->PlayerReady() ) { // duzenko #4425: happens elsewhere for fbo, "Click when ready" skips FBO even with r_useFbo 1
+		if ( !game->PlayerReady() ) {
 			qglClear( GL_COLOR_BUFFER_BIT );
 		}
 	}
@@ -575,10 +542,6 @@ void RB_DumpFramebuffer( const char *fileName ) {
 	renderCrop_t r;
 
 	qglGetIntegerv( GL_VIEWPORT, &r.x );
-
-	if (!r_useFbo.GetBool()) {
-		qglReadBuffer( GL_BACK );
-	}
 
 	// calculate pitch of buffer that will be returned by qglReadPixels()
 	int alignment;
@@ -623,7 +586,6 @@ static bool RB_CheckTools( int width, int height ) {
 	     r_showVertexColor.GetBool() ||
 	     r_showShadowCount.GetBool() ||
 	     r_showTris.GetBool() ||
-	     r_showPortals.GetBool() ||
 	     r_showTexturePolarity.GetBool() ||
 	     r_showTangentSpace.GetBool() ||
 	     r_showDepth.GetBool() ) {
@@ -639,133 +601,106 @@ RB_DrawFullScreenQuad
 Moved to backend: Revelator
 =============
 */
-void RB_DrawFullScreenQuad( void ) {
+void RB_DrawFullScreenQuad( float e ) {
+#if 1
+	vertexCache.VertexPosition( vertexCache.screenRectSurf.ambientCache );
+	RB_DrawElementsWithCounters( &vertexCache.screenRectSurf );
+#else
 	qglBegin( GL_QUADS );
 	qglTexCoord2f( 0, 0 );
-	qglVertex2f( 0, 0 );
+	qglVertex2f( -e, -e );
 	qglTexCoord2f( 0, 1 );
-	qglVertex2f( 0, 1 );
+	qglVertex2f( -e, e );
 	qglTexCoord2f( 1, 1 );
-	qglVertex2f( 1, 1 );
+	qglVertex2f( e, e );
 	qglTexCoord2f( 1, 0 );
-	qglVertex2f( 1, 0 );
+	qglVertex2f( e, -e );
 	qglEnd();
+#endif
 }
+
+void RB_DrawFullScreenTri() {
+	GL_Cull( CT_TWO_SIDED );
+	qglDrawArrays( GL_TRIANGLES, 0, 3 );
+}
+
+// postprocess related - J.C.Denton
+idCVar r_postprocess_gamma( "r_postprocess_gamma", "1.2", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "Applies inverse power function in postprocessing", 0.1f, 3.0f );
+idCVar r_postprocess_brightness( "r_postprocess_brightness", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "Multiplies color by coefficient", 0.5f, 2.0f );
+idCVar r_postprocess_colorCurveBias( "r_postprocess_colorCurveBias", "0.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, " Applies Exponential Color Curve to final pass (range 0 to 1), 1 = color curve fully applied , 0= No color curve" );
+idCVar r_postprocess_colorCorrection( "r_postprocess_colorCorrection", "5", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, " Applies an exponential color correction function to final scene " );
+idCVar r_postprocess_colorCorrectBias( "r_postprocess_colorCorrectBias", "0.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, " Applies an exponential color correction function to final scene with this bias. \n E.g. value ranges between 0-1. A blend is performed between scene render and color corrected image based on this value " );
+idCVar r_postprocess_desaturation( "r_postprocess_desaturation", "0.00", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, " Desaturates the scene " );
+
 
 /*
 =============
-RB_Bloom
+RB_Tonemap
 
-Originally in front renderer (idPlayerView::dnPostProcessManager)
-Moved to backend: Revelator
+GLSL replacement for legacy hardware gamma ramp
 =============
 */
-void RB_Bloom( void ) {
-	int w = globalImages->currentRenderImage->uploadWidth;
-	int h = globalImages->currentRenderImage->uploadHeight;
+struct TonemapUniforms : GLSLUniformGroup {
+	UNIFORM_GROUP_DEF( TonemapUniforms )
+	DEFINE_UNIFORM(sampler, texture)
+	DEFINE_UNIFORM(sampler, bloomTex)
+	DEFINE_UNIFORM(float, gamma)
+	DEFINE_UNIFORM(float, brightness)
+	DEFINE_UNIFORM(float, desaturation)
+	DEFINE_UNIFORM(float, colorCurveBias)
+	DEFINE_UNIFORM(float, colorCorrection)
+	DEFINE_UNIFORM(float, colorCorrectBias)
+	DEFINE_UNIFORM(float, bloomWeight)
+	DEFINE_UNIFORM(int, sharpen)
+	DEFINE_UNIFORM(float, sharpness)
+};
 
-	FB_CopyColorBuffer();
-
-	// revelator: added small function to take care of nono's
-	if ( RB_CheckTools( w, h ) ) {
+void RB_Bloom( bloomCommand_t *cmd ) {
+	if ( !r_bloom.GetBool() ) {
 		return;
 	}
-	float	parm[4];
+	if ( RB_CheckTools( globalImages->currentRenderImage->uploadWidth, globalImages->currentRenderImage->uploadHeight ) ) {
+		return;
+	}
 
-	FB_SelectPostProcess();
+	TRACE_GL_SCOPE("Postprocess")
+	frameBuffers->UpdateCurrentRenderCopy();
+	bloom->ComputeBloomFromRenderImage();
+	frameBuffers->LeavePrimary( false );
+	bloom->ApplyBloom();
+}
 
-	// full screen blends
-	qglLoadIdentity();
-	qglMatrixMode( GL_PROJECTION );
-	qglPushMatrix();
-	qglLoadIdentity();
-	qglOrtho( 0, 1, 0, 1, -1, 1 );
+idCVar r_postprocess_sharpen( "r_postprocess_sharpen", "1", CVAR_RENDERER|CVAR_BOOL|CVAR_ARCHIVE, "Use contrast-adaptive sharpening in tonemapping" );
+idCVar r_postprocess_sharpness( "r_postprocess_sharpness", "0.5", CVAR_RENDERER|CVAR_FLOAT|CVAR_ARCHIVE, "Sharpening amount" );
 
+void RB_Tonemap() {
+	if ( !r_tonemap ) {
+		return;
+	}
+	TRACE_GL_SCOPE("Tonemap")
+
+	frameBuffers->defaultFbo->Bind();
+	GL_ViewportRelative( 0, 0, 1, 1 );
+	GL_ScissorRelative( 0, 0, 1, 1 );
 	GL_State( GLS_DEPTHMASK );
-
 	qglDisable( GL_DEPTH_TEST );
-
-	qglEnable( GL_VERTEX_PROGRAM_ARB );
-	qglEnable( GL_FRAGMENT_PROGRAM_ARB );
 	GL_SelectTexture( 0 );
+	globalImages->guiRenderImage->Bind();
 
-	GL_Viewport( 0, 0, 256, 1 );
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_COOK_MATH1 );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_COOK_MATH1 );
-	parm[0] = r_postprocess_colorCurveBias.GetFloat();
-	parm[1] = r_postprocess_sceneGamma.GetFloat();
-	parm[2] = r_postprocess_sceneExposure.GetFloat();
-	parm[3] = 1;
-	qglProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, 0, parm );
+	GLSLProgram* tonemap = R_FindGLSLProgram( "tonemap" );
+	tonemap->Activate();
+	TonemapUniforms *uniforms = tonemap->GetUniformGroup<TonemapUniforms>();
+	uniforms->texture.Set( 0 );
+	uniforms->gamma.Set( idMath::ClampFloat( 1e-3f, 1e+3f, r_postprocess_gamma.GetFloat() ) );
+	uniforms->brightness.Set( r_postprocess_brightness.GetFloat() );
+	uniforms->desaturation.Set(idMath::ClampFloat( -1.0f, 1.0f, r_postprocess_desaturation.GetFloat() ) );
+	uniforms->colorCurveBias.Set(r_postprocess_colorCurveBias.GetFloat() );
+	uniforms->colorCorrection.Set(r_postprocess_colorCorrection.GetFloat() );
+	uniforms->colorCorrectBias.Set(idMath::ClampFloat( 0.0f, 1.0f, r_postprocess_colorCorrectBias.GetFloat() ) );
+	uniforms->sharpen.Set( r_postprocess_sharpen.GetBool() );
+	uniforms->sharpness.Set( idMath::ClampFloat( 0.0f, 1.0f, r_postprocess_sharpness.GetFloat() ) );
+
 	RB_DrawFullScreenQuad();
-	globalImages->bloomCookedMath->CopyFramebuffer( 0, 0, 256, 1, false );
-
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_COOK_MATH2 );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_COOK_MATH2 );
-	parm[0] = r_postprocess_brightPassThreshold.GetFloat();
-	parm[1] = r_postprocess_brightPassOffset.GetFloat();
-	parm[2] = r_postprocess_colorCorrection.GetFloat();
-	parm[3] = Max( Min( r_postprocess_colorCorrectBias.GetFloat(), 1.0f ), 0.0f );
-	qglProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, 0, parm );
-	RB_DrawFullScreenQuad();
-	globalImages->bloomCookedMath->CopyFramebuffer( 0, 0, 256, 1, false );
-
-	GL_Viewport( 0, 0, w / 2, h / 2 );
-	GL_SelectTexture( 0 );
-	globalImages->currentRenderImage->Bind();
-	GL_SelectTexture( 1 );
-	globalImages->bloomCookedMath->Bind();
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_BRIGHTNESS );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_BRIGHTNESS );
-	RB_DrawFullScreenQuad();
-	GL_SelectTexture( 0 );
-	globalImages->bloomImage->CopyFramebuffer( 0, 0, w / 2, h / 2, false );
-
-	globalImages->bloomImage->Bind();
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_GAUSS_BLRX );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_GAUSS_BLRX );
-	parm[0] = 2 / w;
-	parm[1] = 1;
-	parm[2] = 1;
-	parm[3] = 1;
-	qglProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, 0, parm );
-	RB_DrawFullScreenQuad();
-	globalImages->bloomImage->CopyFramebuffer( 0, 0, w / 2, h / 2, false );
-
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_GAUSS_BLRY );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_GAUSS_BLRY );
-	parm[0] = 2 / h;
-	qglProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, 0, parm );
-	RB_DrawFullScreenQuad();
-	globalImages->bloomImage->CopyFramebuffer( 0, 0, w / 2, h / 2, false );
-
-	FB_SelectPrimary();
-	GL_Viewport( 0, 0, w, h );
-	FB_TogglePrimary( false );
-	GL_SelectTexture( 0 );
-	globalImages->currentRenderImage->Bind();
-	GL_SelectTexture( 1 );
-	globalImages->bloomImage->Bind();
-	GL_SelectTexture( 2 );
-	globalImages->bloomCookedMath->Bind();
-	qglBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_BLOOM_FINAL_PASS );
-	qglBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_BLOOM_FINAL_PASS );
-	parm[0] = r_postprocess_bloomIntensity.GetFloat();
-	parm[1] = Max( Min( r_postprocess_desaturation.GetFloat(), 1.0f ), 0.0f );
-	qglProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, 0, parm );
-	RB_DrawFullScreenQuad();
-	GL_SelectTexture( 2 );
-	globalImages->BindNull(); // or else GUI is screwed
-	GL_SelectTexture( 1 );
-	globalImages->BindNull(); // or else GUI is screwed
-	GL_SelectTexture( 0 );
-
-	qglDisable( GL_VERTEX_PROGRAM_ARB );
-	qglDisable( GL_FRAGMENT_PROGRAM_ARB );
-
-	qglPopMatrix();
-	qglEnable( GL_DEPTH_TEST );
-	qglMatrixMode( GL_MODELVIEW );
 }
 
 /*
@@ -818,6 +753,8 @@ RB_SwapBuffers
 =============
 */
 const void	RB_SwapBuffers( const void *data ) {
+	TRACE_GL_SCOPE( "SwapBuffers" )
+
 	// texture swapping test
 	if ( r_showImages.GetInteger() != 0 ) {
 		RB_ShowImages();
@@ -850,7 +787,7 @@ void RB_CopyRender( const void *data ) {
 
 	RB_LogComment( "***************** RB_CopyRender *****************\n" );
 
-	FB_CopyRender( cmd );
+	frameBuffers->CopyRender( cmd );
 }
 
 /*
@@ -885,17 +822,21 @@ void RB_ExecuteBackEndCommands( const emptyCommand_t *cmds ) {
 		case RC_DRAW_VIEW: {
 			backEnd.viewDef = ( ( const drawSurfsCommand_t * )cmds )->viewDef;
 			isv3d = ( backEnd.viewDef->viewEntitys != nullptr );	// view is 2d or 3d
-			if ( !backEnd.viewDef->IsLightGem() ) {					// duzenko #4425: create/switch to framebuffer object
-				if ( !fboOff ) {									// don't switch to FBO if bloom or some 2d has happened
-					if ( isv3d ) {
-						FB_TogglePrimary( true );
-					} else {
-						FB_TogglePrimary( false );					// duzenko: render 2d in default framebuffer, as well as all 3d until frame end
-						fboOff = true;
-					}
+			if ( !fboOff ) {									// don't switch to FBO if bloom or some 2d has happened
+				if ( isv3d ) {
+					frameBuffers->EnterPrimary();
+				} else {
+					frameBuffers->LeavePrimary();	// switch to GUI or default FBO to render UI elements at native resolution
+					FB_DebugShowContents();
+					fboOff = true;
 				}
 			}
-			RB_DrawView();
+			if( r_useNewBackend.GetBool() ) {
+				renderBackend->DrawView( backEnd.viewDef );
+			} else {
+				RB_DrawView();
+			}
+			GL_CheckErrors();
 			if ( isv3d ) {
 				c_draw3d++;
 			} else {
@@ -906,12 +847,17 @@ void RB_ExecuteBackEndCommands( const emptyCommand_t *cmds ) {
 			}
 			break;
 		}
+		case RC_DRAW_LIGHTGEM:
+			backEnd.viewDef = ( ( const drawLightgemCommand_t * )cmds )->viewDef;
+			renderBackend->DrawLightgem( backEnd.viewDef, ( ( const drawLightgemCommand_t * )cmds )->dataBuffer );
+			break;			
 		case RC_SET_BUFFER:
 			RB_SetBuffer( cmds );
 			c_setBuffers++;
 			break;
 		case RC_BLOOM:
-			RB_Bloom();
+			RB_Bloom( (bloomCommand_t*)cmds );
+			FB_DebugShowContents();
 			c_drawBloom++;
 			fboOff = true;
 			break;
@@ -921,7 +867,8 @@ void RB_ExecuteBackEndCommands( const emptyCommand_t *cmds ) {
 			break;
 		case RC_SWAP_BUFFERS:
 			// duzenko #4425: display the fbo content
-			FB_TogglePrimary( false );
+			frameBuffers->LeavePrimary();
+			RB_Tonemap();
 			RB_SwapBuffers( cmds );
 			c_swapBuffers++;
 			break;
@@ -947,5 +894,9 @@ void RB_ExecuteBackEndCommands( const emptyCommand_t *cmds ) {
 		common->Printf( "3d: %i, 2d: %i, SetBuf: %i, SwpBuf: %i, drwBloom: %i, CpyRenders: %i, CpyFrameBuf: %i, CpyDepthBuf: %i\n", c_draw3d, c_draw2d, c_setBuffers, c_swapBuffers, c_drawBloom, c_copyRenders, backEnd.c_copyFrameBuffer, backEnd.c_copyDepthBuffer );
 		backEnd.c_copyFrameBuffer = 0;
 		backEnd.c_copyDepthBuffer = 0;
+	}
+
+	if ( image_showBackgroundLoads && backEnd.pc.textureLoads ) {
+		common->Printf( "%i/%i loads in %i/%i ms\n", backEnd.pc.textureLoads, backEnd.pc.textureBackgroundLoads, backEnd.pc.textureLoadTime, backEnd.pc.textureUploadTime );
 	}
 }

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef _MISSION_MANAGER_H_
@@ -22,7 +22,7 @@
 namespace fs = stdext;
 
 // Shared_ptr typedef
-#include "../pugixml/pugixml.hpp"
+#include "pugixml.hpp"
 typedef std::shared_ptr<pugi::xml_document> XmlDocumentPtr;
 
 class CMissionDB;
@@ -41,39 +41,13 @@ struct MissionScreenshot
 	idStr	serverRelativeUrl;
 
 	// Get the local image file name without path, e.g. "monastery01.jpg"
-	idStr GetLocalFilename() const
-	{
-		idStr temp;
-		serverRelativeUrl.ExtractFileName(temp);
-
-		idStr ext;
-		temp.ExtractFileExtension(ext);
-
-		temp.StripTrailingOnce(ext);
-		temp.StripTrailingOnce(".");
-
-		// Locally We save screenshots as JPG
-		return temp + ".jpg";
-	}
+	idStr GetLocalFilename() const;
 
 	// Returns the image filename including extension
-	idStr GetRemoteFilename() const
-	{
-		idStr temp;
-		serverRelativeUrl.ExtractFileName(temp);
-		
-		return temp;
-	}
+	idStr GetRemoteFilename() const;
 
 	// Returns the file extension of the server file (lowercase, without dot, e.g. "png")
-	idStr GetRemoteFileExtension() const
-	{
-		idStr temp;
-		serverRelativeUrl.ExtractFileExtension(temp);
-		temp.ToLower();
-
-		return temp;
-	}
+	idStr GetRemoteFileExtension() const;
 };
 typedef std::shared_ptr<MissionScreenshot> MissionScreenshotPtr;
 
@@ -101,9 +75,11 @@ struct DownloadableMod
 
 	// The list of mission download URLs
 	idStringList missionUrls;
+	idStr missionSha256;
 
 	// The list of Localisation pack download URLs
 	idStringList l10nPackUrls;
+	idStr l10nPackSha256;
 
 	// Begin Initially empty variables, need to be filled per request by the mission manager
 
@@ -119,56 +95,16 @@ struct DownloadableMod
 	// End Initially empty variables
 
 	// Default constructor
-	DownloadableMod() :
-		id(-1), // invalid ID
-		type(Single),
-		version(1),
-		isUpdate(false),
-        needsL10NpackDownload(false),	// gnartsch
-		detailsLoaded(false)
-	{}
+	DownloadableMod();
+	~DownloadableMod();
 
 	// Static sort compare functor, sorting by mod title
 	typedef DownloadableMod* DownloadableModPtr;
 
-	static int SortCompareTitle(const DownloadableModPtr* a, const DownloadableModPtr* b)
-	{
-		//alexdiru 4499
-		idStr aName = common->Translate((*a)->title);
-		idStr prefix = "";
-		idStr suffix = "";
-		common->GetI18N()->MoveArticlesToBack(aName, prefix, suffix);
-		if (!suffix.IsEmpty())
-		{
-			// found, remove prefix and append suffix
-			aName.StripLeadingOnce(prefix.c_str());
-			aName += suffix;
-		}
-
-		idStr bName = common->Translate((*b)->title);
-		prefix = "";
-		suffix = "";
-		common->GetI18N()->MoveArticlesToBack(bName, prefix, suffix);
-		if (!suffix.IsEmpty())
-		{
-			// found, remove prefix and append suffix
-			bName.StripLeadingOnce(prefix.c_str());
-			bName += suffix;
-		}
-
-		return aName.Icmp(bName);
-	}
+	static int SortCompareTitle(const DownloadableModPtr* a, const DownloadableModPtr* b);
 
 	// Gets the local path to the screenshot image (relative to darkmod path, e.g. fms/_missionshots/preview_monst02.jpg)
-	idStr GetLocalScreenshotPath(int screenshotNum) const
-	{
-		assert(screenshotNum >= 0 && screenshotNum < screenshots.Num());
-
-		return cv_tdm_fm_path.GetString() + 
-			   idStr(TMP_MISSION_SCREENSHOT_FOLDER) + "/" + 
-			   TMP_MISSION_SCREENSHOT_PREFIX +
-			   screenshots[screenshotNum]->GetLocalFilename();
-	}
+	idStr GetLocalScreenshotPath(int screenshotNum) const;
 };
 // Use raw pointers in the DownloadableModList
 // to allow the use of the qsort algorithm as used in idStr::Sort()
@@ -260,6 +196,7 @@ public:
 		IN_PROGRESS,
 		FAILED,
 		SUCCESSFUL,
+		MALFORMED,	//stgatilov: invalid data or checksum
 	};
 
 public:
@@ -273,6 +210,10 @@ public:
 	// Save/Restore data
 	void Save(idSaveGame* savefile) const;
 	void Restore(idRestoreGame* savefile);
+
+	// Save missionDB to hard drive right now!
+	// Note: it is done automatically in destructor.
+	void SaveDatabase() const;
 
 	// Returns the number of available mods
 	int GetNumMods();
@@ -313,7 +254,9 @@ public:
 	bool ProceedToNextMission();
 
 	// Removes everything except for the mod PK4 and the metadata files from the mod save path
-	void CleanupModFolder(const idStr& name);
+	//stgatilov: this feature is dangerous for mappers and useless for players
+	//see https://forums.thedarkmod.com/index.php?/topic/21085-dark-mod-just-deleted-my-entire-fmsvenice-folder-and-eveything-in-it/
+	//void CleanupModFolder(const idStr& name);
 
 	// Called by MissionData when the player completed a mission
 	void OnMissionComplete();
@@ -330,6 +273,8 @@ public:
 	idStr GetNewFoundModsText();
 
 	void ClearNewModList();
+
+	void AddToNewModList(const idStrList& newModsList);
 
 	// Reload darkmod.txt for newly downloaded/found PK4s, to update any outdated mission db entries
 	void RefreshMetaDataForNewFoundMods();
@@ -391,21 +336,20 @@ public:
 	// Moves the given file, from <fromPath> to <toPath>
 	static bool DoMoveFile(const fs::path& fromPath, const fs::path& toPath);
 
-private:
-	// Called by destructor (when the game is shutting down)
-	void Shutdown();
+	// Sub-routine of SearchForNewMods() investigating the FM folder
+	// It moves incoming pk4/zip files into FM subdirectories
+	static idStrList SearchForNewMods(const idStr& fmsDir);
 
+private:
 	// Finds out which map is the starting map (must be called after InitCurrentMod)
 	void InitStartingMap();
 
 	// Attempts to read the map sequence file for the current mod
 	void InitMapSequence();
 
-	void SearchForNewMods();
-
 	// Sub-routine of SearchForNewMods() investigating the FM folder
 	// using the given extension (including dot ".pk4", ".zip")
-	MoveList SearchForNewMods(const idStr& extension);
+	static idStrList SearchForNewMods(const idStr& fmsDir, const idStr& extension, MoveList* appendMoveList);
 
 	// Returns the path to the "darkmod" base
 	fs::path GetDarkmodPath();
@@ -420,7 +364,7 @@ private:
 	static int ModSortCompare(const int* a, const int* b);
 
 	// Loads the mod list from the given XML
-	void LoadModListFromXml(const XmlDocumentPtr& doc);
+	bool LoadModListFromXml(const XmlDocumentPtr& doc);
 
 	// Loads mod details from the given XML, storing the data in the mod with the given number
 	void LoadModDetailsFromXml(const XmlDocumentPtr& doc, int modNum);

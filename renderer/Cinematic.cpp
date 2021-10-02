@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -77,6 +77,15 @@ bool idCinematic::InitFromFile( const char *qpath, bool looping, bool withAudio 
 
 /*
 ==============
+idCinematic::InitFromFile
+==============
+*/
+const char *idCinematic::GetFilePath() const {
+	return nullptr;
+}
+
+/*
+==============
 idCinematic::AnimationLength
 ==============
 */
@@ -103,8 +112,12 @@ cinData_t idCinematic::ImageForTime( int milliseconds ) {
 	return c;
 }
 
-bool idCinematic::SoundForTimeInterval(int sampleOffset, int *sampleSize, int frequency, float *output) {
+bool idCinematic::SoundForTimeInterval(int sampleOffset44k, int *sampleSize, float *output) {
 	return false;
+}
+
+int idCinematic::GetRealSoundOffset(int sampleOffset) const {
+	return sampleOffset;
 }
 
 cinStatus_t idCinematic::GetStatus() const {

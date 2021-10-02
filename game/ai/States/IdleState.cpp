@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -32,9 +32,10 @@
 #include "ObservantState.h"
 #include "../Library.h"
 
+#define		WARNING_DELAY 10000 // grayman #5164 - ms delay between "unreachable" WARNINGs
+
 namespace ai
 {
-
 
 // Get the name of this state
 const idStr& IdleState::GetName() const
@@ -66,7 +67,7 @@ void IdleState::Init(idAI* owner)
 
 	_startSleeping = owner->spawnArgs.GetBool("sleeping", "0");
 	_startSitting = owner->spawnArgs.GetBool("sitting", "0");
-	
+
 	// Memory shortcut
 	Memory& memory = owner->GetMemory();
 
@@ -199,6 +200,16 @@ void IdleState::Think(idAI* owner)
 			owner->GetMind()->SwitchState(STATE_IDLE_SLEEP);
 			return;
 		}
+		else if ( owner->AI_DEST_UNREACHABLE ) // grayman #5164
+		{
+			if ( gameLocal.time >= owner->m_nextWarningTime )
+			{
+				gameLocal.Warning("IdleState::Think %s (%s) can't sleep: too far from sleeping location (%s)\n", owner->GetName(), owner->GetPhysics()->GetOrigin().ToString(), memory.idlePosition.ToString());
+				owner->GetMind()->SwitchState(owner->backboneStates[ERelaxed]);
+				owner->m_nextWarningTime = gameLocal.time + WARNING_DELAY;
+			}
+			return;
+		}
 	}
 	else if (owner->GetMoveType() == MOVETYPE_SLEEP)
 	{
@@ -207,10 +218,20 @@ void IdleState::Think(idAI* owner)
 	}
 	else if (_startSitting && owner->GetMoveType() != MOVETYPE_SIT && waitState != "sit_down")
 	{
-		if (owner->ReachedPos(memory.idlePosition, MOVE_TO_POSITION) 
+		if (owner->ReachedPos(memory.idlePosition, MOVE_TO_POSITION)
 			&& owner->GetCurrentYaw() == memory.idleYaw)
 		{
 			owner->SitDown();
+		}
+		else if ( owner->AI_DEST_UNREACHABLE ) // grayman #5164
+		{
+			if ( gameLocal.time >= owner->m_nextWarningTime )
+			{
+				gameLocal.Warning("%s (%s) can't sit: too far from sitting location (%s)\n", owner->GetName(), owner->GetPhysics()->GetOrigin().ToString(), memory.idlePosition.ToString());
+				owner->GetMind()->SwitchState(owner->backboneStates[ERelaxed]);
+				owner->m_nextWarningTime = gameLocal.time + WARNING_DELAY;
+			}
+			return;
 		}
 	}
 
@@ -236,18 +257,19 @@ void IdleState::InitialiseMovement(idAI* owner)
 	owner->movementSubsystem->ClearTasks();
 
 	// angua: store the position at map start
-	if (memory.idlePosition == idVec3(idMath::INFINITY, idMath::INFINITY, idMath::INFINITY))
+	if ( memory.idlePosition == idVec3(idMath::INFINITY, idMath::INFINITY, idMath::INFINITY) )
 	{
 		// No idle position saved yet, take the current one
 		memory.idlePosition = owner->GetPhysics()->GetOrigin();
+		memory.returnSitPosition = memory.idlePosition; // grayman #3989
 		memory.idleYaw = owner->GetCurrentYaw();
 	}
 
-	if (owner->spawnArgs.GetBool("patrol", "1")) // grayman #2683 - only start patrol if you're supposed to 
+	if ( owner->spawnArgs.GetBool("patrol", "1") ) // grayman #2683 - only start patrol if you're supposed to 
 	{
 		// grayman #3528 - if you need to stay where you are, don't start patrolling yet
 
-		if (memory.stayPut)
+		if ( memory.stayPut )
 		{
 			memory.stayPut = false; // reset
 		}
@@ -271,7 +293,7 @@ void IdleState::InitialiseMovement(idAI* owner)
 			// angua: don't do this when we are sitting or sleeping
 			// We already HAVE an idle position set, this means that we are
 			// supposed to be there, let's move
-			float startPosTolerance = owner->spawnArgs.GetFloat("startpos_tolerance", "-1");
+			float startPosTolerance = owner->spawnArgs.GetFloat("startpos_tolerance", "-1"); // grayman #3989
 			owner->movementSubsystem->PushTask(
 				TaskPtr(new MoveToPositionTask(memory.idlePosition, memory.idleYaw, startPosTolerance))
 			);

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Id Software, Inc.
@@ -30,8 +30,25 @@ Event are used for scheduling tasks and for linking script commands.
 #include "Event.h"
 #include "../Game_local.h"
 
-#define MAX_EVENTSPERFRAME			8192
+#define MAX_EVENTSPERFRAME			(10<<10)
 //#define CREATE_EVENT_CODE
+
+idCVar g_eventAliveSoftLimit(
+	"g_eventAliveSoftLimit", "2048", CVAR_INTEGER | CVAR_GAME,
+	"Post warning when number of events alive exceeds this limit",
+	1, MAX_EVENTS
+);
+idCVar g_eventPerFrameSoftLimit(
+	"g_eventPerFrameSoftLimit", "5120", CVAR_INTEGER | CVAR_GAME,
+	"Post warning when number of events processed in single frame exceeds this limit",
+	1, MAX_EVENTSPERFRAME
+);
+idCVar g_eventNumberPrintedOnLimit(
+	"g_eventNumberPrintedOnLimit", "10", CVAR_INTEGER | CVAR_GAME,
+	"How many events are printed to console when soft limit is exceeded",
+	0, MAX_EVENTS + MAX_EVENTSPERFRAME
+);
+
 
 /***********************************************************************
 
@@ -101,9 +118,12 @@ void idEventDef::Construct()
 			break;
 
 		case D_EVENT_INTEGER :
+			argsize += sizeof(int);
+			break;
+
 		case D_EVENT_ENTITY :
 		case D_EVENT_ENTITY_NULL :
-			argsize += sizeof(int);
+			argsize += sizeof(idEntityPtr<idEntity>);
 			break;
 
 		case D_EVENT_VECTOR :
@@ -227,6 +247,7 @@ void idEventDef::SortEventDefs() {
 ***********************************************************************/
 
 static idLinkList<idEvent> FreeEvents;
+static int FreeEventsNum = 0;
 static idLinkList<idEvent> EventQueue;
 static idEvent EventPool[ MAX_EVENTS ];
 
@@ -257,12 +278,33 @@ idEvent *idEvent::Alloc( const idEventDef *evdef, int numargs, va_list args ) {
 	int			i;
 	const char	*materialName;
 
+	int nonFreeNum = sizeof(EventPool) / sizeof(EventPool[0]) - FreeEventsNum;
+#if _DEBUG
+	//stgatilov: check that free events counter is valid
+	if (nonFreeNum <= 100) {	//avoid wasting too much time
+		int aliveNum = EventQueue.Num();
+		assert(aliveNum == nonFreeNum || aliveNum + 1 == nonFreeNum);
+	}
+#endif
+
 	if ( FreeEvents.IsListEmpty() ) {
 		gameLocal.Error( "idEvent::Alloc : No more free events" );
+	}
+	if ( nonFreeNum >= g_eventAliveSoftLimit.GetInteger() ) {
+		static int previousPrintTime = 0;
+		if ( gameLocal.realClientTime - previousPrintTime > 5000 ) {	//spam every 5 seconds
+			previousPrintTime = gameLocal.realClientTime;
+			gameLocal.Warning( "Soft limit of alive events exceeded (%d)! Some events printed below:", nonFreeNum );
+			idCmdArgs args;
+			args.AppendArg("");
+			args.AppendArg(g_eventNumberPrintedOnLimit.GetString());
+			Cmd_EventList_f(args);
+		}
 	}
 
 	ev = FreeEvents.Next();
 	ev->eventNode.Remove();
+	FreeEventsNum--;
 
 	ev->eventdef = evdef;
 
@@ -385,6 +427,7 @@ void idEvent::Free( void ) {
 
 	eventNode.SetOwner( this );
 	eventNode.AddToEnd( FreeEvents );
+	FreeEventsNum++;
 }
 
 /*
@@ -456,12 +499,27 @@ void idEvent::ClearEventList( void ) {
 	//
 	FreeEvents.Clear();
 	EventQueue.Clear();
+	FreeEventsNum = 0;
    
 	// 
 	// add the events to the free list
 	//
 	for( i = 0; i < MAX_EVENTS; i++ ) {
 		EventPool[ i ].Free();
+	}
+}
+
+//stgatilov: some informative labels suitable for tracing
+//ideally, it should match natvis definitions...
+idStr GetTraceLabel(const idEvent &evt) {
+	assert( g_tracingEnabled );
+	if ( evt.eventdef == &EV_Thread_Execute ) {
+		return idStr("thread: ") + static_cast<idThread*>(evt.object)->GetThreadName();
+	} else {
+		idStr res = evt.typeinfo->classname + idStr("::") + evt.eventdef->GetName();
+		if ( evt.object->IsType( idEntity::Type ) )
+			res += idStr(": ") + static_cast<idEntity*>(evt.object)->GetName();
+		return res;
 	}
 }
 
@@ -483,6 +541,8 @@ void idEvent::ServiceEvents( void ) {
 	byte		*data;
 	const char  *materialName;
 
+	TRACE_CPU_SCOPE( "idEvent::ServiceEvents" )
+
 	num = 0;
 	while( !EventQueue.IsListEmpty() ) {
 		event = EventQueue.Next();
@@ -491,6 +551,8 @@ void idEvent::ServiceEvents( void ) {
 		if ( event->time > gameLocal.time ) {
 			break;
 		}
+
+		TRACE_CPU_SCOPE_STR ("Service:Event", GetTraceLabel(*event) )
 
 		// copy the data into the local args array and set up pointers
 		ev = event->eventdef;
@@ -538,6 +600,15 @@ void idEvent::ServiceEvents( void ) {
 			}
 		}
 
+		num++;
+		if ( num == g_eventPerFrameSoftLimit.GetInteger() ) {
+			gameLocal.Warning( "Soft limit of %d events per frame exceeded! Some events printed below:", num );
+		}
+		//stgatilov: print information about events, so that mappers can debug the issue
+		if ( num >= g_eventPerFrameSoftLimit.GetInteger() && num < g_eventPerFrameSoftLimit.GetInteger() + g_eventNumberPrintedOnLimit.GetInteger() ) {
+			event->Print();
+		}
+
 		// the event is removed from its list so that if then object
 		// is deleted, the event won't be freed twice
 		event->eventNode.Remove();
@@ -549,10 +620,13 @@ void idEvent::ServiceEvents( void ) {
 
 		// Don't allow ourselves to stay in here too long.  An abnormally high number
 		// of events being processed is evidence of an infinite loop of events.
-		num++;
 		if ( num > MAX_EVENTSPERFRAME ) {
 			gameLocal.Error( "Event overflow.  Possible infinite loop in script." );
 		}
+	}
+
+	if ( num >= g_eventPerFrameSoftLimit.GetInteger() ) {
+		gameLocal.Warning( "Soft limit of events per frame exceeded (%d)! See events above.", num );
 	}
 }
 
@@ -653,7 +727,7 @@ void idEvent::Save( idSaveGame *savefile ) {
 				case D_EVENT_ENTITY :
 				case D_EVENT_ENTITY_NULL :
 					reinterpret_cast< idEntityPtr<idEntity> * >( dataPtr )->Save(savefile);
-					size += sizeof( int );
+					size += sizeof( idEntityPtr<idEntity> );
 					break;
 				case D_EVENT_VECTOR :
 					savefile->WriteVec3( *reinterpret_cast<idVec3 *>( dataPtr ) );
@@ -711,6 +785,7 @@ void idEvent::Restore( idRestoreGame *savefile ) {
 		event = FreeEvents.Next();
 		event->eventNode.Remove();
 		event->eventNode.AddToEnd( EventQueue );
+		FreeEventsNum--;
 
 		savefile->ReadInt( event->time );
 
@@ -753,7 +828,7 @@ void idEvent::Restore( idRestoreGame *savefile ) {
 					case D_EVENT_ENTITY :
 					case D_EVENT_ENTITY_NULL :
 						reinterpret_cast< idEntityPtr<idEntity> * >( dataPtr )->Restore(savefile);
-						size += sizeof( int );
+						size += sizeof( idEntityPtr<idEntity> );
 						break;
 					case D_EVENT_VECTOR :
 						savefile->ReadVec3( *reinterpret_cast<idVec3 *>( dataPtr ) );
@@ -837,6 +912,50 @@ void idEvent::SaveTrace( idSaveGame *savefile, const trace_t &trace ) {
 	savefile->WriteInt( trace.c.id );
 }
 
+//stgatilov: prints event to console
+//used when getting to much events (exceed soft limits)
+void idEvent::Print() {
+	common->Printf("Event %s::%s on %s at %d\n",
+		typeinfo ? typeinfo->classname : "[null]",
+		eventdef ? eventdef->GetName() : "[null]",
+		object ? (
+			object->IsType(idEntity::Type) ? ((idEntity*)object)->name.c_str() :
+			object->IsType(idThread::Type) ? ((idThread*)object)->GetThreadName() :
+			"[unknown]"
+		) : "[null]",
+		time
+	);
+}
+
+void Cmd_EventList_f(const idCmdArgs &args) {
+	int limit = -1;
+	if (args.Argc() > 1) {
+		limit = atoi(args.Argv(1));
+	}
+
+	int num = EventQueue.Num();
+	if (limit >= num/2)
+		limit = -1;
+
+	idHashMap<int, int> printIds;
+	if (limit > 0) {
+		idRandom rnd = gameLocal.random;
+		//print last events (half of limit)
+		for (int i = 0; i < limit/2; i++)
+			printIds.Set(num - 1 - i, 0);
+		//print random events (another half)
+		while (printIds.Num() < limit)
+			printIds.Set(rnd.RandomInt(num), 0);
+	}
+
+	int idx = 0;
+	for (idLinkList<idEvent> *node = EventQueue.NextNode(); node; node = node->NextNode()) {
+		if (limit < 0 || printIds.Find(idx))
+			node->Owner()->Print();
+		idx++;
+	}
+	common->Printf("Total: %d/%d events alive\n", num, MAX_EVENTS);
+}
 
 
 #ifdef CREATE_EVENT_CODE

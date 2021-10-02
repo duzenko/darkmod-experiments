@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __PARSER_H__
@@ -164,6 +164,12 @@ public:
 	static void		RemoveAllGlobalDefines( void );
 					// set the base folder to load files from
 	static void		SetBaseFolder( const char *path );
+
+					// stgatilov: returns a set of names of all defines
+	idList<idStr>	GetAllDefineNames(bool sorted = true);
+					// stgatilov: returns string representation of macro value
+					// it is just concatenation of all replacement tokens (useful for constants)
+	idStr			GetDefineValueString(const char *name);
 
 private:
 	int				loaded;						// set when a source file is loaded from file or memory

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __USERINTERFACE_H__
@@ -46,7 +46,7 @@ public:
 
 	virtual void				SetUniqued( bool b ) = 0;
 								// returns false if it failed to load
-	virtual bool				InitFromFile( const char *qpath, bool rebuild = true, bool cache = true ) = 0;
+	virtual bool				InitFromFile( const char *qpath, bool rebuild = true ) = 0;
 
 								// handles an event, can return an action string, the caller interprets
 								// any return and acts accordingly
@@ -98,6 +98,15 @@ public:
 	virtual void				SetCursor( float x, float y ) = 0;
 	virtual float				CursorX() = 0;
 	virtual float				CursorY() = 0;
+
+	//stgatilov: allows clicking GUI buttons in automation
+	virtual const char*			RunGuiScript(const char *windowName, int scriptNum) = 0;
+
+	//stgatilov: has same effect as "resetTime" command in GUI script.
+	virtual bool				ResetWindowTime(const char *windowName, int startTime = 0) = 0;
+
+	//stgatilov #2454: fetch subtitles from sound world and update GUI variables accordingly
+	virtual void				UpdateSubtitles() = 0;
 };
 
 
@@ -132,7 +141,11 @@ public:
 	virtual void				DeAlloc( idUserInterface *gui ) = 0;
 
 								// Returns NULL if gui by that name does not exist.
-	virtual idUserInterface *	FindGui( const char *qpath, bool autoLoad = false, bool needUnique = false, bool forceUnique = false ) = 0;
+	virtual idUserInterface *	FindGui(
+		const char *qpath,
+		bool autoLoad = false, bool needUnique = false, bool forceUnique = false,
+		idDict presetDefines = {}
+	) = 0;
 
 								// Returns NULL if gui by that name does not exist.
 	virtual idUserInterface *	FindDemoGui( const char *qpath ) = 0;
@@ -142,6 +155,9 @@ public:
 
 								// De-allocates a list gui
 	virtual void				FreeListGUI( idListGUI *listgui ) = 0;
+
+								// hack: needed for gamepad support
+	virtual bool				IsBindHandlerActive() const = 0;
 };
 
 extern idUserInterfaceManager *	uiManager;

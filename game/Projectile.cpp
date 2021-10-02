@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2004 Id Software, Inc.
@@ -86,10 +86,6 @@ idProjectile::idProjectile( void ) {
 	memset( &projectileFlags, 0, sizeof( projectileFlags ) );
 	memset( &renderLight, 0, sizeof( renderLight ) );
 
-	// note: for net_instanthit projectiles, we will force this back to false at spawn time
-
-	fl.networkSync		= true;
-	netSyncPhysics		= false;
 	m_Lock				= NULL;  // grayman #2478
 	isMine				= false; // grayman #2478
 	replaced			= false; // grayman #2908
@@ -300,11 +296,6 @@ void idProjectile::Create( idEntity *owner, const idVec3 &start, const idVec3 &d
 	UpdateVisuals();
 
 	state = CREATED;
-
-
-	if ( spawnArgs.GetBool( "net_fullphysics" ) ) {
-		netSyncPhysics = true;
-	}
 }
 
 /*
@@ -459,7 +450,7 @@ void idProjectile::Launch( const idVec3 &start, const idVec3 &dir, const idVec3 
 
 	thruster.SetPosition( &physicsObj, 0, idVec3( GetPhysics()->GetBounds()[ 0 ].x, 0, 0 ) );
 
-	if ( !gameLocal.isClient ) {
+	{
 		if ( fuse <= 0 ) {
 			// run physics for 1 second
 			RunPhysics();
@@ -609,14 +600,13 @@ void idProjectile::Think( void ) {
 		{
 			// Any AI around? For AI who manage to avoid a collision with the mine, catch them here if they're close enough and moving/rotating.
 
-			idEntity* entityList[ MAX_GENTITIES ];
 			idVec3 org = GetPhysics()->GetOrigin();
 			idBounds bounds = GetPhysics()->GetAbsBounds();
 			float closeEnough = Square(23);
 
 			// get all entities touching the bounds
-
-			int numListedEntities = gameLocal.clip.EntitiesTouchingBounds( bounds, -1, entityList, MAX_GENTITIES );
+			idClip_EntityList entityList;
+			int numListedEntities = gameLocal.clip.EntitiesTouchingBounds( bounds, -1, entityList );
 
 			for ( int i = 0 ; i < numListedEntities ; i++ )
 			{
@@ -648,7 +638,7 @@ void idProjectile::Think( void ) {
 	case INACTIVE: stateStr = "INACTIVE"; break;
 	};
 
-	gameRenderWorld->DrawText(stateStr, physicsObj.GetOrigin(), 0.2f, colorRed, gameLocal.GetLocalPlayer()->viewAxis);*/
+	gameRenderWorld->DebugText(stateStr, physicsObj.GetOrigin(), 0.2f, colorRed, gameLocal.GetLocalPlayer()->viewAxis);*/
 
 	// run physics
 	RunPhysics();
@@ -707,15 +697,6 @@ bool idProjectile::Collide( const trace_t &collision, const idVec3 &velocity ) {
 
 	if ( state == EXPLODED || state == FIZZLED ) {
 		return true;
-	}
-
-	// predict the explosion
-	if ( gameLocal.isClient ) {
-		if ( ClientPredictionCollide( this, spawnArgs, collision, velocity, !spawnArgs.GetBool( "net_instanthit" ) ) ) {
-			Explode( collision, NULL );
-			return true;
-		}
-		return false;
 	}
 
 	// remove projectile when a 'noimpact' surface is hit
@@ -998,33 +979,6 @@ idProjectile::AddDefaultDamageEffect
 void idProjectile::AddDefaultDamageEffect( const trace_t &collision, const idVec3 &velocity ) {
 
 	DefaultDamageEffect( this, spawnArgs, collision, velocity );
-
-#ifdef MULTIPLAYER
-	if (gameLocal.isServer && fl.networkSync) {
-
-		idBitMsg	msg;
-		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
-		int			excludeClient;
-
-		if ( spawnArgs.GetBool( "net_instanthit" ) ) {
-			excludeClient = owner.GetEntityNum();
-		} else {
-			excludeClient = -1;
-		}
-
-		msg.Init( msgBuf, sizeof( msgBuf ) );
-		msg.BeginWriting();
-		msg.WriteFloat( collision.c.point[0] );
-		msg.WriteFloat( collision.c.point[1] );
-		msg.WriteFloat( collision.c.point[2] );
-		msg.WriteDir( collision.c.normal, 24 );
-		msg.WriteLong( ( collision.c.material != NULL ) ? gameLocal.ServerRemapDecl( -1, DECL_MATERIAL, collision.c.material->Index() ) : -1 );
-		msg.WriteFloat( velocity[0], 5, 10 );
-		msg.WriteFloat( velocity[1], 5, 10 );
-		msg.WriteFloat( velocity[2], 5, 10 );
-		ServerSendEvent( EVENT_DAMAGE_EFFECT, &msg, false, excludeClient );
-	}
-#endif
 }
 
 /*
@@ -1088,10 +1042,6 @@ void idProjectile::Fizzle( void ) {
 	FreeLightDef();
 
 	state = FIZZLED;
-
-	if ( gameLocal.isClient ) {
-		return;
-	}
 
 	CancelEvents( &EV_Fizzle );
 	PostEventMS( &EV_Remove, spawnArgs.GetInt( "remove_time", "1500" ) );
@@ -1187,6 +1137,12 @@ void idProjectile::Explode( const trace_t &collision, idEntity *ignore ) {
 
 	// DarkMod: Check material list to see if it's activated
 	g_Global.GetSurfName( collision.c.material, SurfTypeName );
+	if ( collision.c.material ) {
+		auto matImg = collision.c.material->GetMaterialImage();
+		if ( !matImg.IsEmpty() )
+			gameRenderWorld->MaterialTrace( collision.c.point, collision.c.material, SurfTypeName );
+	}
+		
 	DM_LOG(LC_WEAPON, LT_DEBUG)LOGSTRING( "Weapon: Projectile surface was %s\r", SurfTypeName.c_str() );
 
 	bActivated = TestActivated( SurfTypeName.c_str() );
@@ -1213,7 +1169,7 @@ void idProjectile::Explode( const trace_t &collision, idEntity *ignore ) {
 	if ( spawnArgs.GetVector( "detonation_axis", "", normal ) ) {
 		GetPhysics()->SetAxis( normal.ToMat3() );
 	}
-	GetPhysics()->SetOrigin( collision.endpos + 2.0f * collision.c.normal );
+	GetPhysics()->SetOrigin( collision.endpos + 5.0f * collision.c.normal );
 
 	// default remove time
 	removeTime = spawnArgs.GetInt( "remove_time", "1500" );
@@ -1280,10 +1236,6 @@ void idProjectile::Explode( const trace_t &collision, idEntity *ignore ) {
 
 	state = EXPLODED;
 	BecomeInactive( TH_ARMED ); // grayman #2478 - disable armed thinking
-
-	if ( gameLocal.isClient ) {
-		return;
-	}
 
 	//
 	// bind the projectile to the impact entity if necesary
@@ -1636,44 +1588,34 @@ idProjectile::WriteToSnapshot
 ================
 */
 void idProjectile::WriteToSnapshot( idBitMsgDelta &msg ) const {
-	msg.WriteBits( owner.GetSpawnId(), 32 );
+	msg.WriteBits( owner.GetEntityNum(), 32 );
+	msg.WriteBits( owner.GetSpawnNum(), 32 );
 
 	msg.WriteBits( state, 3 );
 
 	msg.WriteBits( fl.hidden, 1 );
 
-	if ( netSyncPhysics ) {
+	msg.WriteBits( 0, 1 );
 
-		msg.WriteBits( 1, 1 );
+	const idVec3 &origin	= physicsObj.GetOrigin();
 
-		physicsObj.WriteToSnapshot( msg );
-
-	} else {
-
-		msg.WriteBits( 0, 1 );
-
-		const idVec3 &origin	= physicsObj.GetOrigin();
-
-		const idVec3 &velocity	= physicsObj.GetLinearVelocity();
+	const idVec3 &velocity	= physicsObj.GetLinearVelocity();
 
 
 
-		msg.WriteFloat( origin.x );
+	msg.WriteFloat( origin.x );
 
-		msg.WriteFloat( origin.y );
+	msg.WriteFloat( origin.y );
 
-		msg.WriteFloat( origin.z );
+	msg.WriteFloat( origin.z );
 
 
 
-		msg.WriteDeltaFloat( 0.0f, velocity[0], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );
+	msg.WriteDeltaFloat( 0.0f, velocity[0], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );
 
-		msg.WriteDeltaFloat( 0.0f, velocity[1], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );
+	msg.WriteDeltaFloat( 0.0f, velocity[1], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );
 
-		msg.WriteDeltaFloat( 0.0f, velocity[2], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );		
-
-	}
-
+	msg.WriteDeltaFloat( 0.0f, velocity[2], RB_VELOCITY_EXPONENT_BITS, RB_VELOCITY_MANTISSA_BITS );		
 }
 
 /*
@@ -1684,7 +1626,10 @@ idProjectile::ReadFromSnapshot
 void idProjectile::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 	projectileState_t newState;
 
-	owner.SetSpawnId( msg.ReadBits( 32 ) );
+	int entId = msg.ReadBits( 32 );
+	int spnId = msg.ReadBits( 32 );
+	owner.Set( entId, spnId );
+
 	newState = (projectileState_t) msg.ReadBits( 3 );
 	if ( msg.ReadBits( 1 ) ) {
 		Hide();
@@ -1801,32 +1746,7 @@ idProjectile::ClientReceiveEvent
 ================
 */
 bool idProjectile::ClientReceiveEvent( int event, int time, const idBitMsg &msg ) {
-#ifdef MULTIPLAYER
-	trace_t collision;
-	idVec3 velocity;
-
-	switch( event ) {
-		case EVENT_DAMAGE_EFFECT: {
-			memset( &collision, 0, sizeof( collision ) );
-			collision.c.point[0] = msg.ReadFloat();
-			collision.c.point[1] = msg.ReadFloat();
-			collision.c.point[2] = msg.ReadFloat();
-			collision.c.normal = msg.ReadDir( 24 );
-			int index = gameLocal.ClientRemapDecl( DECL_MATERIAL, msg.ReadLong() );
-			collision.c.material = ( index != -1 ) ? static_cast<const idMaterial *>( declManager->DeclByIndex( DECL_MATERIAL, index ) ) : NULL;
-			velocity[0] = msg.ReadFloat( 5, 10 );
-			velocity[1] = msg.ReadFloat( 5, 10 );
-			velocity[2] = msg.ReadFloat( 5, 10 );
-			DefaultDamageEffect( this, spawnArgs, collision, velocity );
-			return true;
-		}
-		default: {
-			return idEntity::ClientReceiveEvent( event, time, msg );
-		}
-	}
-#else
 	return false;
-#endif
 }
 
 /*
@@ -2023,6 +1943,10 @@ void idProjectile::Event_ClearPlayerImmobilization(idEntity* player)
 
 	// Release the immobilization imposed on the player by Lockpicking
 	static_cast<idPlayer*>(player)->SetImmobilization("Lockpicking", 0);
+
+	// stgatilov #4968: stop lockpicking if player's frob is broken
+	// note: release does not look at lockpick type, so we pass garbage
+	m_Lock->ProcessLockpickImpulse(EReleased, '-');
 }
 
 /*
@@ -2474,7 +2398,7 @@ void idDebris::Launch( void ) {
 	physicsObj.SetAxis( axis );
 	SetPhysics( &physicsObj );
 
-	if ( !gameLocal.isClient ) {
+	{
 		if ( fuse <= 0 ) {
 			// run physics for 1 second
 			RunPhysics();
@@ -2584,10 +2508,6 @@ void idDebris::Fizzle( void ) {
 	physicsObj.PutToRest();
 
 	Hide();
-
-	if ( gameLocal.isClient ) {
-		return;
-	}
 
 	CancelEvents( &EV_Fizzle );
 	PostEventMS( &EV_Remove, 0 );

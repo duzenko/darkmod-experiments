@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MAPFILE_H__
@@ -162,11 +162,14 @@ public:
 	void					AddPrimitive( idMapPrimitive *p ) { primitives.Append( p ); }
 	unsigned int			GetGeometryCRC( void ) const;
 	void					RemovePrimitiveData();
+	bool					NeedsReload(const idMapEntity *oldEntity) const;
 
 protected:
 	idList<idMapPrimitive*>	primitives;
 };
 
+
+struct idMapReloadInfo;
 
 class idMapFile {
 public:
@@ -194,6 +197,12 @@ public:
 	unsigned int			GetGeometryCRC( void ) const { return geometryCRC; }
 							// returns true if the file on disk changed
 	bool					NeedsReload();
+							// reload a map, returning information about changed entities
+							// used for hot reload from .map file (note: can return "fail")
+	idMapReloadInfo 		TryReload();
+							// apply specified diff to this map, and return information about changes
+							// used for incremental hot reload from DarkRadiant
+	idMapReloadInfo			ApplyDiff(const char *text);
 
 	int						AddEntity( idMapEntity *mapentity );
 	idMapEntity *			FindEntity( const char *name );
@@ -202,6 +211,7 @@ public:
 	void					RemoveAllEntities();
 	void					RemovePrimitiveData();
 	bool					HasPrimitiveData() { return hasPrimitiveData; }
+	int						GetTotalPrimitivesNum() const;
 
 protected:
 	float					version;
@@ -213,6 +223,24 @@ protected:
 
 private:
 	void					SetGeometryCRC( void );
+};
+
+//stgatilov: used to detect which entities changed during idMapFile::Reload
+struct idMapReloadInfo {
+	struct NameAndIdx {
+		const char *name;
+		int idx;
+		static int Cmp(const NameAndIdx *a, const NameAndIdx *b);
+	};
+
+	bool mapInvalid = false;
+	bool cannotReload = true;
+	idList<NameAndIdx> modifiedEntities;
+	idList<NameAndIdx> respawnEntities;		//modified entities which are forced to respawn
+	idList<NameAndIdx> addedEntities;
+	idList<NameAndIdx> removedEntities;
+	//note: this map may miss nonmodified entities
+	std::unique_ptr<idMapFile> oldMap;
 };
 
 #endif /* !__MAPFILE_H__ */

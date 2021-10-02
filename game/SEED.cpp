@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 // Copyright (C) 2010-2011 Tels (Donated to The Dark Mod Team)
@@ -78,6 +77,7 @@ TODO: We currently determine the material by doing a point-trace, then when the 
 
 
 #include "SEED.h"
+#include "../renderer/Image.h"
 
 // maximum number of tries to place an entity
 #define MAX_TRIES 8
@@ -360,14 +360,17 @@ void Seed::Save( idSaveGame *savefile ) const {
 			savefile->WriteFloat( m_Classes[i].func_a );
 		}
 		// image based distribution
-		savefile->WriteUnsignedInt( m_Classes[i].imgmap );
 		if (m_Classes[i].imgmap != 0)
 		{
+			savefile->WriteString( m_Classes[i].imgmap->imgName );
 			savefile->WriteBool( m_Classes[i].map_invert );
 			savefile->WriteFloat( m_Classes[i].map_scale_x );
 			savefile->WriteFloat( m_Classes[i].map_scale_y );
 			savefile->WriteFloat( m_Classes[i].map_ofs_x );
 			savefile->WriteFloat( m_Classes[i].map_ofs_y );
+		}
+		else {
+			savefile->WriteString( "" );
 		}
 
 		// only write the rendermodel if it is used
@@ -429,11 +432,7 @@ void Seed::ClearClasses( void )
 			renderModelManager->FreeModel( m_Classes[i].hModel );
 		}
 		m_Classes[i].hModel = NULL;
-		if (m_Classes[i].imgmap != 0)
-		{
-			gameLocal.m_ImageMapManager->UnregisterMap( m_Classes[i].imgmap );
-			m_Classes[i].imgmap = 0;
-		}
+		m_Classes[i].imgmap = 0;
 		if (m_Classes[i].m_LODHandle)
 		{
 			gameLocal.m_ModelGenerator->UnregisterLODData( m_Classes[i].m_LODHandle );
@@ -446,7 +445,7 @@ void Seed::ClearClasses( void )
 			m_Classes[i].spawnArgs = NULL;
 		}
 	}
-	m_Classes.Clear();
+	m_Classes.ClearFree();
 	m_iNumStaticMulties = 0;
 }
 
@@ -673,14 +672,18 @@ void Seed::Restore( idRestoreGame *savefile ) {
 		m_Classes[i].map_ofs_x = 0.0f;
 		m_Classes[i].map_ofs_y = 0.0f;
 
-		savefile->ReadUnsignedInt( m_Classes[i].imgmap );
-	    if (m_Classes[i].imgmap != 0)
-		{
+		idStr imgname;
+		savefile->ReadString(imgname);
+		if (imgname.Length() > 0) {
+			m_Classes[i].imgmap = globalImages->ImageFromFile(imgname.c_str(), TF_NEAREST, false, TR_CLAMP, TD_HIGH_QUALITY, CF_2D, IR_CPU);
 			savefile->ReadBool( m_Classes[i].map_invert );
 			savefile->ReadFloat( m_Classes[i].map_scale_x );
 			savefile->ReadFloat( m_Classes[i].map_scale_y );
 			savefile->ReadFloat( m_Classes[i].map_ofs_x );
 			savefile->ReadFloat( m_Classes[i].map_ofs_y );
+		}
+		else {
+			m_Classes[i].imgmap = NULL;
 		}
 
 		savefile->ReadBool( bHaveIt );
@@ -790,8 +793,9 @@ void Seed::Spawn( void ) {
 		// gameLocal.random.RandomInt() always returns 1 hence it is unusable:
 		// add the entity number so that different seeds spawned in the same second
 		// don't display the same pattern
-		unsigned int seconds = (unsigned int) time (NULL) + (unsigned int) entityNumber;
-		m_iSeed_2 = (int) (1664525U * seconds + 1013904223U) & 0x7FFFFFFFU;
+		//stgatilov: randseed on game initialization is randomized in 2020
+		unsigned int seed = gameLocal.random.RandomInt() + (unsigned int) entityNumber;
+		m_iSeed_2 = (int) (1664525U * seed + 1013904223U) & 0x7FFFFFFFU;
 	}
 
 	// to restart the same sequence, f.i. when the user changes level of detail in GUI
@@ -1328,7 +1332,7 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 		// so pick one map at random:
 		if (mapName.Find(',') >= 0)
 		{
-			mapName = mapName.RandomPart(',', RandomFloat() );			// use our random generator, so a "randseed" spawnarg "fixes" it
+			mapName = mapName.RandomPart(RandomFloat(), ',');			// use our random generator, so a "randseed" spawnarg "fixes" it
 			// one of the parts said "don't use a map"? Ok, we'll do.
 			if (mapName == "''")
 			{
@@ -1337,11 +1341,11 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 		}
 		if (!mapName.IsEmpty())
 		{
-			// need int here, as the return value can be -1
-			int img = gameLocal.m_ImageMapManager->GetImageMap( mapName );
-			if (img < 0)
+			idStr imageName = "textures/seed/" + mapName + ".png";
+			idImage *img = globalImages->ImageFromFile(imageName.c_str(), TF_NEAREST, false, TR_CLAMP, TD_HIGH_QUALITY, CF_2D, IR_CPU);
+			if (img == NULL)
 			{
-				gameLocal.Warning ("SEED %s: Could not load image map %s: %s", GetName(), mapName.c_str(), gameLocal.m_ImageMapManager->GetLastError() );
+				gameLocal.Warning ("SEED %s: Could not load image map %s", GetName(), mapName.c_str() );
 			}
 			else
 			{
@@ -1355,7 +1359,7 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 	SeedClass.map_ofs_x = 0.0f;
 	SeedClass.map_ofs_y = 0.0f;
 	// not empty => image based map
-	if ( SeedClass.imgmap > 0)
+	if ( SeedClass.imgmap )
 	{
 	    SeedClass.map_invert = ent->spawnArgs.GetBool( "seed_map_invert", spawnArgs.GetString( "map_invert", "0") );
 
@@ -1384,27 +1388,33 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 						   	spawnArgs.GetString( "map_ofs",				// and if that isn't set either, try SEED::map_scale
 						   	"0" ) ) ) );								// finally fallback to 0
 
-		const unsigned char *imgData = gameLocal.m_ImageMapManager->GetMapData( SeedClass.imgmap );
-		if (!imgData)
+		const imageBlock_t &imgData = SeedClass.imgmap->cpuData;
+		if (imgData.GetPic() == NULL)
 		{
 			gameLocal.Error("SEED %s: Can't access image data from %s, maybe the image file is corrupt?\n", 
-					GetName(), gameLocal.m_ImageMapManager->GetMapName( SeedClass.imgmap ) );
-		}
-
-		unsigned int bpp = gameLocal.m_ImageMapManager->GetMapBpp( SeedClass.imgmap );
-		if (bpp != 1)
-		{
-			gameLocal.Error("SEED %s: Bytes per pixel must be 1 but is %i!\n", GetName(), bpp );
+					GetName(), SeedClass.imgmap->imgName.c_str() );
 		}
 
 		// Compute an average density for the image map, so we can correct the number of entities
 		// based on this. An image map with 50% black and 50% white should result in 0.5, as should 50% grey:
-		unsigned int w = gameLocal.m_ImageMapManager->GetMapWidth( SeedClass.imgmap );
-		unsigned int h = gameLocal.m_ImageMapManager->GetMapHeight( SeedClass.imgmap );
+		int w = imgData.width;
+		int h = imgData.height;
 		if (SeedClass.map_ofs_x == 0 && SeedClass.map_ofs_y == 0 && SeedClass.map_scale_x == 1.0f && SeedClass.map_scale_y == 1.0f)
 		{
-			// can use the precomputed density of the entire image map
-			fImgDensity = gameLocal.m_ImageMapManager->GetMapDensity( SeedClass.imgmap );
+			// Compute an average density for the image map, so the SEED can use it
+			double sumDensity = 0.0f;
+
+			for (int x = 0; x < w; x++)
+			{
+				for (int y = 0; y < h; y++)
+				{
+					//stgatilov: since image should be grayscale, use red channel
+					sumDensity += (double)imgData.GetPic()[ 4 * (w * y + x) ];	// 0 .. 255
+				}
+			}
+
+			// divide the sum by (w*h) (pixel count)
+			fImgDensity = sumDensity / (double)(w * h * 256.0f);
 		}
 		else
 		{
@@ -1414,15 +1424,16 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 			double yo = h * SeedClass.map_ofs_y;
 			double xs = SeedClass.map_scale_x;
 			double ys = SeedClass.map_scale_y;
-			for (unsigned int x = 0; x < w; x++)
+			for (int x = 0; x < w; x++)
 			{
-				for (unsigned int y = 0; y < h; y++)
+				for (int y = 0; y < h; y++)
 				{
 					// compute X and Y based on scaling/offset
 					// first fmod => -w .. +w => +w => 0 .. 2 * w => fmod => 0 .. w
 					int x1 = fmod( fmod( x * xs + xo, wd ) + wd, wd);
 					int y1 = fmod( fmod( y * ys + yo, hd ) + hd, hd);
-					fImgDensity += (float)imgData[ w * y1 + x1 ];	// 0 .. 255
+					//stgatilov: use red channel of grayscale image
+					fImgDensity += (float)imgData.GetPic()[ 4 * (w * y1 + x1) ];	// 0 .. 255
 				}
 			}
 			// divide the sum by W and H and 256 so we arrive at 0 .. 1.0
@@ -1437,7 +1448,7 @@ void Seed::AddClassFromEntity( idEntity *ent, const bool watch, const bool getSp
 
 #ifdef S_DEBUG
 		gameLocal.Printf("SEED %s: Using %s: %ix%i px, %i bpp, average density %0.4f.\n", 
-				GetName(), gameLocal.m_ImageMapManager->GetMapName( SeedClass.imgmap ) ,
+				GetName(), SeedClass.imgmap->imgName.c_str() ,
 			   	w, h, bpp, fImgDensity );
 #endif
 		if (fImgDensity < 0.001f)
@@ -1935,7 +1946,7 @@ void Seed::Prepare( void )
 	seed_entity_t		SeedEntity;
 
 	// Gather all targets and make a note of them
-	m_Classes.Clear();
+	m_Classes.ClearFree();
 	m_Inhibitors.Clear();
 	m_Watched.Clear();
 
@@ -2058,7 +2069,6 @@ void Seed::Prepare( void )
 
 	// to relay these spawnargs
 	idList< idStr > sa;
-	sa.Clear();
 	sa.Append("_bunching");
 	sa.Append("_color_min");
 	sa.Append("_color_max");
@@ -2560,8 +2570,14 @@ void Seed::PrepareEntities( void )
 					x = fmod( fmod(x, 1.0f) + 1.0, 1.0);
 					y = fmod( fmod(y, 1.0f) + 1.0, 1.0);
 
+					const imageBlock_t &imgData = m_Classes[i].imgmap->cpuData;
+
 					// 1 - x to correct for top-left images
-					int value = gameLocal.m_ImageMapManager->GetMapDataAt( m_Classes[i].imgmap, 1.0f - x, y );
+					int pixX = idMath::ClampInt(0, imgData.width - 1, imgData.width * (1.0f - x));
+					int pixY = idMath::ClampInt(0, imgData.height - 1, imgData.height * y);
+					//stgatilov: use red channel of grayscale-by-intent image
+					int value = imgData.GetPic()[ 4 * (pixX + pixY * imgData.width) ];
+
 					if (m_Classes[i].map_invert)
 					{
 						value = 255 - value;

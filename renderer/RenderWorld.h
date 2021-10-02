@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __RENDERWORLD_H__
@@ -131,22 +131,38 @@ typedef struct renderEntity_s {
 	bool					noSelfShadow;			// cast shadows onto other objects,but not self
 	bool					noShadow;				// no shadow at all
 	float					shadowMapOffset;		// workaround for shadow garbage on thin objects
+	enum areaLock_t {
+		RAL_NONE,
+		RAL_ORIGIN,
+		RAL_CENTER,
+	}						areaLock;				// 2.08 Dragofer's draw call optimization
 
 	bool					noDynamicInteractions;	// don't create any light / shadow interactions after
 													// the level load is completed.  This is a performance hack
 													// for the gigantic outdoor meshes in the monorail map, so
 													// all the lights in the moving monorail don't touch the meshes
     bool                    isLightgem;             //nbohr1more: #4379 lightgem culling
+	
+	bool					noFog;                  //nbohr1more: #3662 noFog for entities
+	
+	int						spectrum;				//nbohr1more: #4956 spectrum entity arg
+	
+	int						lightspectrum;
+	
+	int						nospectrum;
 
 	bool					weaponDepthHack;		// squash depth range so view weapons don't poke into walls
 													// this automatically implies noShadow
 	int						forceUpdate;			// force an update (NOTE: not a bool to keep this struct a multiple of 4 bytes)
 	int						timeGroup;
-	int						xrayIndex;
+	int						xrayIndex;				// 1 - regular entity, no substitute, 2 - xray view substitute, 4 - has substitute
+	int						sortOffset;				// 2.08: mappers finetune translucent draw order
 } renderEntity_t;
 
 
 typedef struct renderLight_s {
+	int						entityNum;			//index of owning idLight in game (foe debugging)
+
 	idMat3					axis;				// rotation vectors, must be unit length
 	idVec3					origin;
 
@@ -167,6 +183,7 @@ typedef struct renderLight_s {
 
 	bool					pointLight;			// otherwise a projection light (should probably invert the sense of this, because points are way more common)
 	bool					parallel;			// lightCenter gives the direction to the light at infinity
+	bool					parallelSky;		// stgatilov #5121: parallel light which starts in all areas having portalSky material
 	idVec3					lightRadius;		// xyz radius for point lights
 	idVec3					lightCenter;		// offset the lighting direction for shading and
 												// shadows, relative to origin
@@ -194,6 +211,9 @@ typedef struct renderLight_s {
 	idSoundEmitter *		referenceSound;		// for shader sound tables, allowing effects to vary with sounds
 
 	bool					noFogBoundary;		// Stops fogs drawing and fogging their bounding boxes -- SteveL #3664
+	
+	int						spectrum;			//nbohr1more: #4956 spectrum entity arg
+	renderEntity_s::areaLock_t areaLock;
 
 } renderLight_t;
 
@@ -251,6 +271,8 @@ typedef struct modelTrace_s {
 	idVec3					normal;				// hit triangle normal vector in global space
 	const idMaterial *		material;			// material of hit surface
 	const renderEntity_t *	entity;				// render entity that was hit
+	const idRenderModel *	model;				// render model that was hit
+	int						surfIdx;			// index of model's surface which was hit
 	int						jointNumber;		// md5 joint nearest to the hit triangle
 } modelTrace_t;
 
@@ -341,6 +363,10 @@ public:
 	virtual	void			SetPortalState( qhandle_t portal, int blockingBits ) = 0;
 	virtual int				GetPortalState( qhandle_t portal ) = 0;
 
+	// stgatilov #5462: returns the plane of the portal, oriented arbitrarily
+	// used to ensure that the origin of door sound is on the right side 
+	virtual idPlane			GetPortalPlane( qhandle_t portal ) = 0;
+
 	// grayman #3042 - set portal sound loss (in dB)
 	virtual void			SetPortalPlayerLoss( qhandle_t portal, float loss ) = 0;
 
@@ -379,11 +405,29 @@ public:
 	// Traces vs the render model, possibly instantiating a dynamic version, and returns true if something was hit
 	virtual bool			ModelTrace( modelTrace_t &trace, qhandle_t entityHandle, const idVec3 &start, const idVec3 &end, const float radius ) const = 0;
 
-	// Traces vs the whole rendered world. FIXME: we need some kind of material flags.
+	// Traces vs the whole rendered world.
+	// stgatilov: calls new TraceAll method internally
 	virtual bool			Trace( modelTrace_t &trace, const idVec3 &start, const idVec3 &end, const float radius, bool skipDynamic = true, bool skipPlayer = false ) const = 0;
 
 	// Traces vs the world model bsp tree.
 	virtual bool			FastWorldTrace( modelTrace_t &trace, const idVec3 &start, const idVec3 &end ) const = 0;
+
+	virtual bool			MaterialTrace( const idVec3 &p, const idMaterial *mat, idStr &matName ) const = 0;
+
+	typedef bool (*TraceFilterFunc)(void *context, const renderEntity_t *, const idRenderModel *, const idMaterial *);
+	// stgatilov: traces the whole rendered world with flexible filtering
+	// if fastWorld is true, then:
+	//    1) filter is not called for world-area models (defaults to true)
+	//    2) does not return entity/material if trace hits world
+	//    3) works faster due to BSP traversal
+	virtual bool			TraceAll(
+		modelTrace_t &trace,
+		const idVec3 &start, const idVec3 &end,
+		bool fastWorld = false, float radius = 0.0f,
+		TraceFilterFunc filterCallback = nullptr, void *context = nullptr
+	) const = 0;
+
+
 
 	//-------------- Demo Control  -----------------
 
@@ -424,7 +468,7 @@ public:
 	virtual void			DebugPolygon( const idVec4 &color, const idWinding &winding, const int lifeTime = 0, const bool depthTest = false ) = 0;
 
 	// Text drawing for debug visualization.
-	virtual void			DrawText( const char *text, const idVec3 &origin, float scale, const idVec4 &color, const idMat3 &viewAxis, const int align = 1, const int lifetime = 0, bool depthTest = false ) = 0;
+	virtual void			DebugText( const char *text, const idVec3 &origin, float scale, const idVec4 &color, const idMat3 &viewAxis, const int align = 1, const int lifetime = 0, bool depthTest = false ) = 0;
 };
 
 #endif /* !__RENDERWORLD_H__ */

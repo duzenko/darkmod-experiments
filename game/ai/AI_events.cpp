@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -385,6 +385,9 @@ const idEventDef AI_GetAttacker( "getAttacker", EventArgs(), 'e', "Returns the a
 const idEventDef AI_IsPlayerResponsibleForDeath( "isPlayerResponsibleForDeath", EventArgs(), 'd', 
 	"Returns true if the player was responsible for the AI's caller's death."); // grayman #3679
 
+const idEventDef AI_GetVectorToIdealOrigin("getVectorToIdealOrigin", EventArgs(), 'v', "Returns the vector from where the AI is to where he ideally should be"); // grayman #3679
+const idEventDef AI_StopPatrol("stopPatrol", EventArgs(), EV_RETURNS_VOID, "Stops an AI from patrolling"); // grayman #5056
+
 /*
 * This is the AI event table class for a generic NPC actor.
 *
@@ -527,7 +530,6 @@ CLASS_DECLARATION( idActor, idAI )
 	EVENT( AI_GetReachableEntityPosition,		idAI::Event_GetReachableEntityPosition )
 	EVENT( AI_ReEvaluateArea,					idAI::Event_ReEvaluateArea )
 	EVENT( AI_PlayCustomAnim,					idAI::Event_PlayCustomAnim )	// #3597
-
 	
 	// greebo: State manipulation interface
 	EVENT(  AI_PushState,						idAI::Event_PushState )
@@ -577,6 +579,8 @@ CLASS_DECLARATION( idActor, idAI )
 	EVENT ( AI_IsPlayerResponsibleForDeath,		idAI::Event_IsPlayerResponsibleForDeath) // grayman #3679
 	EVENT ( AI_NoisemakerDone,					idAI::Event_NoisemakerDone) // grayman #3681
 	EVENT ( AI_OnHitByDoor,						idAI::Event_HitByDoor) // grayman #3681
+	EVENT ( AI_GetVectorToIdealOrigin,			idAI::Event_GetVectorToIdealOrigin) // grayman #3989
+	EVENT ( AI_StopPatrol,						idAI::Event_StopPatrol) // grayman #5056
 
 END_CLASS
 
@@ -2588,28 +2592,23 @@ idAI::Event_GetRandomTarget
 */
 void idAI::Event_GetRandomTarget( const char *type ) {
 	int	i;
-	int	num;
 	int which;
 	idEntity *ent;
-	idEntity *ents[ MAX_GENTITIES ];
 
-	num = 0;
+	idClip_EntityList ents;
 	for( i = 0; i < targets.Num(); i++ ) {
 		ent = targets[ i ].GetEntity();
 		if ( ent && idStr::Cmp( ent->GetEntityDefName(), type ) == 0 ) {
-			ents[ num++ ] = ent;
-			if ( num >= MAX_GENTITIES ) {
-				break;
-			}
+			ents.AddGrow( ent );
 		}
 	}
 
-	if ( !num ) {
+	if ( ents.Num() == 0 ) {
 		idThread::ReturnEntity( NULL );
 		return;
 	}
 
-	which = gameLocal.random.RandomInt( num );
+	which = gameLocal.random.RandomInt( ents.Num() );
 	idThread::ReturnEntity( ents[ which ] );
 }
 
@@ -3006,11 +3005,11 @@ idAI::Event_FindActorsInBounds
 */
 void idAI::Event_FindActorsInBounds( const idVec3 &mins, const idVec3 &maxs ) {
 	idEntity *	ent;
-	idEntity *	entityList[ MAX_GENTITIES ];
 	int			numListedEntities;
 	int			i;
 
-	numListedEntities = gameLocal.clip.EntitiesTouchingBounds( idBounds( mins, maxs ), CONTENTS_BODY, entityList, MAX_GENTITIES );
+	idClip_EntityList entityList;
+	numListedEntities = gameLocal.clip.EntitiesTouchingBounds( idBounds( mins, maxs ), CONTENTS_BODY, entityList );
 	for( i = 0; i < numListedEntities; i++ ) {
 		ent = entityList[ i ];
 		if ( ent != this && !ent->IsHidden() && ( ent->health > 0 ) && ent->IsType( idActor::Type ) ) {
@@ -3342,6 +3341,11 @@ void idAI::Event_EmptyHand(const char* hand) // grayman #3154
 	}
 }
 
+void idAI::Event_StopPatrol() // grayman #5056
+{
+	movementSubsystem->StopPatrol();
+}
+
 void idAI::Event_RestartPatrol() // grayman #2920
 {
 	movementSubsystem->StartPatrol();
@@ -3448,6 +3452,13 @@ void idAI::Event_HitByDoor(idEntity* door)
 
 		mind->GetState()->OnVisualStimDoor(door, this);
 	}
+}
+
+// grayman #3989
+
+void idAI::Event_GetVectorToIdealOrigin()
+{
+	idThread::ReturnVector(GetMemory().returnSitPosition - GetPhysics()->GetOrigin()); // grayman #4936
 }
 
 

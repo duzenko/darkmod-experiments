@@ -1,17 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+The Dark Mod GPL Source Code
 
- 
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "precompiled.h"
 #pragma hdrstop
@@ -68,6 +67,8 @@ void CModMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 	else if (cmd == "mainMenuStartup")
 	{
 		gui->SetStateBool("curModIsCampaign", gameLocal.m_MissionManager->CurrentModIsCampaign());
+		//stgatilov: we need to set cvar early, otherwise state switching code will "play nosound"
+		gui->SetStateBool("menu_bg_music", cv_tdm_menu_music.GetBool());
 	}
 	else if (cmd == "loadModNotes")
 	{
@@ -83,9 +84,9 @@ void CModMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 	{
 		UpdateSelectedMod(gui);
 	}
-	else if (cmd == "eraseSelectedModFromDisk")
+	/*else if (cmd == "eraseSelectedModFromDisk")
 	{
-    int modIndex = gui->GetStateInt("missionList_sel_0", "-1");
+		int modIndex = gui->GetStateInt("missionList_sel_0", "-1");
 
 		CModInfoPtr info = gameLocal.m_MissionManager->GetModInfo(modIndex);
 
@@ -98,7 +99,7 @@ void CModMenu::HandleCommands(const idStr& cmd, idUserInterface* gui)
 
 		// Update the selected mission
 		UpdateSelectedMod(gui);
-	}
+	}*/
 	else if (cmd == "update")
 	{
 		gameLocal.Error("Deprecated update method called by main menu.");

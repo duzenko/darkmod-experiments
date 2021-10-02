@@ -1,17 +1,16 @@
-// vim:ts=4:sw=4:cindent
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -322,7 +321,7 @@ bool idStr::Filter( const char *filter, const char *name, bool casesensitive ) {
 	while(*filter) {
 		if (*filter == '*') {
 			filter++;
-			buf.Empty();
+			buf.Clear();
 			for (i = 0; *filter; i++) {
 				if ( *filter == '*' || *filter == '?' || (*filter == '[' && *(filter+1) != '[') ) {
 					break;
@@ -428,7 +427,7 @@ idStr::StripMediaName
 void idStr::StripMediaName( const char *name, idStr &mediaName ) {
 	char c;
 
-	mediaName.Empty();
+	mediaName.Clear();
 
 	for ( c = *name; c; c = *(++name) ) {
 		// truncate at an extension
@@ -559,7 +558,7 @@ void idStr::StripLeadingWhitespace( void ) {
 	// Tels: first count how many chars to remove, then move the data only once
 	int remove = 0;
 	// cast to unsigned char to prevent stripping off high-ASCII characters
-	while( (unsigned char)data[ remove ] <= ' ' ) {
+	while( data[remove] && (unsigned char)data[ remove ] <= ' ' ) {
 		remove ++;
 	}
 	len -= remove;
@@ -814,7 +813,7 @@ idStr::Mid
 const char *idStr::Mid( const int start, const int len, idStr &result ) const {
 	int i;
 
-	result.Empty();
+	result.Clear();
 
 	i = Length();
 	if ( i == 0 || len <= 0 || start >= i ) {
@@ -901,6 +900,120 @@ idStr& idStr::StripQuotes ( void )
 	data[len] = '\0';
 	
 	return *this;
+}
+
+/*
+============
+idStr::Split
+
+stgatilov: Finds all characters matching "delimiters" list, returns array of substrings
+between them (including substrings before the first delimiter and after the last one).
+If "delimiters" is NULL, then whitespace characters are treated as delimiters.
+If "skipEmpty" is true, then empty substrings are dropped from result.
+============
+*/
+idList<idStr> idStr::Split( const char *delimiters, bool skipEmpty = false ) const
+{
+	if (!delimiters)
+		delimiters = " \n\r\t\f\v";
+	idList<idStr> tokens;
+
+	int start = 0;
+	for (int i = 0; i <= len; i++) {
+		if (i == len || idStr::FindChar(delimiters, data[i]) >= 0) {
+			int len = i - start;
+			if (len > 0 || !skipEmpty)
+				tokens.Append(idStr::Mid(start, len));
+			start = i+1;
+		}
+	}
+	assert(start == len+1);
+
+	return tokens;
+}
+
+/*
+============
+idStr::Join
+
+stgatilov: concatenates the given array of strings, putting "separator" between them.
+============
+*/
+idStr idStr::Join( const idList<idStr> &tokens, const char *separator )
+{
+	if (tokens.Num() == 0)
+		return "";
+
+	idStr res = tokens[0];
+	for (int i = 1; i < tokens.Num(); i++) {
+		res += separator;
+		res += tokens[i];
+	}
+	return res;
+}
+
+/*
+============
+idStr::Split
+
+stgatilov: Finds all substrings matching "delimiters" list, returns array of substrings
+between them (including substrings before the first delimiter and after the last one).
+Note that delimiters matching is done greedily, and if several delimiters start as same position, the first one wins.
+If "skipEmpty" is true, then empty substrings are dropped from result.
+============
+*/
+idList<idStr> idStr::Split( const idList<idStr> &delimiters, bool skipEmpty ) const {
+	idList<idStr> tokens;
+
+	int start = 0;
+	for (int i = 0; i <= len; ) {
+		bool tokenEnds = false;
+		int delimLen = 1;
+		if (i == len)
+			tokenEnds = true;
+		else {
+			for (int j = 0; j < delimiters.Num(); j++)
+				if (Cmpn(data + i, delimiters[j].data, delimiters[j].len) == 0) {
+					tokenEnds = true;
+					delimLen = delimiters[j].len;
+					break;
+				}
+		}
+		if (tokenEnds) {
+			int len = i - start;
+			if (len > 0 || !skipEmpty)
+				tokens.Append(idStr::Mid(start, len));
+			i += delimLen;
+			start = i;
+		}
+		else {
+			i++;
+		}
+	}
+	assert(start == len + 1);
+
+	return tokens;
+}
+
+/*
+============
+idStr::SplitLines
+
+stgatilov: Given contents of text file, returns list of its lines.
+Works properly with Windows/Linux/MacOS style of EOL characters.
+See also splitlines in Python.
+============
+*/
+idList<idStr> idStr::SplitLines( void ) const {
+	static idList<idStr> EOLS = {"\r\n", "\n", "\r"};
+	idList<idStr> lines = Split( EOLS, false );
+
+	//like in Python's splitlines, remove last line if it is empty
+	//that's because text file must end with EOL, which does NOT start a new line
+	if ( lines.Num() > 0 && lines[lines.Num() - 1].Length() == 0 )
+		lines.Pop();
+
+	return lines;
 }
 
 /*
@@ -1235,7 +1348,7 @@ void idStr::ExtractFileExtension( idStr &dest ) const {
 
 	if ( !pos ) {
 		// no extension
-		dest.Empty();
+		dest.Clear();
 	} else {
 		Right( Length() - pos, dest );
 	}
@@ -2004,3 +2117,11 @@ idStr idStr::FormatNumber( int number ) {
 	return string;
 }
 
+idStr idStr::Fmt( const char* fmt, ... ) {
+	idStr res;
+	va_list args;
+	va_start( args, fmt );
+	vsprintf( res, fmt, args );
+	va_end( args );
+	return res;
+}

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -77,8 +77,9 @@ bool ThrowObjectTask::Perform(Subsystem& subsystem)
 	}
 
 	// angua: Throw after the delay has expired, but only if
-	// the player is visible  and object throwing is enabled for this AI
+	// the player is visible and object throwing is enabled for this AI
 	if ( ( _nextThrowObjectTime <= gameLocal.time ) && 
+		 owner->AI_ENEMY_VISIBLE && // grayman #4343
 		 owner->spawnArgs.GetBool("outofreach_projectile_enabled", "0"))
 	{
 		idStr waitState(owner->WaitState());

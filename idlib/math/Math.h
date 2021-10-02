@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __MATH_MATH_H__
@@ -93,10 +93,8 @@
 #define IEEE_DBLE_EXPONENT_BIAS	0
 #define IEEE_DBLE_SIGN_BIT		79
 
-template<class T> ID_INLINE T	Max( T x, T y ) { return ( x > y ) ? x : y; }
-template<class T> ID_INLINE T	Min( T x, T y ) { return ( x < y ) ? x : y; }
-template<class T> ID_INLINE int	MaxIndex( T x, T y ) { return  ( x > y ) ? 0 : 1; }
-template<class T> ID_INLINE int	MinIndex( T x, T y ) { return ( x < y ) ? 0 : 1; }
+template<class T> ID_FORCE_INLINE int	MaxIndex( T x, T y ) { return  ( x > y ) ? 0 : 1; }
+template<class T> ID_FORCE_INLINE int	MinIndex( T x, T y ) { return ( x < y ) ? 0 : 1; }
 
 template<class T> ID_INLINE T	Max3( T x, T y, T z ) { return ( x > y ) ? ( ( x > z ) ? x : z ) : ( ( y > z ) ? y : z ); }
 template<class T> ID_INLINE T	Min3( T x, T y, T z ) { return ( x < y ) ? ( ( x < z ) ? x : z ) : ( ( y < z ) ? y : z ); }
@@ -104,8 +102,8 @@ template<class T> ID_INLINE int	Max3Index( T x, T y, T z ) { return ( x > y ) ? 
 template<class T> ID_INLINE int	Min3Index( T x, T y, T z ) { return ( x < y ) ? ( ( x < z ) ? 0 : 2 ) : ( ( y < z ) ? 1 : 2 ); }
 
 template<class T> ID_INLINE T	Sign( T f ) { return ( f > 0 ) ? 1 : ( ( f < 0 ) ? -1 : 0 ); }
-template<class T> ID_INLINE T	Square( T x ) { return x * x; }
-template<class T> ID_INLINE T	Cube( T x ) { return x * x * x; }
+template<class T> ID_FORCE_INLINE T	Square( T x ) { return x * x; }
+template<class T> ID_FORCE_INLINE T	Cube( T x ) { return x * x * x; }
 
 
 class idMath {
@@ -251,6 +249,13 @@ private:
 
 	static dword				iSqrt[SQRT_TABLE_SIZE];
 	static bool					initialized;
+};
+
+//used as scoped guard which temporarily masks all FP exceptions
+//note: FP exceptions are only enabled for debugging purposes using com_fpexceptions CVar
+struct idIgnoreFpExceptions {
+	idIgnoreFpExceptions();
+	~idIgnoreFpExceptions();
 };
 
 

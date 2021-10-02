@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -236,11 +236,10 @@ void UnreachableTargetState::Think(idAI* owner)
 	// Check the distance to the enemy, the other subsystem tasks need it.
 	// This handles both melee and ranged weapons.
 	memory.canHitEnemy = owner->CanHitEntity(enemy);
-
 	if (!owner->AI_ENEMY_VISIBLE)
 	{
 		// The enemy is not visible, let's keep track of him for a small amount of time
-		if (gameLocal.time - memory.lastTimeEnemySeen < MAX_BLIND_CHASE_TIME)
+		if (gameLocal.time - memory.lastTimeEnemySeen < MAX_BLIND_UNREACHABLE_TIME ) // grayman #4343
 		{
 			// Cheat a bit and take the last reachable position as "visible & reachable"
 			owner->lastVisibleReachableEnemyPos = owner->lastReachableEnemyPos;

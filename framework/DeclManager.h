@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __DECLMANAGER_H__
@@ -61,6 +61,7 @@ typedef enum {
 	DECL_AF,
 	DECL_MODELEXPORT,
 	DECL_MAPDEF,
+	DECL_SUBTITLES,
 
 	// TDM specific DECLs
 	DECL_XDATA, 				// External data, for scripts
@@ -232,6 +233,9 @@ ID_INLINE idDecl *idDeclAllocator( void ) {
 class idMaterial;
 class idDeclSkin;
 class idSoundShader;
+class idRenderModel;
+class idWindow;
+class LoadStack;
 
 class idDeclManager {
 public:
@@ -243,6 +247,15 @@ public:
 
 	virtual void			BeginLevelLoad() = 0;
 	virtual void			EndLevelLoad() = 0;
+
+	//stgatilov: for LoadStack --- tracking how assets load each other
+	virtual void			BeginEntityLoad(idMapEntity *entity) = 0;
+	virtual void			EndEntityLoad(idMapEntity *entity) = 0;
+	virtual void			BeginModelLoad(idRenderModel *model) = 0;
+	virtual void			EndModelLoad(idRenderModel *model) = 0;
+	virtual void			BeginWindowLoad(idWindow *model) = 0;
+	virtual void			EndWindowLoad(idWindow *model) = 0;
+	virtual const LoadStack &GetLoadStack() const = 0;
 
 							// Registers a new decl type.
 	virtual void			RegisterDeclType( const char *typeName, declType_t type, idDecl *(*allocator)( void ) ) = 0;

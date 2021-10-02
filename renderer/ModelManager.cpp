@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -231,7 +231,7 @@ idRenderModelManagerLocal::Shutdown
 */
 void idRenderModelManagerLocal::Shutdown() {
 	models.DeleteContents( true );
-	hash.Free();
+	hash.ClearFree();
 }
 
 /*
@@ -271,33 +271,37 @@ idRenderModel *idRenderModelManagerLocal::GetModel( const char *modelName, bool 
 	}
 
 	// see if we can load it
-
-	// determine which subclass of idRenderModel to initialize
-
-	idRenderModel	*model;
-
 	canonical.ExtractFileExtension( extension );
 
+	// determine which subclass of idRenderModel to initialize
+	idRenderModel *model = nullptr;
 	if ( ( extension.Icmp( "ase" ) == 0 ) || ( extension.Icmp( "lwo" ) == 0 ) || ( extension.Icmp( "flt" ) == 0 ) ) {
 		model = new idRenderModelStatic;
-		model->InitFromFile( modelName );
 	} else if ( extension.Icmp( "ma" ) == 0 ) {
 		model = new idRenderModelStatic;
-		model->InitFromFile( modelName );
+	} else if ( extension.Icmp( "proxy" ) == 0 ) {
+		//stgatilov #4970: proxy models substitute rotation hack
+		model = new idRenderModelStatic;
 	} else if ( extension.Icmp( MD5_MESH_EXT ) == 0 ) {
 		model = new idRenderModelMD5;
-		model->InitFromFile( modelName );
 	} else if ( extension.Icmp( "md3" ) == 0 ) {
 		model = new idRenderModelMD3;
-		model->InitFromFile( modelName );
 	} else if ( extension.Icmp( "prt" ) == 0  ) {
 		model = new idRenderModelPrt;
-		model->InitFromFile( modelName );
 	} else if ( extension.Icmp( "liquid" ) == 0  ) {
 		model = new idRenderModelLiquid;
-		model->InitFromFile( modelName );
-	} else {
+	}
 
+	if (model) {
+		//do actual load
+		model->InitEmpty(modelName);	//make sure name is set during BeginModelLoad!
+		TRACE_CPU_SCOPE_TEXT("Load:Model", model->Name())
+		declManager->BeginModelLoad(model);
+		model->InitFromFile( modelName );
+		declManager->EndModelLoad(model);
+	}
+	else {
+		//can't load: make default
 		if ( extension.Length() ) {
 			common->Warning( "unknown model type '%s'", canonical.c_str() );
 		}
@@ -492,6 +496,9 @@ void idRenderModelManagerLocal::BeginLevelLoad() {
 	R_PurgeTriSurfData( frameData );
 }
 
+static idCVarInt r_capModelSize( "r_capModelSize", "0", CVAR_TOOL, "" );
+static idCVarBool r_modelSizeStats( "r_modelSizeStats", "0", CVAR_TOOL, "" );
+
 /*
 =================
 idRenderModelManagerLocal::EndLevelLoad
@@ -549,16 +556,90 @@ void idRenderModelManagerLocal::EndLevelLoad() {
 		}
 	}
 
+	std::map<int, int> modelStats;
+	std::vector<int> modelSizes;
+	std::vector<int> modelOffsets;
+
 	// create static vertex/index buffers for all models
-	vertexCache.PrepareStaticCacheForUpload();
 	for( int i = 0; i < models.Num(); i++ ) {
 		idRenderModel *model = models[i];
 		if( model->IsLoaded() ) {
+			int totalSize = 0;
 			for( int j = 0; j < model->NumSurfaces(); j++ ) {
-				R_CreateStaticBuffersForTri( *( model->Surface( j )->geometry ) );
+				auto& tri = *model->Surface( j )->geometry;
+				R_CreateStaticBuffersForTri( tri );
+				totalSize += tri.ambientCache.size;
+			}
+			if ( r_capModelSize > 0 ) {
+				if ( totalSize > 1024 * r_capModelSize )
+					common->Warning( "Model capped: %dKB - %s\n", totalSize / 1024, model->Name() );
+			}
+			if ( r_modelSizeStats ) {
+				modelSizes.push_back( totalSize );
+				extern uint32_t staticVertexSize;
+				modelOffsets.push_back( staticVertexSize );
+				int index = 0;
+				while ( totalSize ) {
+					totalSize /= 10;
+					modelStats[index]++;
+					index++;
+				}
 			}
 		}
 	}
+	if ( r_modelSizeStats ) {
+		common->Printf( "Total models: %d, ", models.Num() );
+		int size = 1;
+		for ( auto it = modelStats.begin(); it != modelStats.end(); ++it )
+		{
+			int value = it->second;
+			common->Printf( ">%d bytes: %d, ", size, value );
+			size *= 10;
+		}
+		common->Printf( "\n" );
+		int rollGrp = 1, rollSum = 0;
+		int modelNum = int(modelSizes.size());
+		common->Printf( "Size distribution grouped by 10%%, from low to high:\n" );
+		for ( int index = 0; index < modelNum; index++ ) {
+			rollSum += modelSizes[index];
+			if ( index == modelNum * rollGrp / 10 - 1 ) {
+				common->Printf( "  %d%%: %d KB\n", rollGrp * 10, rollSum / 1024 );
+				rollGrp++;
+			}
+		}
+		common->Printf( "Offset distribution grouped by 10%%, from low to high:\n" );
+		rollGrp = 1;
+		for ( int index = 0; index < modelNum; index++ ) {
+			if ( index == modelNum * rollGrp / 10 - 1 ) {
+				common->Printf( "  %d%%: %d KB\n", rollGrp * 10, modelOffsets[index] / 1024 );
+				rollGrp++;
+			}
+		}
+		std::sort( modelSizes.begin(), modelSizes.end() );
+		rollGrp = 1, rollSum = 0;
+		common->Printf( "Size distribution grouped by 10%%, from smallest to biggest:\n" );
+		for ( int index = 0; index < modelNum; index++ ) {
+			rollSum += modelSizes[index];
+			if ( index == modelNum * rollGrp / 10 - 1 ) {
+				common->Printf( "  %d%%: %d KB\n", rollGrp * 10, rollSum / 1024 );
+				rollGrp++;
+			}
+		}
+		rollSum = 0, rollGrp = 0;
+		common->Printf( "Size distribution - top N:\n" );
+		for ( int index = modelNum - 1; index >= 0; index-- ) {
+			rollSum += modelSizes[index];
+			if( modelNum - index == (int64)1 << (rollGrp * 2)) {
+				common->Printf( "  top %d: %d KB\n", 1 << ( rollGrp * 2 ), rollSum / 1024 );
+				rollGrp++;
+			}
+		}
+	}
+
+	vertexCache.PrepareStaticCacheForUpload();
+	// previous frame contents are now invalid, purge them
+	R_ToggleSmpFrame();
+	R_ToggleSmpFrame();
 
 	// _D3XP added this
 	int	end = Sys_Milliseconds();

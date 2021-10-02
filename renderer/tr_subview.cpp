@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -244,10 +244,10 @@ static viewDef_t *R_MirrorViewBySurface( drawSurf_t *drawSurf ) {
 	R_LocalPointToGlobal( drawSurf->space->modelMatrix, viewOrigin, parms->initialViewAreaOrigin );
 
 	// set the mirror clip plane
-	parms->numClipPlanes = 1;
-	parms->clipPlanes[0] = -camera.axis[0];
+	parms->clipPlane = (idPlane*)R_FrameAlloc( sizeof( idPlane) );;
+	parms->clipPlane->Normal() = -camera.axis[0];
 
-	parms->clipPlanes[0][3] = -( camera.origin * parms->clipPlanes[0].Normal() );
+	parms->clipPlane->ToVec4()[3] = -( camera.origin * parms->clipPlane->Normal() );
 	
 	return parms;
 }
@@ -265,10 +265,10 @@ static viewDef_t *R_XrayViewBySurface( drawSurf_t *drawSurf ) {
 	// copy the viewport size from the original
 	parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
 	*parms = *tr.viewDef;
-	parms->renderView.viewID = VID_SUBVIEW;	// clear to allow player bodies to show up, and suppress view weapons
+	parms->renderView.viewID = VID_PLAYER_VIEW;	// clear to allow player bodies to show up, and suppress view weapons
 
 	parms->isSubview = true;
-	parms->isXraySubview = true;
+	parms->xrayEntityMask = XR_ONLY;
 
 	return parms;
 }
@@ -336,7 +336,7 @@ R_MirrorRender
 void R_MirrorRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect& scissor ) {
 	viewDef_t		*parms;
 
-	if ( tr.viewDef->superView && tr.viewDef->superView->isSubview ) // #4615 HOM effect - only draw mirrors from player's view and top-level asubviews
+	if ( tr.viewDef->superView && tr.viewDef->superView->isSubview ) // #4615 HOM effect - only draw mirrors from player's view and top-level subviews
 		return;
 
 	// remote views can be reused in a single frame
@@ -390,7 +390,7 @@ void R_PortalRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect& scis
 	parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
 	*parms = *tr.primaryView;
 	parms->renderView.viewID = VID_SUBVIEW;
-	parms->numClipPlanes = 0;
+	parms->clipPlane = nullptr;
 	parms->superView = tr.viewDef;
 	parms->subviewSurface = surf;
 
@@ -415,8 +415,6 @@ void R_PortalRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect& scis
 		gameLocal.portalSkyGlobalOrigin += diff; // This is for the global portalSky.
 		// It should keep going even when not active.
 	}
-
-	//if ( gameLocal.portalSkyEnt.GetEntity() && gameLocal.IsPortalSkyActive() && g_enablePortalSky.GetInteger() ) {
 
 		if ( gameLocal.GetCurrentPortalSkyType() == PORTALSKY_STANDARD ) {
 			PSOrigin = gameLocal.portalSkyOrigin;
@@ -465,55 +463,6 @@ void R_PortalRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect& scis
 
 		R_RenderView( *parms );
 
-		//if ( g_enablePortalSky.GetInteger() == 1 ) // duzenko #4414 - the new method will use the left-over pixels in framebuffer
-		//	renderSystem->CaptureRenderToImage( "_currentRender" );
-
-		//hackedView.forceUpdate = true;				// FIX: for smoke particles not drawing when portalSky present
-	/*} else // grayman #3108 - contributed by 7318 
-	{
-		// So if g_enablePortalSky is disabled, GlobalPortalSkies doesn't break.
-		// When g_enablePortalSky gets re-enabled, GlobalPortalSkies keeps working. 
-		gameLocal.playerOldEyePos = currentEyePos;
-	}*/
-
-	//hackedView.forceUpdate = true; // Fix for lightgem problems? -Gildoran
-	
-	/*viewDef_t		*parms;
-
-	// remote views can be reused in a single frame
-	if ( stage->dynamicFrameCount == tr.frameCount ) {
-		return;
-	}
-
-	// issue a new view command
-	parms = R_MirrorViewBySurface( surf );
-	if ( !parms ) {
-		return;
-	}
-
-	//tr.CropRenderSize( stage->width, stage->height, true, true );
-
-	parms->renderView.x = 0;
-	parms->renderView.y = 0;
-	parms->renderView.width = SCREEN_WIDTH;
-	parms->renderView.height = SCREEN_HEIGHT;
-
-	tr.RenderViewToViewport( &parms->renderView, &parms->viewport );
-
-	parms->scissor = scissor;
-
-	parms->superView = tr.viewDef;
-	parms->subviewSurface = surf;
-
-	// triangle culling order changes with mirroring
-	parms->isMirror = (((int)parms->isMirror ^ (int)tr.viewDef->isMirror) != 0);
-
-	// generate render commands for it
-	R_RenderView( parms );
-
-	// copy this rendering to the image
-	stage->dynamicFrameCount = tr.frameCount;
-	tr.UnCrop();*/
 	if ( g_enablePortalSky.GetInteger() == 1 ) {
 		idImage *image = NULL;
 		if ( stage )
@@ -543,7 +492,11 @@ void R_XrayRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect scissor
 		return;
 	}
 
-	tr.CropRenderSize( stage->width, stage->height, true );
+	if ( stage->width ) { // FIXME wrong field use?
+		parms->xrayEntityMask = XR_SUBSTITUTE;
+	}
+
+	//tr.CropRenderSize( stage->width, stage->height, true );
 
 	parms->renderView.x = 0;
 	parms->renderView.y = 0;
@@ -568,10 +521,10 @@ void R_XrayRender( drawSurf_t *surf, textureStage_t *stage, idScreenRect scissor
 
 	// copy this rendering to the image
 	stage->dynamicFrameCount = tr.frameCount;
-	stage->image = globalImages->scratchImage2;
+	stage->image = globalImages->xrayImage;
 
 	tr.CaptureRenderToImage( *stage->image );
-	tr.UnCrop();
+	//tr.UnCrop();
 }
 
 /*
@@ -630,12 +583,11 @@ bool R_Lightgem_Render() {
 		0.0f, 1.0f, 0.0f,
 		-1.0f, 0.0f, 0.0f
 	); 
-	renderSystem->CropRenderSize( DARKMOD_LG_RENDER_WIDTH, DARKMOD_LG_RENDER_WIDTH, true, true );
 
-	// Give the rv the current ambient light values - Not all of the other values, avoiding fancy effects.
-	lightgemRv.shaderParms[2] = gameLocal.globalShaderParms[2]; // Ambient R
-	lightgemRv.shaderParms[3] = gameLocal.globalShaderParms[3]; // Ambient G
-	lightgemRv.shaderParms[4] = gameLocal.globalShaderParms[4]; // Ambient B
+	// Give the rv the current ambient light values (obsolete #5449)
+	lightgemRv.shaderParms[2] = 0.0f;
+	lightgemRv.shaderParms[3] = 0.0f;
+	lightgemRv.shaderParms[4] = 0.0f;
 
 	// angua: render view needs current time, otherwise it will be unable to see time-dependent changes in light shaders such as flickering torches
 	lightgemRv.time = gameLocal.GetTime();
@@ -690,6 +642,14 @@ bool R_Lightgem_Render() {
 
 	// generate render commands for it
 	R_RenderView( parms );
+	// hack: we replace the drawview command with our own lightgem draw command
+	drawSurfsCommand_t *cmd = (drawSurfsCommand_t *)frameData->cmdTail;
+	cmd->commandId = RC_NOP;
+	drawLightgemCommand_t *newCmd = (drawLightgemCommand_t *)R_GetCommandBuffer( sizeof(drawLightgemCommand_t) );
+	newCmd->commandId = RC_DRAW_LIGHTGEM;
+	newCmd->viewDef = cmd->viewDef;
+	// the frontend buffer has already been analyzed this frame and will become the backend buffer in the next frame
+	newCmd->dataBuffer = gameLocal.m_lightGem.m_LightgemImgBufferFrontend;
 
 	// and switch back our normal render definition - player model and head are returned
 	prent->suppressSurfaceInViewID = playerid;
@@ -710,22 +670,6 @@ bool R_Lightgem_Render() {
 		}
 	}
 
-	int width, height;
-	renderSystem->GetCurrentRenderCropSize( width, height );
-	width = (width + 3) & ~3; //opengl wants width padded to 4x
-
-	copyRenderCommand_t &cmd = *(copyRenderCommand_t *)R_GetCommandBuffer( sizeof( cmd ) );
-	cmd.commandId = RC_COPY_RENDER;
-	// the frontend buffer has already been analyzed this frame and will become the backend buffer in the next frame
-	cmd.buffer = gameLocal.m_lightGem.m_LightgemImgBufferFrontend;
-	cmd.usePBO = true;
-	cmd.image = NULL;
-	cmd.x = 0;
-	cmd.y = 0;
-	cmd.imageWidth = width;
-	cmd.imageHeight = height;
-
-	tr.UnCrop();
 	return true;
 }
 
@@ -740,7 +684,7 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 	const idMaterial		*shader;
 
 	// for testing the performance hit
-	if ( r_skipSubviews.GetBool() ) 
+	if ( r_skipSubviews ) 
 		return false;
 
 	if ( R_PreciseCullSurface( drawSurf, ndcBounds ) ) 
@@ -813,13 +757,15 @@ would change tr.viewCount.
 ================
 */
 bool R_GenerateSubViews( void ) {
+	TRACE_CPU_SCOPE( "R_GenerateSubViews" )
+
 	drawSurf_t *drawSurf, *skySurf = NULL;
 	int				i;
 	bool			subviews;
 	const idMaterial		*shader;
 
 	// for testing the performance hit
-	if ( r_skipSubviews.GetBool() ) 
+	if ( r_skipSubviews || tr.viewDef->areaNum < 0 ) 
 		return false;
 
 	// duzenko #4420: no mirrors on lightgem stage
@@ -843,26 +789,22 @@ bool R_GenerateSubViews( void ) {
 		if ( !shader || !shader->HasSubview() )
 			continue;
 
-		if ( R_GenerateSurfaceSubview( drawSurf ) ) {
-			subviews = true;
-			if ( shader->GetSort() == SS_PORTAL_SKY ) // portal sky needs to be the last one, and only once
-				skySurf = drawSurf;
-		}
+		if ( shader->GetSort() == SS_PORTAL_SKY ) // portal sky needs to be the last one, and only once
+			skySurf = drawSurf;
+		else
+			if ( R_GenerateSurfaceSubview( drawSurf ) ) {
+				subviews = true;
+			}
 	}
 
 	static bool dontReenter = false;
-	if ( !dontReenter && gameLocal.portalSkyEnt.GetEntity() && gameLocal.IsPortalSkyActive() && g_enablePortalSky.GetBool() 
+	if ( !dontReenter && gameLocal.portalSkyEnt.GetEntity() && ( gameLocal.IsPortalSkyActive() || g_stopTime.GetBool() ) && g_enablePortalSky.GetBool() 
 		&& !tr.viewDef->renderWorld->mapName.IsEmpty()  // FIXME a better way to check for RenderWindow views? (compass, etc)
 	) {
 		dontReenter = true;
-		if ( skySurf ) { // textures/smf/portal_sky
-			idScreenRect sc;
-			R_PortalRender( skySurf, NULL, sc );
-		} else { // caulk 
-			idScreenRect sc;
-			R_PortalRender( NULL, NULL, sc );
-			subviews = true;
-		}
+		idScreenRect sc;
+		R_PortalRender( skySurf, NULL, sc ); // even if skySurf null
+		subviews = true;
 		dontReenter = false;
 	}
 

@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SND_LOCAL_H__
@@ -55,8 +55,21 @@ class idWaveFile;
 class idSoundCache;
 class idSoundSample;
 class idSampleDecoder;
+class idSoundChannel;
 class idSoundWorldLocal;
 
+//stgatilov #2454: atomic piece of subtitle text data
+struct Subtitle {
+	int offsetStart;		/* number of samples from start of sound to subtitle start */
+	int offsetEnd;			/* number of samples from start of sound to subtitle end */
+	idStr text;				/* text to be displayed (may contain \n being multiline) */
+};
+//stgatilov #2454: reference to subtitle which should be displayed now
+struct SubtitleMatch {
+	const Subtitle *subtitle;		/* subtitle to be shown */
+	const idSoundChannel *channel;	/* channel which emitted message */
+	// TODO: return ended subtitles if they did not display for long enough?
+};
 
 /*
 ===================================================================================
@@ -172,6 +185,7 @@ public:
 	int				Seek( int offset );
 	int				Close( void );
 	int				ResetFile( void );
+	ID_TIME_T		Timestamp( void ) const { return mfileTime; }
 
 	int				GetOutputSize( void ) { return mdwSize; }
 	int				GetMemorySize( void ) { return mMemSize; }
@@ -185,7 +199,7 @@ private:
 	dword			mdwSize;		// size in samples
 	dword			mMemSize;		// size of the wave data in memory
 	dword			mseekBase;
-	ID_TIME_T			mfileTime;
+	ID_TIME_T		mfileTime;
 
 	bool			mbIsReadingFromMemory;
 	short *			mpbData;
@@ -193,6 +207,7 @@ private:
 	dword			mulDataSize;
 
 	void *			ogg;			// only !NULL when !s_realTimeDecoding
+	int				oggStream;		// stgatilov: ogg->stream in original D3 with hacked libogg
 	bool			isOgg;
 
 private:
@@ -233,7 +248,7 @@ idSoundEmitterLocal
 typedef enum {
 	REMOVE_STATUS_INVALID				= -1,
 	REMOVE_STATUS_ALIVE					=  0,
-	REMOVE_STATUS_WAITSAMPLEFINISHED	=  1,
+	REMOVE_STATUS_WAITSAMPLEFINISHED	=  1,	//stgatilov: plays now, but will be stopped & freed when it ends
 	REMOVE_STATUS_SAMPLEFINISHED		=  2
 } removeStatus_t;
 
@@ -356,9 +371,10 @@ public:
 	void				Start( void );
 	void				Stop( void );
 	void				GatherChannelSamples( int sampleOffset44k, int sampleCount44k, float *dest ) const;
+	int					GatherSubtitles( int sampleOffset44k, idList<SubtitleMatch> &matches, int level ) const;	//stgatilov #2454
 	void				ALStop( void );			// free OpenAL resources if any
 
-	bool				triggerState;
+	bool				triggerState;			// stgatilov: is it enabled according to Start/Stop methods?
 	int					trigger44kHzTime;		// hardware time sample the channel started
 	int					triggerGame44kHzTime;	// game time sample time the channel started
 	soundShaderParms_t	parms;					// combines the shader parms and the per-channel overrides
@@ -370,14 +386,13 @@ public:
 	float				lastVolume;				// last calculated volume based on distance
 	float				lastV[6];				// last calculated volume for each speaker, so we can smoothly fade
 	idSoundFade			channelFade;
-	bool				triggered;
+	bool				triggered;				// stgatilov: true means all OpenAL buffers should be recreated
 	ALuint				openalSource;
 	ALuint				openalStreamingOffset;
 	ALuint				openalStreamingBuffer[3];
 	ALuint				lastopenalStreamingBuffer[3];
 
 	bool				disallowSlow;
-
 };
 
 class SoundChainResults // grayman #3042
@@ -449,7 +464,7 @@ public:
 	float				minDistance;				// smallest of all playing channel min distances // grayman #3042
 	float				volumeLoss;					// grayman #3042 - accumulated volume loss while traversing portals
 	int					lastValidPortalArea;		// so an emitter that slides out of the world continues playing
-	bool				playing;					// if false, no channel is active
+	bool				playing;					// true if any channel is active according to our timings (OpenAL status does not matter)
 	bool				hasShakes;
 	idVec3				spatializedOrigin;			// the virtual sound origin, either the real sound origin,
 													// or a point through a portal chain
@@ -580,10 +595,12 @@ public:
 	void					AddChannelContribution( idSoundEmitterLocal *sound, idSoundChannel *chan,
 												int current44kHz, int numSpeakers, float *finalMixBuffer );
 	void					MixLoop( int current44kHz, int numSpeakers, float *finalMixBuffer );
+	void					MixLoopInternal( int current44kHz, int numSpeakers, float *finalMixBuffer );
 	void					AVIUpdate( void );
 	float					GetDiffractionLoss(const idVec3 p1, const idVec3 p2, const idVec3 p3); // grayman #4219
 	bool					ResolveOrigin( bool primary, const int stackDepth, const soundPortalTrace_t *prevStack, const int soundArea, const float dist, const float loss, const idVec3& soundOrigin, const idVec3& prevSoundOrigin, idSoundEmitterLocal *def , SoundChainResults *results); // grayman #3042 // grayman #4219 // grayman #4882
 	float					FindAmplitude( idSoundEmitterLocal *sound, const int localTime, const idVec3 *listenerPosition, const s_channelType channel, bool shakesOnly );
+	void					GetSubtitles( idList<SubtitleMatch> &dest ) override;	//stgatilov #2454
 
 	//============================================
 
@@ -599,6 +616,8 @@ public:
 	ALuint					listenerEffect;
 	ALuint					listenerSlot;
 	ALuint					listenerFilter;
+	// nbohr1more: #5587 Reverb volume control
+	float					listenerSlotReverbGain;
 
 	int						gameMsec;
 	int						game44kHz;
@@ -620,6 +639,13 @@ public:
 	bool					slowmoActive;
 	float					slowmoSpeed;
 	bool					enviroSuitActive;
+
+	//stgatilov #2454: array of active subtitles is generated by sound thread but used by backend/frontend thread
+	//  activeSubtitles[activeSubtitlesFrame]  is fully created and publicly visible
+	//  activeSubtitles[!activeSubtitlesFrame] is currently appended to by sound thread
+	idList<SubtitleMatch>	activeSubtitles[2];		// double-buffered list of active subtitles
+	int						activeSubtitlesFrame;	// which buffer in activeSubtitles is valid now
+	mutable idSysMutex		activeSubtitlesMutex;	
 };
 
 /*
@@ -745,6 +771,8 @@ public:
 	LPALDELETEAUXILIARYEFFECTSLOTS	alDeleteAuxiliaryEffectSlots;
 	LPALISAUXILIARYEFFECTSLOT		alIsAuxiliaryEffectSlot;
 	LPALAUXILIARYEFFECTSLOTI		alAuxiliaryEffectSloti;
+	// nbohr1more: #5587 Reverb volume control
+	LPALAUXILIARYEFFECTSLOTF		alAuxiliaryEffectSlotf;
 
 	idEFXFile				EFXDatabase;
 	bool					efxloaded;
@@ -753,12 +781,14 @@ public:
 							// mark available during initialization, or through an explicit test
 	static int				EFXAvailable;
 
+	static bool				HRTFAvailable;	// can be used on this OpenAL implementation?
+	static bool				useHRTF;		// actually used in this runtime?
+
 
 	static idCVar			s_noSound;
 	static idCVar			s_diffractionMax; // grayman #4219
 	static idCVar			s_device;
 	static idCVar			s_quadraticFalloff;
-	static idCVar			s_drawSounds;
 	static idCVar			s_minVolume6;
 	static idCVar			s_dotbias6;
 	static idCVar			s_minVolume2;
@@ -782,7 +812,10 @@ public:
 	static idCVar			s_clipVolumes;
 	static idCVar			s_realTimeDecoding;
 	static idCVar			s_useEAXReverb;
+	static idCVar			s_useHRTF;
 	static idCVar			s_decompressionLimit;
+	// nbohr1more: #5587 Reverb volume control
+	static idCVar			s_alReverbGain;
 
 	static idCVar			s_slowAttenuate;
 
@@ -829,15 +862,19 @@ public:
 	bool					onDemand;
 	bool					purged;
 	bool					levelLoadReferenced;		// so we can tell which samples aren't needed any more
+	idList<Subtitle>		subtitles;
+	SubtitleLevel			subtitlesVerbosity;
 
 	int						LengthIn44kHzSamples() const;
 	ID_TIME_T		 			GetNewTimeStamp( void ) const;
 	void					MakeDefault();				// turns it into a beep
 	void					Load();						// loads the current sound based on name
 	void					Reload( bool force );		// reloads if timestamp has changed, or always if force
+	void					LoadSubtitles();			// load subtitles from .srt file if it is present (stgatilov #2454)
 	void					PurgeSoundSample();			// frees all data
 	void					CheckForDownSample();		// down sample if required
 	bool					FetchFromCache( int offset, const byte **output, int *position, int *size, const bool allowIO );
+	int						FetchSubtitles( int offset, idList<SubtitleMatch> &matches );	//stgatilov #2454
 
 	//stgatilov #4534: for playing sound from a video
 	idCinematic *cinematic;
@@ -890,6 +927,7 @@ public:
 	const idSoundSample *	GetObject( const int index ) const;
 
 	void					ReloadSounds( bool force );
+	void					ReloadSubtitles();
 
 	void					BeginLevelLoad();
 	void					EndLevelLoad();
@@ -899,6 +937,7 @@ public:
 private:
 	bool					insideLevelLoad;
 	idList<idSoundSample*>	listCache;
+	idHashIndex				cacheHash;
 };
 
 #endif /* !__SND_LOCAL_H__ */

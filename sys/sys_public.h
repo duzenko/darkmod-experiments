@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #ifndef __SYS_PUBLIC__
@@ -28,14 +28,6 @@
 // Win32
 #if defined(WIN32) || defined(_WIN32)
 
-#ifdef _WIN64
-#define	BUILD_STRING					"win-x64"
-#define	CPUSTRING						"x64"
-#else
-#define	BUILD_STRING					"win-x86"
-#define	CPUSTRING						"x86"
-#endif
-
 #define BUILD_OS_ID						0
 
 #ifdef _WIN64
@@ -45,25 +37,19 @@
 #define CPU_EASYARGS					1
 #endif
 
-#define ALIGN16( x )					__declspec(align(16)) x
-#define ALIGNTYPE16						__declspec(align(16)) // anon
 #define PACKED
 
-#define _alloca16( x )					((void *)((((uintptr_t)_alloca( (x)+15 )) + 15) & ~15))
 
 #define PATHSEPERATOR_STR				"\\"
 #define PATHSEPERATOR_CHAR				'\\'
 
 #define ID_STATIC_TEMPLATE				static
 
-#define ID_INLINE						__inline
 #define ID_NOINLINE						__declspec(noinline)
 //anon begin
-#define ID_INLINE_EXTERN				extern inline //anon
-#define ID_FORCE_INLINE					__inline //anon
-#define ID_FORCE_INLINE_EXTERN			extern __forceinline //anon
+#define ID_INLINE_EXTERN				extern inline
+#define ID_FORCE_INLINE_EXTERN			extern __forceinline
 //anon end
-
 
 //stgatilov begin
 #ifdef _WIN64
@@ -81,10 +67,8 @@
 
 #define assertmem( x, y )				assert( _CrtIsValidPointer( x, y, true ) )
 
-#define THREAD_RETURN_TYPE unsigned long
-
 #if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
-#define ID_LITTLE_ENDIAN			1
+//#define ID_LITTLE_ENDIAN			1
 #endif
 
 #endif
@@ -97,18 +81,12 @@
 // Mac OSX
 #if defined(MACOS_X)
 
-#define BUILD_STRING				"MacOSX-universal"
 #define BUILD_OS_ID					1
 #ifdef __ppc__
-	#define	CPUSTRING					"ppc"
 	#define CPU_EASYARGS				0
 #elif defined(__i386__)
-	#define	CPUSTRING					"x86"
 	#define CPU_EASYARGS				1
 #endif
-
-#define ALIGN16( x )					x __attribute__ ((aligned (16)))
-#define ALIGNTYPE16						__attribute__ ((aligned (16))) // anon
 
 #ifdef __MWERKS__
 #define PACKED
@@ -118,7 +96,6 @@
 #endif
 
 #define _alloca							alloca
-#define _alloca16( x )					((void *)((((uintptr_t)alloca( (x)+15 )) + 15) & ~15))
 
 #define PATHSEPERATOR_STR				"/"
 #define PATHSEPERATOR_CHAR				'/'
@@ -126,7 +103,6 @@
 #define __cdecl
 #define ASSERT							assert
 
-#define ID_INLINE						inline
 #define ID_STATIC_TEMPLATE
 
 #define ID_INLINE_EXTERN				extern inline //anon
@@ -143,24 +119,15 @@
 #define BUILD_OS_ID					2
 
 #ifdef __i386__
-	#define	BUILD_STRING				"linux-x86"
-	#define CPUSTRING					"x86"
 	#define CPU_EASYARGS				1
 #elif defined(__x86_64__)
-	#define	BUILD_STRING				"linux-x86_64"
-	#define CPUSTRING					"x64"
 	#define CPU_EASYARGS				0
 #elif defined(__ppc__)
-	#define	BUILD_STRING				"linux-ppc"
-	#define CPUSTRING					"ppc"
 	#define CPU_EASYARGS				0
 #endif
 
 #define _alloca							alloca
-#define _alloca16( x )					((void *)((((uintptr_t)alloca( (x)+15 )) + 15) & ~15))
 
-#define ALIGN16( x )					x
-#define ALIGNTYPE16						 // anon
 #define PACKED							__attribute__((packed))
 
 #define PATHSEPERATOR_STR				"/"
@@ -169,8 +136,8 @@
 #define __cdecl
 #define ASSERT							assert
 
-#define ID_INLINE						inline
 #define ID_NOINLINE						__attribute__((noinline))
+
 #define ID_STATIC_TEMPLATE
 
 #define assertmem( x, y )
@@ -205,6 +172,15 @@
 #define id_attribute(x)
 #endif
 
+#ifdef _INLINEDEBUG
+//stgatilov: force optimization of some function in "Debug with Inlines" MSVC configuration
+#define DEBUG_OPTIMIZE_ON __pragma(optimize("gt", on))
+#define DEBUG_OPTIMIZE_OFF __pragma(optimize("", on))
+#else
+#define DEBUG_OPTIMIZE_ON
+#define DEBUG_OPTIMIZE_OFF
+#endif
+
 typedef enum {
 	CPUID_NONE							= 0x00000,
 	CPUID_UNSUPPORTED					= 0x00001,	// unsupported (386/486)
@@ -212,7 +188,7 @@ typedef enum {
 	CPUID_INTEL							= 0x00004,	// Intel
 	CPUID_AMD							= 0x00008,	// AMD
 
-	CPUID_MMX							= 0x00010,	// Multi Media Extensions
+	//CPUID_MMX							= 0x00010,	// Multi Media Extensions
 	CPUID_SSE							= 0x00020,	// Streaming SIMD Extensions
 	CPUID_SSE2							= 0x00040,	// Streaming SIMD Extensions 2
 	CPUID_SSE3							= 0x00080,	// Streaming SIMD Extentions 3 aka Prescott's New Instructions
@@ -249,7 +225,8 @@ typedef enum {
 	SE_KEY,					// evValue is a key code, evValue2 is the down flag
 	SE_CHAR,				// evValue is an ascii char
 	SE_MOUSE,				// evValue and evValue2 are reletive signed x / y moves
-	SE_JOYSTICK_AXIS,		// evValue is an axis number and evValue2 is the current state (-127 to 127)
+	SE_PAD_BUTTON,			// evValue is a button code, evValue2 is the down flag
+	SE_PAD_AXIS,			// evValue is an axis number and evValue2 is the current state (-127 to 127)
 	SE_CONSOLE				// evPtr is a char*, from typing something at a non-game console
 } sysEventType_t;
 
@@ -314,6 +291,10 @@ double			Sys_ClockTicksPerSecond( void );
 // returns number of microseconds passed after 1970-Jan-01
 // uses GetSystemTimeAsFileTime on Windows and gettimeofday on other platforms
 uint64_t Sys_GetTimeMicroseconds( void );
+#define Sys_Microseconds Sys_GetTimeMicroseconds
+
+// stgatilov: called once on initialization to initialize CPUID info and sys_cpustring
+void Sys_InitCPUID();
 
 // returns a selection of the CPUID_* flags
 cpuid_t			Sys_GetProcessorId( void );
@@ -327,6 +308,9 @@ void			Sys_FPU_SetFTZ( bool enable );
 
 // sets Denormals-Are-Zero mode (only available when CPUID_DAZ is set)
 void			Sys_FPU_SetDAZ( bool enable );
+
+// enable/disable floating point exceptions when operations produce NaN or Inf
+void			Sys_FPU_SetExceptions(bool enable);
 
 // returns amount of drive space in path
 int				Sys_GetDriveFreeSpace( const char *path );
@@ -347,6 +331,7 @@ void			Sys_DLL_Unload(uintptr_t dllHandle);
 void			Sys_GenerateEvents( void );
 sysEvent_t		Sys_GetEvent( void );
 void			Sys_ClearEvents( void );
+void			Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr );
 
 // input is tied to windows, so it needs to be started up and shut down whenever
 // the main window is recreated
@@ -382,11 +367,11 @@ void			Sys_AdjustMouseMovement(float &dx, float &dy);
 void			Sys_ShowWindow( bool show );
 bool			Sys_IsWindowVisible( void );
 void			Sys_ShowConsole( int visLevel, bool quitOnClose );
+bool			Sys_GetCurrentMonitorResolution( int &width, int &height );
 
 
 void			Sys_Mkdir( const char *path );
 ID_TIME_T		Sys_FileTimeStamp( FILE *fp );
-ID_TIME_T       Sys_DosToUnixTime( unsigned long dostime );
 // NOTE: do we need to guarantee the same output on all platforms?
 const char *	Sys_TimeStampToStr( ID_TIME_T timeStamp );
 const char *	Sys_DefaultBasePath( void );
@@ -404,6 +389,19 @@ void			Sys_SetFatalError( const char *error );
 
 // display perference dialog
 void			Sys_DoPreferences( void );
+
+
+struct debugStackFrame_t {
+	static const int MAX_LEN = 88;
+	void *pointer;
+	char functionName[MAX_LEN];
+	char fileName[MAX_LEN];
+	int lineNumber;
+};
+
+void Sys_CaptureStackTrace(int ignoreFrames, uint8_t *data, int &len);
+int Sys_GetStackTraceFramesCount(uint8_t *data, int len);
+void Sys_DecodeStackTrace(uint8_t *data, int len, debugStackFrame_t *frames);
 
 /*
 ==============================================================
@@ -505,39 +503,9 @@ void			Sys_ShutdownNetworking( void );
 ==============================================================
 */
 
-typedef THREAD_RETURN_TYPE (*xthread_t)( void * );
-
-typedef enum {
-	THREAD_NORMAL,
-	THREAD_ABOVE_NORMAL,
-	THREAD_HIGHEST
-} xthreadPriority;
-
-typedef struct {
-	const char *	name;
-	intptr_t		threadHandle;
-    unsigned long	threadId;
-} xthreadInfo;
-
-const int MAX_THREADS				= 10;
-extern xthreadInfo *g_threads[MAX_THREADS];
-extern int			g_thread_count;
-
-void				Sys_CreateThread( xthread_t function, void *parms, xthreadPriority priority, xthreadInfo &info, const char *name, xthreadInfo *threads[MAX_THREADS], int *thread_count );
-void				Sys_DestroyThread( xthreadInfo& info ); // sets threadHandle back to 0
-
 // find the name of the calling thread
 // if index != NULL, set the index in g_threads array (use -1 for "main" thread)
 const char *		Sys_GetThreadName( int *index = 0 );
-
-const int MAX_CRITICAL_SECTIONS		= 4;
-
-enum {
-	CRITICAL_SECTION_ZERO = 0,
-	CRITICAL_SECTION_ONE,
-	CRITICAL_SECTION_TWO,
-	CRITICAL_SECTION_THREE
-};
 
 void				Sys_EnterCriticalSection( int index = CRITICAL_SECTION_ZERO );
 void				Sys_LeaveCriticalSection( int index = CRITICAL_SECTION_ZERO );
@@ -573,6 +541,12 @@ public:
 	virtual const char *	GetProcessorString( void ) = 0;
 	virtual void			FPU_SetFTZ( bool enable ) = 0;
 	virtual void			FPU_SetDAZ( bool enable ) = 0;
+	virtual void			FPU_SetExceptions(bool enable) = 0;
+
+	// stgatilov #4550: should be called when new thread starts: sets FPU properties
+	virtual void			ThreadStartup() = 0;
+	// stgatilov #4550: should be called regularly in every thread: updates FPU properties after cvar changes
+	virtual void			ThreadHeartbeat() = 0;
 
 	virtual bool			LockMemory( void *ptr, int bytes ) = 0;
 	virtual bool			UnlockMemory( void *ptr, int bytes ) = 0;

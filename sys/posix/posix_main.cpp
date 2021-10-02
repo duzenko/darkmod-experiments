@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 #include "../../idlib/precompiled.h"
 #include "../sys_local.h"
@@ -73,7 +73,8 @@ void Posix_Exit(int ret) {
 	}
 	// at this point, too late to catch signals
 	Posix_ClearSigs();
-	if ( asyncThread.threadHandle ) {
+	if ( asyncThread ) {
+		asyncThreadShutdown = true;
 		Sys_DestroyThread( asyncThread );
 	}
 	// process spawning. it's best when it happens after everything has shut down
@@ -84,9 +85,9 @@ void Posix_Exit(int ret) {
 	// in case of signal, handler tries a common->Quit
 	// we use set_exit to maintain a correct exit code
 	if ( set_exit ) {
-		exit( set_exit );
+		std::quick_exit( set_exit );
 	}
-	exit( ret );
+	std::quick_exit( ret );
 }
 
 /*
@@ -298,6 +299,11 @@ void Posix_QueEvent( sysEventType_t type, int value, int value2,
 #endif
 }
 
+void Sys_QueEvent( int, sysEventType_t type, int value, int value2,
+				  int ptrLength, void *ptr ) {
+	Posix_QueEvent( type, value, value2, ptrLength, ptr );
+}
+
 /*
 ================
 Sys_GetEvent
@@ -348,7 +354,9 @@ Sys_Init
 Posix_EarlyInit/Posix_LateInit is better
 =================
 */
-void Sys_Init( void ) { }
+void Sys_Init( void ) {
+	Sys_InitCPUID();
+}
 
 /*
 =================
@@ -418,43 +426,6 @@ ID_TIME_T Sys_FileTimeStamp(FILE * fp) {
 	return st.st_mtime;
 }
 
-/*
-=================
-Sys_DosToUnixTime
-=================
-*/
-long Sys_DosToUnixTime( unsigned long dostime ) {
-	ID_TIME_T unix_time = 0;
-    unsigned int sec, min, hour, day, mon, year;
-    struct tm dostm;
-
-    // break dos time down into its sec, min, hour components
-    sec = (dostime & 0x1F) * 2;
-    min = (dostime & 0x7E0) >> 5;
-    hour = (dostime & 0xF800)  >> 11; 
-
-    // temporarily remove time component
-    year = dostime >> 16;
-    
-    // break dos date down into its day, month, year components
-    day = year & 0x1F;
-    mon = (year & 0x1E0) >> 5;
-    year = (year >> 9) + 1980;
-
-    if (sec <= 60 && min <= 59 && hour <= 23 && day >= 1 && day <= 31 && mon >= 1 && mon <= 12 && year <= 2107) {
-        dostm.tm_sec = sec;
-        dostm.tm_min = min;
-        dostm.tm_hour = hour;
-        dostm.tm_mday = day;
-        dostm.tm_mon = mon - 1;
-        dostm.tm_year = year - 1900;
-        
-        unix_time = mktime(&dostm);
-    }
-
-	return (long) unix_time;
-}
-
 void Sys_Sleep(int msec) {
 	if ( msec < 20 ) {
 		static int last = 0;
@@ -488,9 +459,6 @@ void Sys_FlushCacheMemory(void *base, int bytes)
 }
 
 void Sys_FPU_ClearStack( void ) {
-}
-
-void Sys_FPU_SetPrecision() {
 }
 
 /*
@@ -538,6 +506,7 @@ Posix_EarlyInit
 */
 void Posix_EarlyInit( void ) {
 	memset( &asyncThread, 0, sizeof( asyncThread ) );
+	asyncThreadShutdown = false;
 	exit_spawn[0] = '\0';
 	Posix_InitSigs();
 	// set the base time

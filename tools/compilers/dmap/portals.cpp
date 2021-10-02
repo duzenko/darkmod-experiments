@@ -1,16 +1,16 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
- 
- This file is part of the The Dark Mod Source Code, originally based 
- on the Doom 3 GPL Source Code as published in 2011.
- 
- The Dark Mod Source Code is free software: you can redistribute it 
- and/or modify it under the terms of the GNU General Public License as 
- published by the Free Software Foundation, either version 3 of the License, 
- or (at your option) any later version. For details, see LICENSE.TXT.
- 
- Project: The Dark Mod (http://www.thedarkmod.com/)
- 
+The Dark Mod GPL Source Code
+
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
+
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
+
+Project: The Dark Mod (http://www.thedarkmod.com/)
+
 ******************************************************************************/
 
 #include "precompiled.h"
@@ -23,6 +23,11 @@
 
 interAreaPortal_t interAreaPortals[MAX_INTER_AREA_PORTALS];
 int					numInterAreaPortals;
+// stgatilov #5129: the arrays below are stored only to avoid duplicate reports
+static interAreaPortal_t droppedAreaPortals[MAX_INTER_AREA_PORTALS];
+static int					numDroppedAreaPortals;
+static interAreaPortal_t overlappingAreaPortals[MAX_INTER_AREA_PORTALS];
+static int					numOverlappingAreaPortals;
 
 
 int		c_active_portals;
@@ -229,41 +234,8 @@ static void MakeHeadnodePortals( tree_t *tree ) {
 
 //===================================================
 
-
-/*
-================
-BaseWindingForNode
-================
-*/
 #define	BASE_WINDING_EPSILON	0.001f
 #define	SPLIT_WINDING_EPSILON	0.001f
-
-idWinding *BaseWindingForNode (node_t *node) {
-	idWinding	*w;
-	node_t		*n;
-
-	w = new idWinding( dmapGlobals.mapPlanes[node->planenum] );
-
-	// clip by all the parents
-	for ( n = node->parent ; n && w ; ) {
-		idPlane &plane = dmapGlobals.mapPlanes[n->planenum];
-
-		if ( n->children[0] == node ) {
-			// take front
-			w = w->Clip( plane, BASE_WINDING_EPSILON );
-		} else {
-			// take back
-			idPlane	back = -plane;
-			w = w->Clip( back, BASE_WINDING_EPSILON );
-		}
-		node = n;
-		n = n->parent;
-	}
-
-	return w;
-}
-
-//============================================================
 
 /*
 ==================
@@ -274,36 +246,46 @@ and clipping it by all of parents of this node
 ==================
 */
 static void MakeNodePortal( node_t *node ) {
-	uPortal_t	*new_portal, *p;
-	idWinding	*w;
-	idVec3		normal;
-	int			side;
 
-	w = BaseWindingForNode (node);
+	idPlane plane = dmapGlobals.mapPlanes[node->planenum];
+	idList<idPlane> cuttingPlanes;
 
+	// clip by all the parents
+	for ( node_t *curr = node, *n = node->parent ; n ; ) {
+		idPlane &plane = dmapGlobals.mapPlanes[n->planenum];
+
+		if ( n->children[0] == curr ) {
+			// take front
+			cuttingPlanes.AddGrow(plane);
+		} else {
+			// take back
+			cuttingPlanes.AddGrow(-plane);
+		}
+		curr = n;
+		n = n->parent;
+	}
+
+	int side;
 	// clip the portal by all the other portals in the node
-	for (p = node->portals ; p && w; p = p->next[side])	
+	for (uPortal_t *p = node->portals ; p; p = p->next[side])	
 	{
-		idPlane	plane;
-
 		if (p->nodes[0] == node)
 		{
 			side = 0;
-			plane = p->plane;
+			cuttingPlanes.AddGrow(p->plane);
 		}
 		else if (p->nodes[1] == node)
 		{
 			side = 1;
-			plane = -p->plane;
+			cuttingPlanes.AddGrow(-p->plane);
 		}
 		else {
 			common->Error( "CutNodePortals_r: mislinked portal");
 			side = 0;	// quiet a compiler warning
 		}
-
-		w = w->Clip( plane, CLIP_EPSILON );
 	}
 
+	idWinding *w = idWinding::CreateTrimmedPlane(plane, cuttingPlanes.Num(), cuttingPlanes.Ptr(), BASE_WINDING_EPSILON);
 	if (!w)
 	{
 		return;
@@ -316,8 +298,7 @@ static void MakeNodePortal( node_t *node ) {
 		return;
 	}
 
-
-	new_portal = AllocPortal ();
+	uPortal_t *new_portal = AllocPortal ();
 	new_portal->plane = dmapGlobals.mapPlanes[node->planenum];
 	new_portal->onnode = node;
 	new_portal->winding = w;	
@@ -486,168 +467,30 @@ MakeTreePortals
 */
 void MakeTreePortals (tree_t *tree)
 {
+	TRACE_CPU_SCOPE("MakeTreePortals")
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "----- MakeTreePortals -----\n");
 	MakeHeadnodePortals (tree);
 	MakeTreePortals_r (tree->headnode);
 }
 
 /*
-=========================================================
-
-FLOOD ENTITIES
-
-=========================================================
-*/
-
-int		c_floodedleafs;
-
-/*
 =============
-FloodPortals_r
+FindLeafNodeAtPoint
 =============
 */
-void FloodPortals_r (node_t *node, int dist) {
-	uPortal_t	*p;
-	int			s;
-
-	if ( node->occupied ) {
-		return;
-	}
-
-	if ( node->opaque ) {
-		return;
-	}
-
-	c_floodedleafs++;
-	node->occupied = dist;
-
-	for (p=node->portals ; p ; p = p->next[s]) {
-		s = (p->nodes[1] == node);
-		FloodPortals_r (p->nodes[!s], dist+1);
-	}
-}
-
-/*
-=============
-PlaceOccupant
-=============
-*/
-bool PlaceOccupant( node_t *headnode, idVec3 origin, uEntity_t *occupant ) {
-	node_t	*node;
-	float	d;
-	idPlane	*plane;
-
+node_t *FindLeafNodeAtPoint( node_t *headnode, idVec3 origin ) {
 	// find the leaf to start in
-	node = headnode;
+	node_t *node = headnode;
 	while ( node->planenum != PLANENUM_LEAF ) {
-		plane = &dmapGlobals.mapPlanes[node->planenum];
-		d = plane->Distance( origin );
+		const idPlane &plane = dmapGlobals.mapPlanes[node->planenum];
+		float d = plane.Distance( origin );
 		if ( d >= 0.0f ) {
 			node = node->children[0];
 		} else {
 			node = node->children[1];
 		}
 	}
-
-	if ( node->opaque ) {
-		return false;
-	}
-	node->occupant = occupant;
-
-	FloodPortals_r (node, 1);
-
-	return true;
-}
-
-/*
-=============
-FloodEntities
-
-Marks all nodes that can be reached by entites
-=============
-*/
-bool FloodEntities( tree_t *tree ) {
-	int		i;
-	idVec3	origin;
-	const char	*cl;
-	bool	inside;
-	node_t *headnode;
-
-	headnode = tree->headnode;
-	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "--- FloodEntities ---\n");
-	inside = false;
-	tree->outside_node.occupied = 0;
-
-	c_floodedleafs = 0;
-	bool errorShown = false;
-	for (i=1 ; i<dmapGlobals.num_entities ; i++) {
-		idMapEntity	*mapEnt;
-
-		mapEnt = dmapGlobals.uEntities[i].mapEntity;
-		if ( !mapEnt->epairs.GetVector( "origin", "", origin) ) {
-			continue;
-		}
-
-		// any entity can have "noFlood" set to skip it
-		if ( mapEnt->epairs.GetString( "noFlood", "", &cl ) ) {
-			continue;
-		}
-
-		mapEnt->epairs.GetString( "classname", "", &cl );
-
-		if ( !strcmp( cl, "light" ) ) {
-			const char	*v;
-
-			// don't place lights that have a light_start field, because they can still
-			// be valid if their origin is outside the world
-			mapEnt->epairs.GetString( "light_start", "", &v);
-			if ( v[0] ) {
-				continue;
-			}
-
-			// don't place fog lights, because they often
-			// have origins outside the light
-			mapEnt->epairs.GetString( "texture", "", &v);
-			if ( v[0] ) {
-				const idMaterial *mat = declManager->FindMaterial( v );
-				if ( mat->IsFogLight() ) {
-					continue;
-				}
-			}
-		}
-
-		if (PlaceOccupant (headnode, origin, &dmapGlobals.uEntities[i])) {
-			inside = true;
-		}
-
-		if (tree->outside_node.occupied && !errorShown) {
-			errorShown = true;
-			PrintIfVerbosityAtLeast( VL_CONCISE, "Leak on entity # %d\n", i);
-			const char *p;
-
-			mapEnt->epairs.GetString( "classname", "", &p);
-			PrintIfVerbosityAtLeast( VL_CONCISE, "Entity classname was: %s\n", p);
-			mapEnt->epairs.GetString( "name", "", &p);
-			PrintIfVerbosityAtLeast( VL_CONCISE, "Entity name was: %s\n", p);
-			idVec3 origin;
-			if ( mapEnt->epairs.GetVector( "origin", "", origin)) {
-				PrintIfVerbosityAtLeast( VL_CONCISE, "Entity origin is: %f %f %f\n\n\n", origin.x, origin.y, origin.z);
-			}
-		}
-	}
-
-	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "%5i flooded leafs\n", c_floodedleafs );
-
-	if (!inside)
-	{
-		PrintIfVerbosityAtLeast( VL_CONCISE, "no entities in open -- no filling\n");
-	}
-	else if (tree->outside_node.occupied)
-	{
-		PrintIfVerbosityAtLeast( VL_CONCISE, "entity reached from outside -- no filling\n");
-	}
-
-	return (bool)(inside && !tree->outside_node.occupied);
+	return node;
 }
 
 /*
@@ -661,28 +504,43 @@ FLOOD AREAS
 static	int		c_areas;
 static	int		c_areaFloods;
 
+idCVar dmap_fixVisportalOutOfBoundaryEffects(
+	"dmap_fixVisportalOutOfBoundaryEffects", "1", CVAR_BOOL | CVAR_SYSTEM,
+	"If set to 0, then visportal sometimes blocks areas on its plane outside of its boundary polygon. "
+	"This is a bug fixed in TDM 2.08. "
+);
+
+// complete information about one visportal found for a BSP portal
+// see also FindVisportalsAtPortal
+typedef struct visportalInfo_s {
+	side_t *side;			// brush side being visportal (original brush)
+	uBrush_t *brush;		// brush with this side (original brush)
+	node_t *node;			// incident BSP node where the brush was found
+	uBrush_t *brushPiece;	// piece of the brush inside BSP node
+} visportalInfo_t;
+
 /*
 =================
-FindSideForPortal
+FindVisportalsAtPortal
+
+This function is used to check if BSP portal is covered by visportal(s).
+It also returns a bunch of useful information about detected visportals.
 =================
 */
-static side_t	*FindSideForPortal( uPortal_t *p ) {
-	int		i, j, k;
-	node_t	*node;
-	uBrush_t	*b, *orig;
-	side_t	*s, *s2;
-
+static int FindVisportalsAtPortal( uPortal_t *p, visportalInfo_t *arrFound, int arrCapacity ) {
+	int numFound = 0;
+	idVec3 pctr = p->winding->GetCenter();
 	// scan both bordering nodes brush lists for a portal brush
 	// that shares the plane
-	for ( i = 0 ; i < 2 ; i++ ) {
-		node = p->nodes[i];
-		for ( b = node->brushlist ; b ; b = b->next ) {
+	for ( int i = 0 ; i < 2 ; i++ ) {
+		node_t *node = p->nodes[i];
+		for ( uBrush_t *b = node->brushlist ; b ; b = b->next ) {
 			if ( !( b->contents & CONTENTS_AREAPORTAL ) ) {
 				continue;
 			}
-			orig = b->original;
-			for ( j = 0 ; j < orig->numsides ; j++ ) {
-				s = orig->sides + j;
+			uBrush_t *orig = b->original;
+			for ( int j = 0 ; j < orig->numsides ; j++ ) {
+				side_t *s = orig->sides + j;
 				if ( !s->visibleHull ) {
 					continue;
 				}
@@ -692,27 +550,55 @@ static side_t	*FindSideForPortal( uPortal_t *p ) {
 				if ( ( s->planenum & ~1 ) != ( p->onnode->planenum & ~1 ) ) {
 					continue;
 				}
+				if ( dmap_fixVisportalOutOfBoundaryEffects.GetBool() ) {
+					// stgatilov #5129: visportal side boundary must contain BSP portal to have effect
+					idPlane sidePlane;
+					s->winding->GetPlane( sidePlane );
+					if ( !s->winding->PointInsideDst( sidePlane.Normal(), pctr, CLIP_EPSILON ) ) {
+						continue;
+					}
+				}
 				// remove the visible hull from any other portal sides of this portal brush
-				for ( k = 0; k < orig->numsides; k++ ) {
+				for ( int k = 0; k < orig->numsides; k++ ) {
 					if ( k == j ) {
 						continue;
 					}
-					s2 = orig->sides + k;
+					side_t *s2 = orig->sides + k;
 					if ( s2->visibleHull == NULL ) {
 						continue;
 					}
 					if ( !( s2->material->GetContentFlags() & CONTENTS_AREAPORTAL ) ) {
 						continue;
 					}
-					common->Warning( "brush has multiple area portal sides at %s", s2->visibleHull->GetCenter().ToString() );
+					common->Warning( "brush %d has multiple area portal sides at %s", b->brushnum, s2->visibleHull->GetCenter().ToString() );
 					delete s2->visibleHull;
 					s2->visibleHull = NULL;
 				}
-				return s;
+				visportalInfo_t info;
+				info.side = s;
+				info.brush = orig;
+				info.brushPiece = b;
+				info.node = node;
+				if (numFound < arrCapacity) {
+					arrFound[numFound++] = info;
+				}
 			}
 		}
 	}
-	return NULL;
+	return numFound;
+}
+
+/*
+=================
+FindSideForPortal
+=================
+*/
+static side_t	*FindSideForPortal( uPortal_t *p ) {
+	visportalInfo_s info;
+	if ( FindVisportalsAtPortal(p, &info, 1) )
+		return info.side;
+	else
+		return NULL;
 }
 
 /*
@@ -815,8 +701,64 @@ void ClearAreas_r( node_t *node ) {
 	node->area = -1;
 }
 
+void ClearOccupied_r( node_t *node ) {
+	if ( node->planenum != PLANENUM_LEAF ) {
+		ClearOccupied_r (node->children[0]);
+		ClearOccupied_r (node->children[1]);
+		return;
+	}
+	node->occupied = 0;
+}
+
 //=============================================================
 
+/*
+=================
+IsPortalSame
+=================
+*/
+bool IsPortalSame( interAreaPortal_s *a, interAreaPortal_s *b ) {
+	return a->side == b->side && (
+		a->area0 == b->area0 && a->area1 == b->area1 ||
+		a->area1 == b->area0 && a->area0 == b->area1
+	);
+}
+
+/*
+=================
+ReportOverlappingPortals
+
+Given an array of visportals which all cover given BSP portal,
+reports this problem to user (with warning and pointfile).
+=================
+*/
+static void ReportOverlappingPortals( uPortal_t *portal, visportalInfo_t *visportals, int multiplicity ) {
+	idStr brushlist;
+	for ( int i = 0; i < multiplicity; i++ ) {
+		if (i) brushlist += ',';
+		brushlist += idStr(visportals[i].brush->brushnum);
+	}
+	idStr pos = portal->winding->GetCenter().ToString();
+	common->Warning ( "Portals [%s] at (%s) overlap", brushlist.c_str(), pos.c_str() );
+	pos.Replace('.', 'd');
+	pos.Replace('-', 'm');
+	pos.Replace(' ', '_');
+	idStr filename;
+	sprintf( filename, "%s_portalO_%s.lin", dmapGlobals.mapFileBase, pos.c_str() );
+
+	idStr ospath = fileSystem->RelativePathToOSPath( filename, "fs_devpath", "" );
+	FILE *linefile = fopen( ospath, "w" );
+	if ( !linefile )
+		common->Error( "Couldn't open %s\n", ospath.c_str() );
+	int pn = portal->winding->GetNumPoints();
+	for ( int i = 0; i <= pn; i++ ) {
+		idVec3 p = (*portal->winding)[i % pn].ToVec3();
+		fprintf( linefile, "%f %f %f\n", p.x, p.y, p.z );
+	}
+	fclose( linefile );
+
+	common->Printf( "saved %s (%i points)\n", filename.c_str(), pn + 1 );
+}
 
 /*
 =================
@@ -829,7 +771,6 @@ static void FindInterAreaPortals_r( node_t *node ) {
 	int			s;
 	int			i;
 	idWinding	*w;
-	interAreaPortal_t	*iap;
 	side_t		*side;
 
 	if ( node->planenum != PLANENUM_LEAF ) {
@@ -858,48 +799,585 @@ static void FindInterAreaPortals_r( node_t *node ) {
 			continue;
 		}
 
-		side = FindSideForPortal( p );
-//		w = p->winding;
-		if ( !side ) {
-			common->Warning( "FindSideForPortal failed at %s", p->winding->GetCenter().ToString() );
+		visportalInfo_t info[32];
+		int num = FindVisportalsAtPortal( p, info, 32 );
+		if ( num == 0 ) {
+			common->Warning( "FindVisportalsAtPortal failed at %s", p->winding->GetCenter().ToString() );
 			continue;
 		}
+		side = info[0].side;
 		w = side->visibleHull;
 		if ( !w ) {
 			continue;
 		}
 
-		// see if we have created this portal before
-		for ( i = 0 ; i < numInterAreaPortals ; i++ ) {
-			iap = &interAreaPortals[i];
+		interAreaPortal_t iap;
+		if ( side->planenum == p->onnode->planenum ) {
+			iap.area0 = p->nodes[0]->area;
+			iap.area1 = p->nodes[1]->area;
+		} else {
+			iap.area0 = p->nodes[1]->area;
+			iap.area1 = p->nodes[0]->area;
+		}
+		iap.side = side;
+		iap.brush = info[0].brush;
 
-			if ( side == iap->side &&
-				( ( p->nodes[0]->area == iap->area0 && p->nodes[1]->area == iap->area1 )
-				|| ( p->nodes[1]->area == iap->area0 && p->nodes[0]->area == iap->area1 ) ) ) {
-				break;
+		if ( dmap_bspAllSidesOfVisportal.GetBool() && num > 1 ) {
+			// stgatilov #5129: given that all sides were inserted
+			// every found visportal side must cover this entire BSP portal
+			for ( i = 0 ; i < numOverlappingAreaPortals ; i++ ) {
+				if ( IsPortalSame( &iap, &overlappingAreaPortals[i] ) )
+					break;
+			}
+			if ( i == numOverlappingAreaPortals ) {
+				ReportOverlappingPortals( p, info, num );
+				// avoid reporting ALL overlapping sides between these areas in future
+				for ( i = 0; i < num; i++ ) {
+					interAreaPortal_t temp = iap;
+					temp.side = info[i].side;
+					temp.brush = info[i].brush;
+					overlappingAreaPortals[numOverlappingAreaPortals++] = temp;
+				}
 			}
 		}
 
+		// see if we have created this portal before
+		for ( i = 0 ; i < numInterAreaPortals ; i++ ) {
+			if ( IsPortalSame( &iap, &interAreaPortals[i] ) )
+				break;
+		}
 		if ( i != numInterAreaPortals ) {
 			continue;	// already emited
 		}
 
-		iap = &interAreaPortals[numInterAreaPortals];
-		numInterAreaPortals++;
-		if ( side->planenum == p->onnode->planenum ) {
-			iap->area0 = p->nodes[0]->area;
-			iap->area1 = p->nodes[1]->area;
-		} else {
-			iap->area0 = p->nodes[1]->area;
-			iap->area1 = p->nodes[0]->area;
-		}
-		iap->side = side;
-
+		if (numInterAreaPortals == MAX_INTER_AREA_PORTALS)
+			common->Error("Exceeded limit on number of visportals (%d)", numInterAreaPortals);
+		interAreaPortals[numInterAreaPortals++] = iap;
 	}
 }
 
+/*
+=============
+FindShortestPathThroughBspNodes
 
+Runs Breadth-First Search over entity's BSP tree: leaf nodes = vertices, portals = edges.
+Tries to find shortest path from start to end node.
+=============
+*/
+static bool FindShortestPathThroughBspNodes(
+	uEntity_t *entity, const idList<node_t*> &startNodes, node_t *endNode,
+	bool (*canPass)(void *ctx, node_t *from, uPortal_t *through, node_t *to), void *ctx,
+	idList<node_t*> *resNodes, idList<uPortal_t*> *resPortals, idList<node_t*> *resAllVisited
+) {
+	if (resNodes)
+		resNodes->Clear();
+	if (resPortals)
+		resPortals->Clear();
 
+	idList<node_t*> nodesQueue;
+	idList<int> prevIdx;
+	idList<uPortal_t*> byPortal;
+
+	if ( entity ) {
+		// occupied is used as visited mark and (1 + shortest distance) at once
+		ClearOccupied_r( entity->tree->headnode );
+	}
+
+	bool found = false;
+	for ( int i = 0; i < startNodes.Num(); i++ ) {
+		node_t *node = startNodes[i];
+		if ( node->occupied )
+			continue;
+		nodesQueue.Append( node );
+		node->occupied = 1;
+		prevIdx.Append( -1 );
+		byPortal.Append( NULL );
+		if ( node == endNode )
+			found = true;
+	}
+
+	// pretty standard Breadth-First-Search over leaf-nodes follows:
+	for ( int done = 0; done < nodesQueue.Num() && !found; done++ ) {
+		node_t *node = nodesQueue[done];
+
+		for ( uPortal_t *p = node->portals, *np; p; p = np ) {
+			int s = (p->nodes[1] == node);
+			np = p->next[s];
+			node_t *otherNode = p->nodes[!s];
+
+			if ( otherNode->occupied > 0 )
+				continue;					// already visited that node
+			if ( !canPass( ctx, node, p, otherNode ) )
+				continue;					// forbidden to go through this portal
+
+			otherNode->occupied = node->occupied + 1;
+			nodesQueue.Append(otherNode);
+			prevIdx.Append(done);
+			byPortal.Append(p);
+
+			if ( otherNode == endNode ) {
+				// terminate as soon as path found: hope to avoid visiting the whole map
+				found = true;
+				break;
+			}
+		}
+	}
+
+	if ( resAllVisited )
+		*resAllVisited = nodesQueue;
+
+	if ( !found )
+		return false;
+
+	// backtrace shortest path found by BFS
+	for ( int idx = nodesQueue.Num() - 1; idx >= 0; idx = prevIdx[idx] ) {
+		node_t *node = nodesQueue[idx];
+		uPortal_t *p = byPortal[idx];
+		if (resNodes)
+			resNodes->AddGrow(node);
+		if (resPortals && p)
+			resPortals->AddGrow(p);
+	}
+	if (resNodes)
+		resNodes->Reverse();
+	if (resPortals)
+		resPortals->Reverse();
+
+	if (resNodes && resPortals)
+		assert( resNodes->Num() == resPortals->Num() + 1 );
+	return true;
+}
+
+/*
+=============
+ReportDroppedPortal
+
+given a BSP portal having same area on both of its sides with visportal on it,
+finds and reports a path from one side to the other one
+=============
+*/
+static bool ReportDroppedPortal( uEntity_t *entity, uPortal_t *startPortal ) {
+	int brushnum = -1;
+	visportalInfo_t info;
+	if ( FindVisportalsAtPortal( startPortal, &info, 1 ) )
+		brushnum = info.brush->brushnum;
+
+	auto CanPass_Generic = [](node_t *from, uPortal_t *through, node_t *to ) -> bool {
+		if ( !Portal_Passable( through ) )
+			return false;					// going into solid
+		if ( FindSideForPortal( through ) )
+			return false;					// going through visportal
+		return true;
+	};
+
+	auto CanPass_BlockSidesOfVisportalBrush = [info]( node_t *from, uPortal_t *through, node_t *to ) -> bool {
+		if ( !Portal_Passable( through ) )
+			return false;					// going into solid
+		if ( FindSideForPortal( through ) )
+			return false;					// going through visportal
+
+		uBrush_t *visportalBrush = info.brush;
+		const idPlane &visportalPlane = dmapGlobals.mapPlanes[info.side->planenum];
+
+		// check all sides of the visportal brush
+		for ( int u = 0; u < visportalBrush->numsides; u++ ) {
+			side_t *uside = &visportalBrush->sides[u];
+			const idPlane &usidePlane = dmapGlobals.mapPlanes[uside->planenum];
+
+			if ( (through->onnode->planenum & ~1) != (uside->planenum & ~1) )
+				continue;	// not on side (wrong plane)
+
+			idPlane windingPlane;
+			uside->winding->GetPlane( windingPlane );
+			if ( !uside->winding->PointInsideDst( windingPlane.Normal(), through->winding->GetCenter(), CLIP_EPSILON ) )
+				continue;	// not on side (out of polygon)
+
+			if ( usidePlane.Normal().Cross( visportalPlane.Normal() ).LengthSqr() <= VECTOR_EPSILON * VECTOR_EPSILON )
+				continue;	// side parallel to visportalled one: can pass
+
+			// cannot pass through nonparallel side of visportal brush
+			return false;
+		}
+
+		return true;
+	};
+
+	auto CanPass_GoAlongVisportal = [info]( node_t *from, uPortal_t *through, node_t *to ) {
+		if ( !Portal_Passable( through ) )
+			return false;					// going into solid
+		if ( FindSideForPortal( through ) )
+			return false;					// going through visportal
+
+		const idWinding &portalWinding = *info.side->winding;
+
+		for ( uPortal_t *p = to->portals, *np; p; p = np) {
+			int s = (p->nodes[1] == to);
+			np = p->next[s];
+
+			const idWinding &w = *p->winding;
+			if (portalWinding.PointLiesOn(w.GetCenter(), CLIP_EPSILON))
+				return true;		// dest node touches visportal by face
+
+			int cnt = w.GetNumPoints();
+			for (int i = 0; i < cnt; i++) {
+				idVec3 beg = w[i].ToVec3();
+				idVec3 end = w[(i+1) % cnt].ToVec3();
+				if (portalWinding.PointLiesOn((beg + end) * 0.5, CLIP_EPSILON))
+					return true;	// dest node touches visportal by edge
+			}
+		}
+
+		return false;
+	};
+
+	idList<node_t*> pathNodes;
+	idList<uPortal_t*> pathPortals;
+
+	// check if we can find cycle over BSP nodes which touch visportal
+	// if yes, then some part of visportal boundary does not contact opaque geometry (or other visportal)
+	bool leakyBoundary = FindShortestPathThroughBspNodes(
+		entity, {startPortal->nodes[0]}, startPortal->nodes[1],
+		LambdaToFuncPtr(CanPass_GoAlongVisportal), &CanPass_GoAlongVisportal,
+		NULL, NULL, NULL
+	);
+
+	// try to find nice-looking cycle with additional constraint:
+	// it does NOT go through side faces of visportal brush
+	bool foundNicePath = FindShortestPathThroughBspNodes(
+		entity, {startPortal->nodes[0]}, startPortal->nodes[1],
+		LambdaToFuncPtr(CanPass_BlockSidesOfVisportalBrush), &CanPass_BlockSidesOfVisportalBrush,
+		&pathNodes, &pathPortals, NULL
+	);
+
+	bool found = foundNicePath;
+	if (!found) {
+		// try to find find arbitrary cycle
+		found = FindShortestPathThroughBspNodes(
+			entity, {startPortal->nodes[0]}, startPortal->nodes[1],
+			LambdaToFuncPtr(CanPass_Generic), &CanPass_Generic,
+			&pathNodes, &pathPortals, NULL
+		);
+	}
+
+	if (!found)
+		return false;	//still not found? should not happen
+	
+	// produce polyline loop
+	idList<idVec3> pathPoints;
+	pathPoints.AddGrow( startPortal->winding->GetCenter() );
+	for (int i = 0; i < pathPortals.Num(); i++)
+		pathPoints.AddGrow( pathPortals[i]->winding->GetCenter() );
+	pathPoints.AddGrow( startPortal->winding->GetCenter() );
+
+	idStr pos = startPortal->winding->GetCenter().ToString();
+	common->Warning ( "Portal %d at (%s) dropped%s", brushnum, pos.c_str(), (leakyBoundary ? " as leaky" : "") );
+	pos.Replace('.', 'd');
+	pos.Replace('-', 'm');
+	pos.Replace(' ', '_');
+	idStr filename;
+	sprintf( filename, "%s_portal%c_%s.lin", dmapGlobals.mapFileBase, (leakyBoundary ? 'L' : 'D'), pos.c_str() );
+
+	idStr ospath = fileSystem->RelativePathToOSPath( filename, "fs_devpath", "" );
+	FILE *linefile = fopen( ospath, "w" );
+	if ( !linefile )
+		common->Error( "Couldn't open %s\n", ospath.c_str() );
+	for ( idVec3 p : pathPoints )
+		fprintf( linefile, "%f %f %f\n", p.x, p.y, p.z );
+	fclose( linefile );
+
+	common->Printf( "saved %s (%i points)\n", filename.c_str(), pathPoints.Num() );
+	return true;
+}
+
+/*
+=============
+DetectUnusedAreaPortals_r
+
+traverses whole BSP tree, finds "dropped" visportals (i.e. having same area on both sides)
+=============
+*/
+static void DetectUnusedAreaPortals_r( uEntity_t *entity, node_t *node ) {
+	if ( node->planenum != PLANENUM_LEAF ) {
+		DetectUnusedAreaPortals_r( entity, node->children[0] );
+		DetectUnusedAreaPortals_r( entity, node->children[1] );
+		return;
+	}
+
+	if ( node->opaque )
+		return;
+
+	int s;
+	for ( uPortal_t *p = node->portals; p; p = p->next[s] ) {
+		s = (p->nodes[1] == node);
+
+		node_t *other = other = p->nodes[!s];
+		if ( other->opaque )
+			continue;
+
+		visportalInfo_s info;
+		if ( !FindVisportalsAtPortal(p, &info, 1) )
+			continue;
+		side_t *side = info.side;
+		if ( !side )
+			continue;
+
+		idWinding *w = side->visibleHull;
+		if ( !w )
+			continue;
+
+		interAreaPortal_t iap;
+		if ( side->planenum == p->onnode->planenum ) {
+			iap.area0 = p->nodes[0]->area;
+			iap.area1 = p->nodes[1]->area;
+		} else {
+			iap.area0 = p->nodes[1]->area;
+			iap.area1 = p->nodes[0]->area;
+		}
+		iap.side = side;
+		iap.brush = info.brush;
+
+		// see if we have created visportal here
+		int i;
+		for ( i = 0 ; i < numInterAreaPortals ; i++ ) {
+			if ( IsPortalSame( &iap, &interAreaPortals[i] ) )
+				break;
+		}
+		if ( i != numInterAreaPortals )
+			continue;
+
+		// see if we already reported it as dropped
+		for ( i = 0 ; i < numDroppedAreaPortals ; i++ ) {
+			if ( IsPortalSame( &iap, &droppedAreaPortals[i] ) )
+				break;
+		}
+		if ( i != numDroppedAreaPortals )
+			continue;
+
+		// TODO: what about dropped visportals separating two areas?
+		// is it true that such situation never happens?
+		if ( other->area != node->area ) {
+			common->Warning("Inter-area portal dropped at %s", p->winding->GetCenter().ToString());
+			continue;
+		}
+
+		// stop wasting time if there are too many dropped portals already
+		if (numDroppedAreaPortals < 100) {
+			ReportDroppedPortal(entity, p);
+		}
+		droppedAreaPortals[numDroppedAreaPortals++] = iap;
+	}
+}
+
+/*
+=============
+ReportUnreferencedAreaPortals
+
+find any portals which did not get into level and was not otherwise reported yet
+=============
+*/
+void ReportUnreferencedAreaPortals( uEntity_t *entity ) {
+	for ( primitive_t *prim = entity->primitives; prim; prim = prim->next ) {
+		uBrush_t *b = prim->brush;
+		if ( !b )
+			continue;
+		if ( !(b->contents & CONTENTS_AREAPORTAL) )
+			continue;
+
+		for ( int i = 0 ; i < b->numsides ; i++ ) {
+			side_t *side = &b->sides[i];
+			if ( !(side->material->GetContentFlags() & CONTENTS_AREAPORTAL) )
+				continue;
+
+			bool referenced = false;
+			for ( int j = 0 ; !referenced && j < numInterAreaPortals ; j++ )
+				if ( interAreaPortals[j].side == side )
+					referenced = true;
+			for ( int j = 0 ; !referenced && j < numDroppedAreaPortals ; j++ )
+				if ( droppedAreaPortals[j].side == side )
+					referenced = true;
+			for ( int j = 0 ; !referenced && j < numOverlappingAreaPortals ; j++ )
+				if ( overlappingAreaPortals[j].side == side )
+					referenced = true;
+
+			if ( !referenced ) {
+				common->Warning( "Portal %d at (%s) is useless", b->brushnum, side->winding->GetCenter().ToString() );
+			}
+			break;
+		}
+	}
+}
+
+/*
+=============
+CheckInfoLocations
+
+Verify that info_location entities are in different map areas.
+Report any issues as warnings and pointfiles.
+=============
+*/
+static void CheckInfoLocations(uEntity_t *e) {
+	// is there location separator at each inter-area portal?
+	idList<const char *> separatorPerVisportal;
+	separatorPerVisportal.SetNum(numInterAreaPortals);
+	memset(separatorPerVisportal.Ptr(), NULL, separatorPerVisportal.Allocated());
+
+	// read location separators and fill separatorPerVisportal
+	for (int entnum = 1; entnum < dmapGlobals.num_entities; entnum++) {
+		const idDict &spawnargs = dmapGlobals.uEntities[entnum].mapEntity->epairs;
+
+		const char *classname = spawnargs.GetString("classname", "");
+		if ( idStr::Icmp(classname, "info_locationseparator") != 0)
+			continue;
+		const char *name = spawnargs.GetString("name", "???");
+		idVec3 origin = spawnargs.GetVector("origin");
+
+		idBounds box = idPortalEntity::GetBounds(origin);
+		int cnt = 0, prevJ = -1;
+		for (int j = 0; j < numInterAreaPortals; j++) {
+			const idWinding &w = *interAreaPortals[j].side->winding;
+			int brushnum = interAreaPortals[j].brush->brushnum;
+			if (!idRenderWorldLocal::DoesVisportalContactBox(w, box))
+				continue;
+
+			const char* &refSep = separatorPerVisportal[j];
+			if (refSep) {
+				common->Warning(
+					"Separators %s and %s cover same portal %d at %s",
+					refSep, name, brushnum, w.GetCenter().ToString()
+				);
+			}
+			else
+				refSep = name;
+
+			if (prevJ >= 0) {
+				const idWinding &prevW = *interAreaPortals[prevJ].side->winding;
+				int prevNum = interAreaPortals[prevJ].brush->brushnum;
+				common->Warning(
+					"Separator %s covers both portal %d at %s and portal %d at %s",
+					name, prevNum, prevW.GetCenter().ToString(), brushnum, w.GetCenter().ToString()
+				);
+			}
+			cnt++;
+			prevJ = j;
+		}
+
+		if (cnt == 0) {
+			common->Warning("Separator %s does not cover any portal", name);
+		}
+	}
+
+	auto CanPass_Locations = [&separatorPerVisportal](node_t *from, uPortal_t *through, node_t *to) -> bool {
+		if ( !Portal_Passable( through ) )
+			return false;					// going into solid
+
+		visportalInfo_t info;
+		if ( !FindVisportalsAtPortal( through, &info, 1 ) )
+			return true;					// can go
+		interAreaPortal_t iap = {0};
+		iap.side = info.side;
+		iap.area0 = through->nodes[0]->area;
+		iap.area1 = through->nodes[1]->area;
+
+		// find visportal we are going through
+		for (int i = 0; i < numInterAreaPortals; i++) {
+			if (IsPortalSame(&iap, &interAreaPortals[i])) {
+				// check if it is covered by location separator
+				if (separatorPerVisportal[i])
+					return false;
+			}
+		}
+
+		return true;
+	};
+
+	struct ILTag {
+		const char *name = NULL;
+		idVec3 origin;
+		node_t *node = NULL;
+	};
+	// which info_location occupies each area
+	idList<ILTag> ilInArea;
+	ilInArea.SetNum(e->numAreas);
+
+	// clear occupied marks now
+	// we will run many searches without clearing marks in-between
+	ClearOccupied_r( e->tree->headnode );
+
+	// read location entities and flood BSP tree from each one
+	for (int entnum = 1; entnum < dmapGlobals.num_entities; entnum++) {
+		const idDict &spawnargs = dmapGlobals.uEntities[entnum].mapEntity->epairs;
+
+		const char *classname = spawnargs.GetString("classname", "");
+		if ( idStr::Icmp(classname, "info_location") != 0)
+			continue;
+		const char *name = spawnargs.GetString("name", "???");
+		idVec3 origin = spawnargs.GetVector("origin");
+
+		node_t *node = FindLeafNodeAtPoint( e->tree->headnode, origin );
+		if (node->opaque) {
+			common->Warning("Location %s is inside opaque geometry", name);
+			continue;
+		}
+
+		int area = node->area;
+		if (!ilInArea[area].node) {
+			// there is no info_location in this area yet
+			// mark all reachable areas as occupied by this info_location
+			idList<node_t*> visited;
+			FindShortestPathThroughBspNodes(
+				NULL, {node}, NULL,
+				LambdaToFuncPtr(CanPass_Locations), &CanPass_Locations,
+				NULL, NULL, &visited
+			);
+			for (int i = 0; i < visited.Num(); i++) {
+				int visArea = visited[i]->area;
+				ilInArea[visArea].name = name;
+				ilInArea[visArea].node = node;
+				ilInArea[visArea].origin = origin;
+			}
+		}
+		else {
+			// this area already occupied by another location entity
+			// find path between them and report it
+			const ILTag &tag = ilInArea[area];
+
+			// we have to clear marks now, since we search path in already visited area
+			ClearOccupied_r( e->tree->headnode );
+
+			idList<node_t*> pathNodes;
+			idList<uPortal_t*> pathPortals;
+			bool found = FindShortestPathThroughBspNodes(
+				NULL, {node}, tag.node,
+				LambdaToFuncPtr(CanPass_Locations), &CanPass_Locations,
+				&pathNodes, &pathPortals, NULL
+			);
+			if (!found) {
+				common->Warning("Failed to find path between overlapping info_locations");
+				return;
+			}
+
+			idList<idVec3> pathPoints;
+			pathPoints.AddGrow(origin);
+			for (int j = 0; j < pathPortals.Num(); j++)
+				pathPoints.AddGrow(pathPortals[j]->winding->GetCenter());
+			pathPoints.AddGrow(tag.origin);
+
+			common->Warning ( "Locations %s and %s overlap", name, tag.name );
+			idStr filename;
+			sprintf( filename, "%s_locationO_%s_%s.lin", dmapGlobals.mapFileBase, name, tag.name );
+
+			idStr ospath = fileSystem->RelativePathToOSPath( filename, "fs_devpath", "" );
+			FILE *linefile = fopen( ospath, "w" );
+			if ( !linefile )
+				common->Error( "Couldn't open %s\n", ospath.c_str() );
+			for ( idVec3 p : pathPoints )
+				fprintf( linefile, "%f %f %f\n", p.x, p.y, p.z );
+			fclose( linefile );
+
+			common->Printf( "saved %s (%i points)\n", filename.c_str(), pathPoints.Num() );
+		}
+	}
+}
 
 
 /*
@@ -911,6 +1389,7 @@ Sets e->areas.numAreas
 =============
 */
 void FloodAreas( uEntity_t *e ) {
+	TRACE_CPU_SCOPE_TEXT("FloodAreas", e->nameEntity)
 	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "--- FloodAreas ---\n");
 
 	// set all areas to -1
@@ -929,8 +1408,157 @@ void FloodAreas( uEntity_t *e ) {
 	// identify all portals between areas if this is the world
 	if ( e == &dmapGlobals.uEntities[0] ) {
 		numInterAreaPortals = 0;
+		numOverlappingAreaPortals = 0;
 		FindInterAreaPortals_r( e->tree->headnode );
+
+		// stgatilov #5129: detecting dropped portals
+		numDroppedAreaPortals = 0;
+		DetectUnusedAreaPortals_r(e, e->tree->headnode);
+		// stgatilov #5129: detecting other issues
+		// for instance, portals fully inside opaque or on opaque surface
+		ReportUnreferencedAreaPortals(e);
+
+		// stgatilov #5354: check info_location-s
+		CheckInfoLocations(e);
 	}
+}
+
+/*
+=========================================================
+
+FLOOD ENTITIES
+
+=========================================================
+*/
+
+/*
+=============
+FloodEntities
+
+Marks all nodes that can be reached by entites
+stgatilov #5592: also report leak if it exists
+=============
+*/
+bool FloodEntities( tree_t *tree ) {
+	PrintIfVerbosityAtLeast( VL_ORIGDEFAULT, "--- FloodEntities ---\n");
+	TRACE_CPU_SCOPE("FloodEntities")
+
+	// stgatilov: list of nodes where entities are put
+	idList<node_t*> entNodes;
+	idList<int> entIds;
+
+	// collect all entities to flood from
+	for (int i = 1; i < dmapGlobals.num_entities; i++) {
+		idMapEntity	*mapEnt = dmapGlobals.uEntities[i].mapEntity;
+
+		idVec3 origin;
+		if ( !mapEnt->epairs.GetVector( "origin", "", origin) ) {
+			continue;
+		}
+
+		// any entity can have "noFlood" set to skip it
+		const char *cl;
+		if ( mapEnt->epairs.GetString( "noFlood", "", &cl ) ) {
+			continue;
+		}
+
+		mapEnt->epairs.GetString( "classname", "", &cl );
+
+		if ( !strcmp( cl, "light" ) ) {
+			const char	*v;
+
+			// don't place lights that have a light_start field, because they can still
+			// be valid if their origin is outside the world
+			mapEnt->epairs.GetString( "light_start", "", &v);
+			if ( v[0] ) {
+				continue;
+			}
+
+			// don't place fog lights, because they often
+			// have origins outside the light
+			mapEnt->epairs.GetString( "texture", "", &v);
+			if ( v[0] ) {
+				const idMaterial *mat = declManager->FindMaterial( v );
+				if ( mat->IsFogLight() ) {
+					continue;
+				}
+			}
+		}
+
+		node_t *node = FindLeafNodeAtPoint( tree->headnode, origin );
+		if ( node->opaque ) {
+			continue;
+		}
+
+		entNodes.AddGrow(node);
+		entIds.AddGrow(i);
+	}
+
+	ClearOccupied_r( tree->headnode );
+	tree->outside_node.occupied = 0;
+	auto CanPass_NonOpaque = [tree](node_t *from, uPortal_t *through, node_t *to) -> bool {
+		if ( Portal_Passable(through) )
+			return true;
+		if ( to == &tree->outside_node )
+			return true;
+		return false;
+	};
+	// run flood algorithm from all nodes containing entities simultaneously
+	idList<node_t*> pathNodes;
+	idList<uPortal_t*> pathPortals;
+	bool found = FindShortestPathThroughBspNodes(
+		NULL, entNodes, &tree->outside_node,
+		LambdaToFuncPtr(CanPass_NonOpaque), &CanPass_NonOpaque,
+		&pathNodes, &pathPortals, NULL
+	);
+
+	if ( found ) {
+		// find any entity in the node path starts from
+		node_t *startNode = pathNodes[0];
+		int q = entNodes.FindIndex(startNode);
+		assert(q >= 0);
+
+		int i = entIds[q];
+		idMapEntity	*mapEnt = dmapGlobals.uEntities[i].mapEntity;
+
+		PrintIfVerbosityAtLeast( VL_CONCISE, "Leak on entity # %d\n", i );
+		const char *classname = mapEnt->epairs.GetString( "classname", "" );
+		PrintIfVerbosityAtLeast( VL_CONCISE, "Entity classname was: %s\n", classname );
+		const char *name = mapEnt->epairs.GetString( "name", "" );
+		PrintIfVerbosityAtLeast( VL_CONCISE, "Entity name was: %s\n", name );
+		idVec3 origin = mapEnt->epairs.GetVector( "origin" );
+		PrintIfVerbosityAtLeast( VL_CONCISE, "Entity origin is: %f %f %f\n", origin.x, origin.y, origin.z);
+
+		idList<idVec3> pathPoints;
+		pathPoints.AddGrow(origin);
+		for (int j = 0; j < pathPortals.Num(); j++)
+			pathPoints.AddGrow(pathPortals[j]->winding->GetCenter());
+		pathPoints.Reverse();
+
+		common->Warning ( "Leak detected to entity %s", name );
+		idStr filename;
+		sprintf( filename, "%s.lin", dmapGlobals.mapFileBase );
+
+		idStr ospath = fileSystem->RelativePathToOSPath( filename, "fs_devpath", "" );
+		FILE *linefile = fopen( ospath, "w" );
+		if ( !linefile )
+			common->Error( "Couldn't open %s\n", ospath.c_str() );
+		for ( idVec3 p : pathPoints )
+			fprintf( linefile, "%f %f %f\n", p.x, p.y, p.z );
+		fclose( linefile );
+
+		common->Printf( "saved %s (%i points)\n", filename.c_str(), pathPoints.Num() );
+	}
+
+	if ( entNodes.Num() == 0 ) {
+		PrintIfVerbosityAtLeast( VL_CONCISE, "no entities in open -- no filling\n");
+		return false;
+	}
+	else if ( tree->outside_node.occupied ) {
+		PrintIfVerbosityAtLeast( VL_CONCISE, "entity reached from outside -- no filling\n");
+		return false;
+	}
+	return true;
 }
 
 /*
@@ -977,6 +1605,7 @@ Fill (set node->opaque = true) all nodes that can't be reached by entities
 =============
 */
 void FillOutside( uEntity_t *e ) {
+	TRACE_CPU_SCOPE("FillOutside")
 	c_outside = 0;
 	c_inside = 0;
 	c_solid = 0;

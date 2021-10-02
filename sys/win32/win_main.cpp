@@ -1,15 +1,15 @@
 /*****************************************************************************
-                    The Dark Mod GPL Source Code
+The Dark Mod GPL Source Code
 
- This file is part of the The Dark Mod Source Code, originally based
- on the Doom 3 GPL Source Code as published in 2011.
+This file is part of the The Dark Mod Source Code, originally based
+on the Doom 3 GPL Source Code as published in 2011.
 
- The Dark Mod Source Code is free software: you can redistribute it
- and/or modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation, either version 3 of the License,
- or (at your option) any later version. For details, see LICENSE.TXT.
+The Dark Mod Source Code is free software: you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version. For details, see LICENSE.TXT.
 
- Project: The Dark Mod (http://www.thedarkmod.com/)
+Project: The Dark Mod (http://www.thedarkmod.com/)
 
 ******************************************************************************/
 
@@ -29,6 +29,11 @@
 #include <sys/stat.h>
 #endif
 
+#pragma warning(push)
+#pragma warning(disable: 4091)
+#include "dbghelp.h"
+#pragma warning(pop)
+
 #include "../sys_local.h"
 #include "win_local.h"
 #include "rc/CreateResourceIDs.h"
@@ -37,30 +42,26 @@
 #include <string>
 #include <vector>
 #include "StdString.h"
+#include "../../tests/TestRun.h"
+#include <iostream>
 
-idCVar Win32Vars_t::sys_arch( "sys_arch", "", CVAR_SYSTEM | CVAR_INIT, "" );
-idCVar Win32Vars_t::sys_cpustring( "sys_cpustring", "detect", CVAR_SYSTEM | CVAR_INIT, "" );
 idCVar Win32Vars_t::in_mouse( "in_mouse", "1", CVAR_SYSTEM | CVAR_BOOL, "enable mouse input" );
-idCVar Win32Vars_t::win_username( "win_username", "", CVAR_SYSTEM | CVAR_INIT, "windows user name" );
 idCVar Win32Vars_t::win_xpos( "win_xpos", "3", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "horizontal position of window" );
 idCVar Win32Vars_t::win_ypos( "win_ypos", "22", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "vertical position of window" );
+idCVarBool Win32Vars_t::win_maximized( "win_maximized", "0", CVAR_SYSTEM | CVAR_ARCHIVE, "maximized state of window" );
 idCVar Win32Vars_t::win_outputDebugString( "win_outputDebugString", "0", CVAR_SYSTEM | CVAR_BOOL, "" );
 idCVar Win32Vars_t::win_outputEditString( "win_outputEditString", "1", CVAR_SYSTEM | CVAR_BOOL, "" );
 idCVar Win32Vars_t::win_viewlog( "win_viewlog", "0", CVAR_SYSTEM | CVAR_INTEGER, "" );
 idCVar Win32Vars_t::win_timerUpdate( "win_timerUpdate", "0", CVAR_SYSTEM | CVAR_BOOL, "allows the game to be updated while dragging the window" );
+idCVarBool Win32Vars_t::win_topmost("win_topmost", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "add topmost flag to Doom 3 window during creation: no other window can occlude it");
 
 Win32Vars_t	win32;
 
 static char		sys_cmdline[MAX_STRING_CHARS];
 
-// not a hard limit, just what we keep track of for debugging
-xthreadInfo *g_threads[MAX_THREADS];
-
-int g_thread_count = 0;
-
-static	xthreadInfo	threadInfo;
 static	HANDLE		hTimer;
 
+#if 0
 /*
 ==================
 Sys_Createthread
@@ -108,6 +109,8 @@ void Sys_DestroyThread( xthreadInfo &info ) {
 	info.threadHandle = 0;
 }
 
+#endif
+
 /*
 ==================
 Sys_Sentry
@@ -116,28 +119,6 @@ Sys_Sentry
 void Sys_Sentry() {
 	int j = 0;
 }
-
-/*
-==================
-Sys_GetThreadName
-==================
-*/
-const char *Sys_GetThreadName( int *index ) {
-	DWORD id = GetCurrentThreadId();
-	for ( int i = 0; i < g_thread_count; i++ ) {
-		if ( id == g_threads[i]->threadId ) {
-			if ( index ) {
-				*index = i;
-			}
-			return g_threads[i]->name;
-		}
-	}
-	if ( index ) {
-		*index = -1;
-	}
-	return "main";
-}
-
 
 /*
 ==================
@@ -168,12 +149,12 @@ Sys_WaitForEvent
 ==================
 */
 void Sys_WaitForEvent( int index ) {
-	assert( index == 0 );
-	if ( !win32.backgroundDownloadSemaphore ) {
-		win32.backgroundDownloadSemaphore = CreateEvent( NULL, TRUE, FALSE, NULL );
+	assert( index >= 0 && index < MAX_TRIGGER_EVENTS );
+	if ( !win32.events[index] ) {
+		win32.events[index] = CreateEvent( NULL, TRUE, FALSE, NULL );
 	}
-	WaitForSingleObject( win32.backgroundDownloadSemaphore, INFINITE );
-	ResetEvent( win32.backgroundDownloadSemaphore );
+	WaitForSingleObject( win32.events[index], INFINITE );
+	ResetEvent( win32.events[index] );
 }
 
 /*
@@ -182,11 +163,10 @@ Sys_TriggerEvent
 ==================
 */
 void Sys_TriggerEvent( int index ) {
-	assert( index == 0 );
-	SetEvent( win32.backgroundDownloadSemaphore );
+	assert( index >= 0 && index < MAX_TRIGGER_EVENTS );
+	SetEvent( win32.events[index] );
 }
 
-#pragma optimize( "", on )
 
 #ifdef DEBUG
 
@@ -466,42 +446,6 @@ ID_TIME_T Sys_FileTimeStamp( FILE *fp ) {
 	struct _stat st;
 	_fstat( _fileno( fp ), &st );
 	return ( long ) st.st_mtime;
-}
-
-/*
-=================
-Sys_DosToUnixTime
-=================
-*/
-ID_TIME_T Sys_DosToUnixTime( unsigned long dostime ) {
-	ID_TIME_T unix_time = 0;
-	unsigned int sec, min, hour, day, mon, year;
-	struct tm dostm;
-
-	// break dos time down into its sec, min, hour components
-	sec = ( dostime & 0x1F ) * 2;
-	min = ( dostime & 0x7E0 ) >> 5;
-	hour = ( dostime & 0xF800 )  >> 11;
-
-	// temporarily remove time component
-	year = dostime >> 16;
-
-	// break dos date down into its day, month, year components
-	day = year & 0x1F;
-	mon = ( year & 0x1E0 ) >> 5;
-	year = ( year >> 9 ) + 1980;
-
-	if ( sec <= 60 && min <= 59 && hour <= 23 && day >= 1 && day <= 31 && mon >= 1 && mon <= 12 && year <= 2107 ) {
-		dostm.tm_sec = sec;
-		dostm.tm_min = min;
-		dostm.tm_hour = hour;
-		dostm.tm_mday = day;
-		dostm.tm_mon = mon - 1;
-		dostm.tm_year = year - 1900;
-
-		unix_time = mktime( &dostm );
-	}
-	return ( long ) unix_time;
 }
 
 /*
@@ -944,12 +888,15 @@ void Sys_In_Restart_f( const idCmdArgs &args ) {
 Sys_AsyncThread
 ==================
 */
-static THREAD_RETURN_TYPE Sys_AsyncThread( void *parm ) {
+static void Sys_AsyncThread( void *parm ) {
 	int		wakeNumber;
 	int		startTime;
 
 	startTime = Sys_Milliseconds();
 	wakeNumber = 0;
+
+	// stgatilov #4550: set FPU props (FTZ + DAZ, etc.)
+	sys->ThreadStartup();
 
 	while ( 1 ) {
 #ifdef WIN32
@@ -974,7 +921,6 @@ static THREAD_RETURN_TYPE Sys_AsyncThread( void *parm ) {
 
 		common->Async();
 	}
-	return ( THREAD_RETURN_TYPE )0;
 }
 
 /*
@@ -987,22 +933,28 @@ Start the thread that will call idCommon::Async()
 void Sys_StartAsyncThread( void ) {
 	// create an auto-reset event that happens 60 times a second
 	hTimer = CreateWaitableTimer( NULL, false, NULL );
-
 	if ( !hTimer ) {
 		common->Error( "idPacketServer::Spawn: CreateWaitableTimer failed" );
 	}
+
+	//stgatilov #4514: run idCommonLocal::Async every 3 ms
+	//ideally, game tic should be incremented every 16.66 ms, but we cannot specify interval up to microseconds
+	//incrementing it every 16 ms causes double frames =( so we do it simply more often
+	//Note: actual tics happen only every 16.66 ms on average (see idCommonLocal::Async)
+	const int intervalMS = 3;		//USERCMD_MSEC;
+
 	LARGE_INTEGER	t;
 	t.HighPart = t.LowPart = 0;
-	SetWaitableTimer( hTimer, &t, USERCMD_MSEC, NULL, NULL, TRUE );
+	SetWaitableTimer( hTimer, &t, intervalMS, NULL, NULL, TRUE );
 
-	Sys_CreateThread( Sys_AsyncThread, NULL, THREAD_ABOVE_NORMAL, threadInfo, "Async", g_threads,  &g_thread_count );
+	auto threadInfo = Sys_CreateThread( (xthread_t)Sys_AsyncThread, NULL, THREAD_ABOVE_NORMAL, "Async" );
 
 #ifdef SET_THREAD_AFFINITY
 	// give the async thread an affinity for the second cpu
 	SetThreadAffinityMask( ( HANDLE )threadInfo.threadHandle, 2 );
 #endif
 
-	if ( !threadInfo.threadHandle ) {
+	if ( !threadInfo ) {
 		common->Error( "Sys_StartAsyncThread: failed" );
 	}
 }
@@ -1039,11 +991,6 @@ void Sys_Init( void ) {
 #endif
 
 	//
-	// Windows user name
-	//
-	win32.win_username.SetString( Sys_GetCurrentUser() );
-
-	//
 	// Windows version
 	//
 	win32.osversion.dwOSVersionInfoSize = sizeof( win32.osversion );
@@ -1059,140 +1006,10 @@ void Sys_Init( void ) {
 	if ( win32.osversion.dwPlatformId == VER_PLATFORM_WIN32s ) {
 		Sys_Error( GAME_NAME " doesn't run on Win32s" );
 	}
-
-	if ( win32.osversion.dwPlatformId == VER_PLATFORM_WIN32_NT ) {
-		if ( win32.osversion.dwMajorVersion <= 4 ) {
-			win32.sys_arch.SetString( "WinNT (NT)" );
-		} else if ( win32.osversion.dwMajorVersion == 5 && win32.osversion.dwMinorVersion == 0 ) {
-			win32.sys_arch.SetString( "Win2K (NT)" );
-		} else if ( win32.osversion.dwMajorVersion == 5 && win32.osversion.dwMinorVersion == 1 ) {
-			win32.sys_arch.SetString( "WinXP (NT)" );
-		} else if ( win32.osversion.dwMajorVersion == 6 ) {
-			win32.sys_arch.SetString( "Vista" );
-		} else if ( win32.osversion.dwMajorVersion == 6 && win32.osversion.dwMinorVersion == 1 ) {
-			win32.sys_arch.SetString( "Windows 7" );
-		} else {
-			win32.sys_arch.SetString( "Unknown NT variant" );
-		}
-	} else if ( win32.osversion.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS ) {
-		if ( win32.osversion.dwMajorVersion == 4 && win32.osversion.dwMinorVersion == 0 ) {
-			// Win95
-			if ( win32.osversion.szCSDVersion[1] == 'C' ) {
-				win32.sys_arch.SetString( "Win95 OSR2 (95)" );
-			} else {
-				win32.sys_arch.SetString( "Win95 (95)" );
-			}
-		} else if ( win32.osversion.dwMajorVersion == 4 && win32.osversion.dwMinorVersion == 10 ) {
-			// Win98
-			if ( win32.osversion.szCSDVersion[1] == 'A' ) {
-				win32.sys_arch.SetString( "Win98SE (95)" );
-			} else {
-				win32.sys_arch.SetString( "Win98 (95)" );
-			}
-		} else if ( win32.osversion.dwMajorVersion == 4 && win32.osversion.dwMinorVersion == 90 ) {
-			// WinMe
-			win32.sys_arch.SetString( "WinMe (95)" );
-		} else {
-			win32.sys_arch.SetString( "Unknown 95 variant" );
-		}
-	} else {
-		win32.sys_arch.SetString( "unknown Windows variant" );
-	}
-
 	//
 	// CPU type
 	//
-	if ( !idStr::Icmp( win32.sys_cpustring.GetString(), "detect" ) ) {
-		idStr string;
-
-		common->Printf( "%1.0f MHz ", Sys_ClockTicksPerSecond() / 1000000.0f );
-
-		win32.cpuid = Sys_GetCPUId();
-
-		string.Clear();
-
-		if ( win32.cpuid & CPUID_AMD ) {
-			string += "AMD CPU";
-		} else if ( win32.cpuid & CPUID_INTEL ) {
-			string += "Intel CPU";
-		} else if ( win32.cpuid & CPUID_UNSUPPORTED ) {
-			string += "unsupported CPU";
-		} else {
-			string += "generic CPU";
-		}
-		string += " with ";
-
-		if ( win32.cpuid & CPUID_MMX ) {
-			string += "MMX & ";
-		}
-		if ( win32.cpuid & CPUID_SSE ) {
-			string += "SSE & ";
-		}
-		if ( win32.cpuid & CPUID_SSE2 ) {
-			string += "SSE2 & ";
-		}
-		if ( win32.cpuid & CPUID_SSE3 ) {
-			string += "SSE3 & ";
-		}
-		if ( win32.cpuid & CPUID_SSSE3 ) {
-			string += "SSSE3 & ";
-		}
-		if ( win32.cpuid & CPUID_SSE41 ) {
-			string += "SSE41 & ";
-		}
-		if ( win32.cpuid & CPUID_AVX ) {
-			string += "AVX & ";
-		}
-		if ( win32.cpuid & CPUID_AVX2 ) {
-			string += "AVX2 & ";
-		}
-		if ( win32.cpuid & CPUID_FMA3 ) {
-			string += "FMA3 & ";
-		}
-		string.StripTrailing( " & " );
-		string.StripTrailing( " with " );
-		win32.sys_cpustring.SetString( string );
-	} else {
-		common->Printf( "forcing CPU type to " );
-		idLexer src( win32.sys_cpustring.GetString(), idStr::Length( win32.sys_cpustring.GetString() ), "sys_cpustring" );
-		idToken token;
-
-		int id = CPUID_NONE;
-		while ( src.ReadToken( &token ) ) {
-			if ( token.Icmp( "generic" ) == 0 ) {
-				id |= CPUID_GENERIC;
-			} else if ( token.Icmp( "intel" ) == 0 ) {
-				id |= CPUID_INTEL;
-			} else if ( token.Icmp( "amd" ) == 0 ) {
-				id |= CPUID_AMD;
-			} else if ( token.Icmp( "mmx" ) == 0 ) {
-				id |= CPUID_MMX;
-			} else if ( token.Icmp( "sse" ) == 0 ) {
-				id |= CPUID_SSE;
-			} else if ( token.Icmp( "sse2" ) == 0 ) {
-				id |= CPUID_SSE2;
-			} else if ( token.Icmp( "sse3" ) == 0 ) {
-				id |= CPUID_SSE3;
-			} else if ( token.Icmp( "ssse3" ) == 0 ) {
-				id |= CPUID_SSSE3;
-			} else if ( token.Icmp( "sse41" ) == 0 ) {
-				id |= CPUID_SSE41;
-			} else if ( token.Icmp( "avx" ) == 0 ) {
-				id |= CPUID_AVX;
-			} else if ( token.Icmp( "avx2" ) == 0 ) {
-				id |= CPUID_AVX2;
-			} else if ( token.Icmp( "fma3" ) == 0 ) {
-				id |= CPUID_FMA3;
-			}
-		}
-		if ( id == CPUID_NONE ) {
-			common->Printf( "WARNING: unknown sys_cpustring '%s'\n", win32.sys_cpustring.GetString() );
-			id = CPUID_GENERIC;
-		}
-		win32.cpuid = ( cpuid_t ) id;
-	}
-
-	common->Printf( "%s\n", win32.sys_cpustring.GetString() );
+	Sys_InitCPUID();
 }
 
 /*
@@ -1202,24 +1019,6 @@ Sys_Shutdown
 */
 void Sys_Shutdown( void ) {
 	CoUninitialize();
-}
-
-/*
-================
-Sys_GetProcessorId
-================
-*/
-cpuid_t Sys_GetProcessorId( void ) {
-	return win32.cpuid;
-}
-
-/*
-================
-Sys_GetProcessorString
-================
-*/
-const char *Sys_GetProcessorString( void ) {
-	return win32.sys_cpustring.GetString();
 }
 
 //=======================================================================
@@ -1235,18 +1034,12 @@ Win_Frame
 void Win_Frame( void ) {
 	// if "viewlog" has been modified, show or hide the log console
 	if ( win32.win_viewlog.IsModified() ) {
-		if ( !com_skipRenderer.GetBool()
-#ifdef MULTIPLAYER
-		        && idAsyncNetwork::serverDedicated.GetInteger() != 1
-#endif
-		   ) {
+		if ( !com_skipRenderer.GetBool() ) {
 			Sys_ShowConsole( win32.win_viewlog.GetInteger(), false );
 		}
 		win32.win_viewlog.ClearModified();
 	}
 }
-
-int Sys_FPU_PrintStateFlags( char *ptr, int ctrl, int stat, int tags, int inof, int inse, int opof, int opse );
 
 /*
 ==================
@@ -1282,14 +1075,24 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	common->Init( 0, NULL, lpCmdLine );
 
+	int runTests = com_runTests.GetInteger();
+	if( runTests ) {
+		if( runTests == 2 ) {
+			AllocConsole();
+			freopen( "CONOUT$", "w+", stdout );
+		}
+		int result = RunTests();
+		if( runTests == 2 ) {
+			getch();
+		}
+		common->Shutdown();
+		return result;
+	}
+
 	Sys_StartAsyncThread();
 
 	// hide or show the early console as necessary
-	if ( win32.win_viewlog.GetInteger() || com_skipRenderer.GetBool()
-#ifdef MULTIPLAYER
-	        || idAsyncNetwork::serverDedicated.GetInteger()
-#endif
-	   ) {
+	if ( win32.win_viewlog.GetInteger() || com_skipRenderer.GetBool() ) {
 		Sys_ShowConsole( 1, true );
 	} else {
 		Sys_ShowConsole( 0, false );
@@ -1436,4 +1239,56 @@ Sys_DoPreferences
 ==================
 */
 void Sys_DoPreferences( void ) {
+}
+
+
+void Sys_CaptureStackTrace(int ignoreFrames, uint8_t *data, int &len) {
+	int cnt = CaptureStackBackTrace(ignoreFrames, len / sizeof(PVOID), (PVOID*)data, NULL);
+	len = cnt * sizeof(PVOID);
+}
+
+int Sys_GetStackTraceFramesCount(uint8_t *data, int len) {
+	return len / sizeof(PVOID);
+}
+
+static bool AreSymbolsInitialized = false;
+
+void Sys_DecodeStackTrace(uint8_t *data, int len, debugStackFrame_t *frames) {
+	//interpret input blob as array of addresses
+	PVOID *addresses = (PVOID*)data;
+	int framesCount = Sys_GetStackTraceFramesCount(data, len);
+	//fill output with zeros
+	memset(frames, 0, framesCount * sizeof(frames[0]));
+
+	HANDLE hProcess = GetCurrentProcess();
+
+	if (!AreSymbolsInitialized) {
+		AreSymbolsInitialized = true;
+		BOOL ok = SymInitialize(hProcess, NULL, TRUE);
+	}
+
+	//allocate symbol structures
+	int buff[(sizeof(IMAGEHLP_SYMBOL64) + sizeof(frames[0].functionName)) / 4 + 1] = {0};
+	IMAGEHLP_SYMBOL64 *symbol = (IMAGEHLP_SYMBOL64*)buff;
+	symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+	symbol->MaxNameLength = sizeof(frames[0].functionName) - 1;
+	IMAGEHLP_LINE64 line = {0};
+	line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+	for (int i = 0; i < framesCount; i++) {
+		frames[i].pointer = addresses[i];
+		sprintf(frames[i].functionName, "[%p]", frames[i].pointer);	//in case PDB not found
+
+		if (!addresses[i])
+			continue;	//null function?
+		if (!SymGetSymFromAddr64(hProcess, DWORD64(addresses[i]), NULL, symbol))
+			continue;	//cannot get symbol
+		idStr::Copynz(frames[i].functionName, symbol->Name, sizeof(frames[0].functionName));
+
+		DWORD displacement = DWORD(-1);
+		if (!SymGetLineFromAddr64(hProcess, DWORD64(addresses[i]), &displacement, &line))
+			continue;	//no code line info
+		idStr::Copynz(frames[i].fileName, line.FileName, sizeof(frames[0].fileName));
+		frames[i].lineNumber = line.LineNumber;
+	}
 }
